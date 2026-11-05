@@ -69,7 +69,7 @@ CS.COM
 Before you log on, press the game's SETTINGS button and set:
 
 - the **phone number** to the one in your phonebook line (`1234` above);
-- the **baud rate** to **9600**;
+- the **baud rate** to **9600**, the speed the server sends at (at any lower setting the game falls behind);
 - your **account name** and **password**, as described next, or leave the stock guest name `JOINGENIE`.
 
 A name or password **must not contain a space**, and the password is **case-sensitive**: type it the same

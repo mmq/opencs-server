@@ -158,8 +158,9 @@ CONNECT_RATE_PER_ADDRESS = (10, 1 / 6)
 REFUSAL_LOG_INTERVAL = 60.0
 
 #: Items (raw writes or messages) a connection may have queued for sending before it is closed.
-#: Ours (DESIGN §3.3): the client handles about 50 packets a second (I §3), so this is over
-#: twenty seconds of backlog for a client that has stopped reading.
+#: Ours (DESIGN §3.3): at ``CLIENT_BYTES_PER_SECOND`` about 40 frames a second go out, so this is
+#: about twenty-five seconds of backlog. A pod's reports replace each other and hold one item each,
+#: so only traffic that cannot be replaced, sustained beyond the rate, gets here.
 OUTBOX_LIMIT = 1024
 
 #: Bytes a second written to one connection. The real client reads through an emulated modem at 9600

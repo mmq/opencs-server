@@ -158,6 +158,9 @@ socket bytes ─► Connection.read_pump ─► FrameReader ─► Frame ─► 
   rules: bounty accrual, the drop release, guppy queues, NPC timers, weather.
 - Each connection has a read task and a write task. A slow client fills only its own bounded outbox; when
   that overflows, that client is disconnected, never the others slowed.
+- The write task keeps to the client's line rate (`policy.CLIENT_BYTES_PER_SECOND`, ADR 11), so a backlog
+  waits in the outbox and not in the kernels' socket buffers. There, a newer `'b'` for a pod replaces the
+  queued one where it sits.
 
 ### 3.4 Time
 

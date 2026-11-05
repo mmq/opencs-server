@@ -264,6 +264,7 @@ start; **only the city files are re-read by `reload`** (below).
 | `[limits] max_accounts` | `10000` | 1 to 1e7 | accounts in all; past it a first login is refused |
 | `[limits] min_password_length` | `6` | 1-64 | the shortest password of a new account (existing ones are not checked) |
 | `[limits] unplayed_account_days` | `30` | 1-36500 | an account with no saved progress and no login for this long is removed |
+| `[limits] client_bytes_per_second` | `960` | 0 to 1e8 | what is written to each connection, the rate of a 9600-baud modem; 0 does not pace. Any faster and a busy game's backlog moves to where the server cannot thin it |
 | `[logging] level` | `"INFO"` | DEBUG, INFO, WARNING, ERROR, CRITICAL | for everything the server logs |
 | `[logging.levels] <layer>` | none | a layer below; a level | overrides `level` for `opencs.<layer>` |
 | `[logging] file` | none (stderr only) | a path | also log to this file, rotating |
@@ -314,7 +315,8 @@ showing it twice. A line is
 the callsign is `-` until the logon completes. Useful ones at INFO: accept and close, logon and logout,
 phase changes, `seated as player N`, `line dropped; held for /RESUME`, `closing: <reason>`, and at
 close `sent N bytes, N frames in N s: ...` with the average and the busiest 1 s and 10 s (a 9600-baud
-modem reads about 960 B/s). A bug is
+modem reads about 960 B/s), then `peak outbox N, N replaced`. A busy player whose rate sits at the limit
+with a peak outbox above about 16 and many replaced was getting fewer positions, not later ones. A bug is
 always an `ERROR` with a traceback and the request that triggered it; the connection or city carries on
 (DESIGN §5), so grep for `ERROR` and `Traceback`.
 

@@ -98,6 +98,8 @@ in policy.
 | inbound line buffer | `MAX_LINE_BYTES` | `fuzz/test_fuzz_net` |
 | inbound frame buffer | `MAX_PENDING` (238 bytes) | `fuzz/test_fuzz_net` |
 | outbox | `OUTBOX_LIMIT` items, then that connection is aborted; the others are not delayed. Chat stops being queued at `DROPPABLE_WATERMARK` | `net/test_connection::test_overflow_at_exactly_limit_plus_one`, `test_outbox_isolation` (real sockets) |
+| outbox, a pod's reports | one `'b'` a pod: a newer one replaces the queued one where it sits, up to a queued change in that pod's life; nothing else is replaced | `net/test_coalescing::test_fifteen_moving_pods_over_a_real_socket_stay_fresh_and_are_not_cut`, `test_a_report_after_a_barrier_stays_behind_it` |
+| bytes written to a connection | `CLIENT_BYTES_PER_SECOND` (`[limits] client_bytes_per_second`), so a backlog stays in the outbox and these limits see it; a close is not paced | `net/test_pacing::test_while_the_pump_holds_back_the_rest_is_a_backlog_the_server_can_see`, `test_a_close_is_not_paced_so_a_long_backlog_still_says_goodbye` |
 | shot log | `SHOT_LOG_MAX` | `world/test_combat`; ceiling in `fuzz/test_fuzz_session::test_a_long_hostile_run_leaves_each_players_records_bounded` |
 | hit set, loadout and score ledgers, attack history | aged out or fixed size | same ceiling test |
 | a client's view | `ever_held` is bounded by the id ranges | `longrun/test_city_48h` |

@@ -12,3 +12,4 @@
 | [0008](0008-written-from-spec.md) | Written from the spec |
 | [0009](0009-limits-per-connection.md) | Rate limits belong to the connection, not the phase |
 | [0010](0010-registration-behind-identity.md) | Every way to make an account goes through `Identity` |
+| [0011](0011-pace-writes-to-the-client.md) | Writes are paced to the client's line rate |
