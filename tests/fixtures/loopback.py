@@ -28,10 +28,10 @@ SHIPPED = Path(__file__).parents[2] / "config" / "server.toml"
 
 
 def local_config() -> AppConfig:
-    """The shipped config on an ephemeral loopback port, not paced: a test should not wait on a
-    modem's rate unless pacing is what it tests."""
+    """The shipped config on an ephemeral loopback port, not paced and not waiting for acks: a test
+    should not wait on a modem's rate, or need a client that acks, unless that is what it tests."""
     config = load_config(SHIPPED)
-    limits = replace(config.server.limits, client_bytes_per_second=0)
+    limits = replace(config.server.limits, client_bytes_per_second=0, client_unacked_bytes=0)
     return replace(config, server=replace(config.server, host="127.0.0.1", port=0, limits=limits))
 
 

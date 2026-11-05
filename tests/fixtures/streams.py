@@ -64,12 +64,15 @@ class FakeWriter:
 
 
 async def until(predicate: Callable[[], Any], what: str = "condition") -> None:
-    """Yield to the loop until ``predicate`` holds; fail after a bounded number of yields."""
-    for _ in range(10_000):
-        if predicate():
-            return
+    """Yield to the loop until ``predicate`` holds; fail after ``TIMEOUT`` seconds. The bound is
+    time, not a count of yields: some conditions wait on a real timer (an ack stall), and a yield
+    costs a microsecond on one platform and many more on another."""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + TIMEOUT
+    while not predicate():
+        if loop.time() > deadline:
+            raise AssertionError(f"never became true: {what}")
         await asyncio.sleep(0)
-    raise AssertionError(f"never became true: {what}")
 
 
 async def wait(awaitable: Any) -> Any:

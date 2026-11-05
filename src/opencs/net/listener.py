@@ -80,6 +80,8 @@ class ConnectionLimits:
     connect_rate: tuple[int, float] = policy.CONNECT_RATE_PER_ADDRESS
     #: What is written to each connection, 0 for no pacing (``policy.CLIENT_BYTES_PER_SECOND``).
     bytes_per_second: int = policy.CLIENT_BYTES_PER_SECOND
+    #: What a client may have unacknowledged, 0 for no limit (``policy.CLIENT_UNACKED_BYTES``).
+    unacked_bytes: int = policy.CLIENT_UNACKED_BYTES
 
 
 class RefusalLog:
@@ -211,6 +213,7 @@ class Listener:
             context,
             sleep=self._sleep,
             bytes_per_second=self._limits.bytes_per_second,
+            unacked_bytes=self._limits.unacked_bytes,
             capture=None
             if self._capture is None
             else self._capture.new(context, self._clock.now()),

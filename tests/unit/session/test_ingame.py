@@ -307,9 +307,21 @@ def test_a_real_captures_stream_is_never_limited(name: str) -> None:
                 m = decode_client(fr.payload)
             except DecodeError:
                 continue
-            if not isinstance(m, client.Ping | client.Quit | client.Acks | client.Flags):
+            answered_here = (
+                client.Ping | client.Quit | client.Acks | client.Flags | client.EchoReply
+            )
+            if not isinstance(m, answered_here):
                 decoded += 1
     assert decoded > 0 and len(seen) == decoded
+    assert not h.io.closed
+
+
+def test_the_clients_acks_reach_the_connection_and_a_probes_answer_stops_here() -> None:
+    world = make_world()
+    h = play(world)
+    h.feed(frame(client_payload(client.Acks(bytes([0x10, 0x11])))))
+    h.feed(frame(client_payload(client.EchoReply(0, 0))))
+    assert h.io.acks == [bytes([0x10, 0x11])]
     assert not h.io.closed
 
 

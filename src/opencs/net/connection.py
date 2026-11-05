@@ -9,6 +9,10 @@ The write pump keeps to the rate the client can read at. Written any faster, the
 wait in the kernels' socket buffers, out of reach; paced, the backlog stays in the outbox, where
 ``backlog`` sees it. While it waits, a newer report of a pod replaces the older one where it sits,
 so a client that is behind gets fewer, fresher positions and not the same ones later and later.
+
+The rate is only what the modem carries; the game may read slower, and loses bytes if it falls too
+far behind. So in a game the pump also stops at ``net.flow.AckWindow``'s limit until the client's
+acks catch up (ADR 11).
 """
 
 from __future__ import annotations
@@ -22,9 +26,10 @@ from typing import Any, Protocol
 
 from opencs import policy
 from opencs.clock import Clock
-from opencs.connlog import ConnectionContext, ConnectionLog
-from opencs.messages import ServerMessage, server_payload
+from opencs.connlog import STREAM_GAME, ConnectionContext, ConnectionLog
+from opencs.messages import ServerMessage, server, server_payload
 from opencs.net.capture import Capture
+from opencs.net.flow import AckWindow
 from opencs.net.traffic import Traffic
 from opencs.wire.codec import BYTE_MAX, BYTE_MIN
 from opencs.wire.frame import build_frame
@@ -51,6 +56,8 @@ class ConnectionIO(Protocol):
     def send_first(self, msg: ServerMessage) -> None: ...
 
     def backlog(self) -> int: ...
+
+    def acked(self, tags: bytes) -> None: ...
 
     def close(self, reason: str) -> None: ...
 
@@ -113,6 +120,8 @@ class Connection:
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         bytes_per_second: int = 0,
         pace_sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        unacked_bytes: int = 0,
+        ack_stall: float = policy.ACK_STALL_SECONDS,
         capture: Capture | None = None,
     ) -> None:
         self.context = context
@@ -128,6 +137,9 @@ class Connection:
         self._pace_sleep = pace_sleep
         self._owed = 0.0  # bytes written and not yet paid for at ``_rate``
         self._owed_at = clock.now()
+        self._window = AckWindow(unacked_bytes, policy.ACK_PROBE_BYTES) if unacked_bytes else None
+        self._ack_stall = ack_stall
+        self._ack_wake = asyncio.Event()
         self._log = ConnectionLog(logging.getLogger("opencs.net"), context)
         self._outbox: deque[Outbound] = deque()
         self._replaceable: dict[int, _Replaceable] = {}  # in the outbox, by ``coalesce_key``
@@ -160,6 +172,11 @@ class Connection:
         """Items queued and not yet written: how far behind the client is reading."""
         return len(self._outbox)
 
+    def acked(self, tags: bytes) -> None:
+        """The client has handled the frames with these tags."""
+        if self._window is not None and self._window.acked(tags, self._clock.now()):
+            self._ack_wake.set()
+
     def close(self, reason: str) -> None:
         """Send what is queued, then close. A client that does not read is cut after
         ``CLOSE_FLUSH_TIMEOUT``."""
@@ -169,6 +186,7 @@ class Connection:
         self._closing = True
         self._outbox.append(_CLOSE)
         self._wake.set()
+        self._ack_wake.set()
         self._flush_timer = asyncio.get_running_loop().call_later(
             self._flush_timeout, self.abort, "close did not flush in time"
         )
@@ -257,6 +275,9 @@ class Connection:
             await self._writer.wait_closed()
         if self._capture is not None:
             self._capture.close()
+        window = self._window
+        if window is not None:
+            self.traffic.note_window(window.peak, window.worst_delay)
         self._log.info("%s", self.traffic.summary(self._clock.now()))
         self._log.info("closed")
         self.finished.set()
@@ -289,25 +310,66 @@ class Connection:
             await self._wake.wait()
             self._wake.clear()
             while self._outbox:
+                await self._wait_for_acks()  # with the item still queued, where it can be replaced
+                if not self._outbox:
+                    break
                 item = self._outbox.popleft()
                 if isinstance(item, _Close):
                     await self._drain()
                     return
                 if isinstance(item, _Replaceable):
                     item = self._unwrap(item)
-                data = self._frame(item)
-                if data:
-                    framed = not isinstance(item, bytes)
-                    now = self._clock.now()
-                    if self._capture is not None:
-                        self._capture.server_data(data, framed=framed, now=now)
-                    self.traffic.sent(len(data), now, frame=framed)
-                    self._writer.write(data)
-                    if not await self._drain():
-                        return
-                    await self._pace(len(data))
+                if not await self._write(item):
+                    return
+                if (
+                    self._window is not None
+                    and self._window.wants_probe
+                    and self._in_game()
+                    and not await self._write(server.EchoProbe(0))
+                ):
+                    return
             if self._aborted:
                 return
+
+    async def _write(self, item: bytes | ServerMessage) -> bool:
+        """Frame and write one item; False if the socket has failed."""
+        tag = self._next_tag if isinstance(item, ServerMessage) and item.is_tagged() else None
+        data = self._frame(item)
+        if not data:
+            return True
+        framed = not isinstance(item, bytes)
+        now = self._clock.now()
+        if self._capture is not None:
+            self._capture.server_data(data, framed=framed, now=now)
+        self.traffic.sent(len(data), now, frame=framed)
+        self._writer.write(data)
+        if self._window is not None:
+            if self._in_game():
+                self._window.wrote(len(data), tag, now)
+            else:
+                self._window.reset()
+        if not await self._drain():
+            return False
+        await self._pace(len(data))
+        return True
+
+    def _in_game(self) -> bool:
+        return self.context.stream == STREAM_GAME
+
+    async def _wait_for_acks(self) -> None:
+        """Hold the pump while the client has as much as it may have unacknowledged. A closing
+        connection is not held, nor one whose acks have stopped: see ``AckWindow.release``."""
+        window = self._window
+        if window is None or not window.full or not self._in_game():
+            return
+        self.traffic.ack_waits += 1
+        while window.full and not self._closing:
+            self._ack_wake.clear()
+            try:
+                await asyncio.wait_for(self._ack_wake.wait(), self._ack_stall)
+            except TimeoutError:
+                self.traffic.ack_stalls += 1
+                window.release()
 
     async def _pace(self, n_bytes: int) -> None:
         """Hold the pump until ``n_bytes`` more are within the rate, less a small burst. A closing

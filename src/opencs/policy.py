@@ -175,6 +175,21 @@ CLIENT_BYTES_PER_SECOND = 960
 #: so a lone shot on a quiet line goes out without waiting. Ours.
 PACE_BURST_BYTES = 256
 
+#: Bytes written to one client and not yet acknowledged before the write pump waits. Under half of
+#: CS.COM's 4096-byte receive ring, which loses bytes when full, and over what a 9600-baud line
+#: carries in the second or so the client takes to batch its acks. ``[limits]
+#: client_unacked_bytes``; 0 does not wait. Ours (DESIGN §3.3, ADR 11).
+CLIENT_UNACKED_BYTES = 2048
+
+#: Bytes written with no tagged frame before the pump adds an echo probe, so that the client has
+#: something to acknowledge. A probe costs about 1.5% of these. Ours (ADR 11).
+ACK_PROBE_BYTES = 384
+
+#: Seconds the pump waits for any ack before assuming the client has read what it was sent. A frame
+#: can be lost, and waiting for its ack would never end. Longer than the 4 or so seconds POD.FUN
+#: takes to load and start acknowledging. Ours (ADR 11).
+ACK_STALL_SECONDS = 5.0
+
 #: Session ticks per second per connection (DESIGN §3.4): fine enough for the 0.3 s login prompt
 #: delay. Ours.
 SESSION_TICK_HZ = 10

@@ -66,7 +66,9 @@ def test_the_close_summary_shows_how_far_behind_the_client_fell() -> None:
         c.send(report(1, 11))
 
     _, connection = written_after(queue)
-    assert connection.traffic.summary(1.0).endswith("; peak outbox 3, 1 replaced")
+    assert connection.traffic.summary(1.0).endswith(
+        "; peak outbox 3, 1 replaced; peak unacked 0 bytes, worst ack 0.0 s, 0 waits, 0 stalls"
+    )
 
 
 def test_a_report_of_stopping_is_never_lost() -> None:

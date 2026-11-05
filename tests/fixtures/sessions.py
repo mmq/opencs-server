@@ -54,6 +54,8 @@ class FakeIO:
     closed_with: list[str] = field(default_factory=list)
     #: What ``backlog`` reports: set it to play a client that has stopped reading.
     queued: int = 0
+    #: What the session passed on from the client's ``Acks``.
+    acks: list[bytes] = field(default_factory=list)
 
     def send_raw(self, data: bytes) -> None:
         self.raw.append(data)
@@ -66,6 +68,9 @@ class FakeIO:
 
     def backlog(self) -> int:
         return self.queued
+
+    def acked(self, tags: bytes) -> None:
+        self.acks.append(tags)
 
     def close(self, reason: str) -> None:
         self.closed_with.append(reason)

@@ -307,8 +307,10 @@ class InGamePhase(Phase):
                 self.host.io.send_first(server.PingReply())
             case client.Quit():
                 self._begin_quit(self.host.now())
-            case client.Acks() | client.Flags():
-                pass  # acknowledgments; the client's own 'S' is not relayed (I §8)
+            case client.Acks():
+                self.host.io.acked(message.tags)  # what the write pump is waiting for (ADR 11)
+            case client.Flags() | client.EchoReply():
+                pass  # the client's own 'S' is not relayed (I §8); a probe's only use is its ack
             case _:
                 if not self._within_budget(message):
                     # Dropped, but not bad input: an honest client's backlog after a stall of up

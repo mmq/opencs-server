@@ -31,6 +31,10 @@ class SessionIO(Protocol):
         (``policy.DROPPABLE_WATERMARK``), so it cannot fill the outbox and get the client cut."""
         ...
 
+    def acked(self, tags: bytes) -> None:
+        """The client has handled the frames with these tags (``client.Acks``, I §8.26)."""
+        ...
+
     def close(self, reason: str) -> None:
         """Flush what is queued, then close the connection."""
         ...

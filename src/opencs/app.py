@@ -291,6 +291,7 @@ async def _listen(
             unauthenticated=limits.max_unauthenticated,
             unauthenticated_per_address=limits.max_unauthenticated_per_address,
             bytes_per_second=limits.client_bytes_per_second,
+            unacked_bytes=limits.client_unacked_bytes,
         ),
         sleep=seams.tick_sleep,
         capture=_capture_factory(config),
