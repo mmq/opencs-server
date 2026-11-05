@@ -28,9 +28,11 @@ SHIPPED = Path(__file__).parents[2] / "config" / "server.toml"
 
 
 def local_config() -> AppConfig:
-    """The shipped config on an ephemeral loopback port."""
+    """The shipped config on an ephemeral loopback port, not paced: a test should not wait on a
+    modem's rate unless pacing is what it tests."""
     config = load_config(SHIPPED)
-    return replace(config, server=replace(config.server, host="127.0.0.1", port=0))
+    limits = replace(config.server.limits, client_bytes_per_second=0)
+    return replace(config, server=replace(config.server, host="127.0.0.1", port=0, limits=limits))
 
 
 class TickGate:

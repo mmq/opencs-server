@@ -64,6 +64,7 @@ class LimitsConfig:
     max_accounts: int = policy.MAX_ACCOUNTS
     min_password_length: int = policy.MIN_PASSWORD_LENGTH
     unplayed_account_days: int = policy.UNPLAYED_ACCOUNT_DAYS
+    client_bytes_per_second: int = policy.CLIENT_BYTES_PER_SECOND
 
 
 @dataclass(frozen=True, slots=True)
@@ -447,6 +448,9 @@ def _parse_limits(table: _Table) -> LimitsConfig:
         ),
         unplayed_account_days=section.integer(
             "unplayed_account_days", d.unplayed_account_days, low=1, high=36_500
+        ),
+        client_bytes_per_second=section.integer(
+            "client_bytes_per_second", d.client_bytes_per_second, low=0, high=100_000_000
         ),
     )
     section.done()

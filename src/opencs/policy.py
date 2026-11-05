@@ -162,6 +162,18 @@ REFUSAL_LOG_INTERVAL = 60.0
 #: twenty seconds of backlog for a client that has stopped reading.
 OUTBOX_LIMIT = 1024
 
+#: Bytes a second written to one connection. The real client reads through an emulated modem at 9600
+#: baud at most from its menu, and DOSBox-X delivers exactly 960 bytes a second at that setting. A
+#: faster server would only move the backlog into the kernels' socket buffers (over 500 KB measured
+#: on loopback), where nothing can be replaced or dropped and every position arrives minutes late.
+#: Held here, it waits in the outbox. ``[limits] client_bytes_per_second``; 0 does not pace. Ours
+#: (DESIGN §3.3).
+CLIENT_BYTES_PER_SECOND = 960
+
+#: Bytes a connection may send at once after being idle before pacing holds it back: a few frames,
+#: so a lone shot on a quiet line goes out without waiting. Ours.
+PACE_BURST_BYTES = 256
+
 #: Session ticks per second per connection (DESIGN §3.4): fine enough for the 0.3 s login prompt
 #: delay. Ours.
 SESSION_TICK_HZ = 10
@@ -169,7 +181,8 @@ SESSION_TICK_HZ = 10
 #: Bytes read from a socket at once. Ours.
 READ_CHUNK = 4096
 
-#: Seconds a closing connection may take to flush its queue before it is cut. Ours.
+#: Seconds a closing connection may take to flush its queue before it is cut. A close is not paced,
+#: so this is the kernel taking the bytes, not the client reading them. Ours.
 CLOSE_FLUSH_TIMEOUT = 5.0
 
 #: The stretches, in seconds, over which a connection's busiest sending is logged at close

@@ -78,6 +78,8 @@ class ConnectionLimits:
     unauthenticated_per_address: int = policy.MAX_UNAUTHENTICATED_PER_ADDRESS
     #: New connections from one address: a token bucket ``(burst, per second)``.
     connect_rate: tuple[int, float] = policy.CONNECT_RATE_PER_ADDRESS
+    #: What is written to each connection, 0 for no pacing (``policy.CLIENT_BYTES_PER_SECOND``).
+    bytes_per_second: int = policy.CLIENT_BYTES_PER_SECOND
 
 
 class RefusalLog:
@@ -208,6 +210,7 @@ class Listener:
             self._clock,
             context,
             sleep=self._sleep,
+            bytes_per_second=self._limits.bytes_per_second,
             capture=None
             if self._capture is None
             else self._capture.new(context, self._clock.now()),

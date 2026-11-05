@@ -495,6 +495,16 @@ def test_the_limits_default_to_policy_and_may_be_tuned(tmp_path: Path) -> None:
     assert limits.max_accounts == policy.MAX_ACCOUNTS
 
 
+def test_the_rate_written_to_a_client_defaults_to_policy_and_0_turns_pacing_off(
+    tmp_path: Path,
+) -> None:
+    limits = load_config(write_config(tmp_path, {"A": CITY})).server.limits
+    assert limits.client_bytes_per_second == policy.CLIENT_BYTES_PER_SECOND == 960
+    text = 'default_city = "A"\n[limits]\nclient_bytes_per_second = 0\n'
+    limits = load_config(write_config(tmp_path, {"A": CITY}, server=text)).server.limits
+    assert limits.client_bytes_per_second == 0
+
+
 @pytest.mark.parametrize(
     "line",
     [
@@ -505,6 +515,7 @@ def test_the_limits_default_to_policy_and_may_be_tuned(tmp_path: Path) -> None:
         "max_unauthenticated_per_address = 99",
         "min_password_length = 0",
         "max_guests = -1",
+        "client_bytes_per_second = -1",
         "unknown_limit = 3",
     ],
 )

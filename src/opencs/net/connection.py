@@ -4,6 +4,10 @@ DESIGN §3.3 and §3.2. The connection knows nothing of phases or rules: it feed
 ``SessionHandler``, drains what the handler queues, and turns each queued ``ServerMessage`` into a
 framed packet at the send boundary, where it assigns the tag (I §4.2, ADR 5). A slow client
 fills only its own outbox; when that overflows, that client is cut and nobody else notices.
+
+The write pump keeps to the rate the client can read at. Written any faster, the bytes would only
+wait in the kernels' socket buffers, out of reach; paced, the backlog stays in the outbox, where
+``backlog`` sees it.
 """
 
 from __future__ import annotations
@@ -95,6 +99,8 @@ class Connection:
         outbox_limit: int = policy.OUTBOX_LIMIT,
         flush_timeout: float = policy.CLOSE_FLUSH_TIMEOUT,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        bytes_per_second: int = 0,
+        pace_sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         capture: Capture | None = None,
     ) -> None:
         self.context = context
@@ -106,6 +112,10 @@ class Connection:
         self._limit = outbox_limit
         self._flush_timeout = flush_timeout
         self._sleep = sleep  # the session tick's pacing; tests pulse it by hand
+        self._rate = bytes_per_second
+        self._pace_sleep = pace_sleep
+        self._owed = 0.0  # bytes written and not yet paid for at ``_rate``
+        self._owed_at = clock.now()
         self._log = ConnectionLog(logging.getLogger("opencs.net"), context)
         self._outbox: deque[Outbound] = deque()
         self._wake = asyncio.Event()
@@ -264,10 +274,29 @@ class Connection:
                         self._capture.server_data(data, framed=framed, now=now)
                     self.traffic.sent(len(data), now, frame=framed)
                     self._writer.write(data)
+                    if not await self._drain():
+                        return
+                    await self._pace(len(data))
             if self._aborted:
                 return
-            if not await self._drain():
-                return
+
+    async def _pace(self, n_bytes: int) -> None:
+        """Hold the pump until ``n_bytes`` more are within the rate, less a small burst. A closing
+        connection is not held: it has only ``CLOSE_FLUSH_TIMEOUT`` to say goodbye."""
+        if not self._rate or self._closing:
+            return
+        self._pay_for(self._clock.now() - self._owed_at)
+        self._owed += n_bytes
+        excess = self._owed - policy.PACE_BURST_BYTES
+        if excess > 0:
+            wait = excess / self._rate
+            before = self._clock.now()
+            await self._pace_sleep(wait)
+            self._pay_for(max(wait, self._clock.now() - before))  # a sleep may run long
+
+    def _pay_for(self, seconds: float) -> None:
+        self._owed = max(0.0, self._owed - seconds * self._rate)
+        self._owed_at = self._clock.now()
 
     async def _drain(self) -> bool:
         try:

@@ -290,6 +290,7 @@ async def _listen(
             per_subnet=limits.max_connections_per_subnet,
             unauthenticated=limits.max_unauthenticated,
             unauthenticated_per_address=limits.max_unauthenticated_per_address,
+            bytes_per_second=limits.client_bytes_per_second,
         ),
         sleep=seams.tick_sleep,
         capture=_capture_factory(config),
