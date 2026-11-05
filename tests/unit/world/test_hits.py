@@ -151,3 +151,12 @@ def test_the_hostile_input_warnings_are_logged_once_then_at_debug(
     warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
     assert len(warnings) == 3
     assert c.own_pod_hit_reports == 5 and c.unrelayable_damage == 5 and c.unsafe_shots == 5
+
+
+def test_a_relayed_shot_says_where_it_started_so_it_can_be_shed_and_only_it_does() -> None:
+    c, (a, _) = playing([0, 1])
+    fired = client.Shot(a, report(0).pos, 0, 0, 1)
+    events = c.client_message(a, fired, 2.0)
+    shots = [e for e in events if isinstance(e.message, server.Shot)]
+    assert [e.shot_from for e in shots] == [fired.pos]
+    assert all(e.shot_from is None for e in events if e not in shots)

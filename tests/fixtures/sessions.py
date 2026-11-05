@@ -56,6 +56,7 @@ class FakeIO:
     queued: int = 0
     #: What the session passed on from the client's ``Acks``.
     acks: list[bytes] = field(default_factory=list)
+    shed: int = 0
 
     def send_raw(self, data: bytes) -> None:
         self.raw.append(data)
@@ -68,6 +69,9 @@ class FakeIO:
 
     def backlog(self) -> int:
         return self.queued
+
+    def note_shed(self) -> None:
+        self.shed += 1
 
     def acked(self, tags: bytes) -> None:
         self.acks.append(tags)

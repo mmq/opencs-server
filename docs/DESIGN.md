@@ -160,7 +160,8 @@ socket bytes ─► Connection.read_pump ─► FrameReader ─► Frame ─► 
   that overflows, that client is disconnected, never the others slowed.
 - The write task keeps to the client's line rate (`policy.CLIENT_BYTES_PER_SECOND`, ADR 11), so a backlog
   waits in the outbox and not in the kernels' socket buffers. There, a newer `'b'` for a pod replaces the
-  queued one where it sits.
+  queued one where it sits. In a game it also stops while too much is unacknowledged (`net/flow.py`), which
+  keeps the client's receive ring from overflowing, and the router sheds shots to a client that is behind.
 
 ### 3.4 Time
 

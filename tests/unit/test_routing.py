@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from fixtures.lobbies import city
+from fixtures.pods import report
+from opencs import policy
 from opencs.messages import ServerMessage, server
+from opencs.messages.fields import WirePos
 from opencs.routing import Router
 from opencs.world.city import City
 from opencs.world.events import Event, ToAll, ToAllExcept, ToHolders, ToPlayer, ToPlayers, ToTeam
@@ -16,12 +19,20 @@ from opencs.world.seating import JoinResult
 class Recorder:
     got: list[ServerMessage] = field(default_factory=list)
     behind: bool = False
+    queued: int = 0
+    shed_count: int = 0
 
     def send(self, msg: ServerMessage) -> None:
         self.got.append(msg)
 
     def congested(self) -> bool:
         return self.behind
+
+    def backlog(self) -> int:
+        return self.queued
+
+    def shed(self) -> None:
+        self.shed_count += 1
 
 
 @dataclass
@@ -138,3 +149,68 @@ def test_a_droppable_event_skips_a_congested_player_and_nothing_else_does() -> N
     t.router.deliver(t.city, [Event(MSG, ToAll(), droppable=True), Event(MSG, ToAll())])
     assert [len(t.sinks[pid].got) for pid in sorted(t.sinks)] == [2, 1, 2, 2]
     assert t.router.dropped == 1
+
+
+NEAR, FAR = WirePos.from_world(1000, 10, 1000), WirePos.from_world(1000, 10, 3000)
+SHOT = server.Shot(2, NEAR, 0, 0, 1)
+FAR_BEHIND = policy.SHOTS_SHED_FAR_BACKLOG
+ALL_BEHIND = policy.SHOTS_SHED_ALL_BACKLOG
+
+
+def at(t: Table, player_id: int, where: WirePos) -> None:
+    player = t.city.player(player_id)
+    assert player is not None
+    player.pod.placed = replace(report(0), pos=where)
+
+
+def shot_to(t: Table, player_id: int, origin: WirePos) -> int:
+    """How many of one shot from ``origin`` this player was sent."""
+    before = len(t.sinks[player_id].got)
+    t.router.deliver(t.city, [Event(SHOT, ToPlayer(player_id), shot_from=origin)])
+    return len(t.sinks[player_id].got) - before
+
+
+def test_a_player_keeping_up_is_sent_every_shot_however_far() -> None:
+    t = table()
+    at(t, 1, NEAR)
+    t.sinks[1].queued = FAR_BEHIND - 1
+    assert shot_to(t, 1, FAR) == 1
+    assert t.router.shots_shed == 0
+
+
+def test_a_player_behind_is_not_sent_far_shots_but_is_sent_near_ones() -> None:
+    t = table()
+    at(t, 1, NEAR)
+    t.sinks[1].queued = FAR_BEHIND
+    assert shot_to(t, 1, FAR) == 0
+    assert shot_to(t, 1, NEAR) == 1
+    assert (t.router.shots_shed, t.sinks[1].shed_count) == (1, 1)
+
+
+def test_a_shot_exactly_at_the_range_is_kept() -> None:
+    t = table()
+    at(t, 1, WirePos.from_world(1000, 10, 1000))
+    t.sinks[1].queued = FAR_BEHIND
+    assert shot_to(t, 1, WirePos.from_world(1000, 10, 1000 + policy.SHOT_KEEP_FEET)) == 1
+    assert shot_to(t, 1, WirePos.from_world(1000, 10, 1001 + policy.SHOT_KEEP_FEET)) == 0
+
+
+def test_a_player_far_behind_is_not_sent_even_near_shots() -> None:
+    t = table()
+    at(t, 1, NEAR)
+    t.sinks[1].queued = ALL_BEHIND
+    assert shot_to(t, 1, NEAR) == 0
+
+
+def test_a_player_behind_with_no_position_yet_has_nothing_near_it() -> None:
+    t = table()
+    t.sinks[1].queued = FAR_BEHIND
+    assert shot_to(t, 1, NEAR) == 0
+
+
+def test_only_a_shot_marked_as_a_players_is_shed() -> None:
+    """A server-made shot (a guppy's grenade) and every other message always go."""
+    t = table()
+    t.sinks[1].queued = ALL_BEHIND
+    t.router.deliver(t.city, [Event(SHOT, ToPlayer(1)), Event(MSG, ToPlayer(1))])
+    assert len(t.sinks[1].got) == 2

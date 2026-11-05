@@ -26,16 +26,16 @@ play testing.
 - A dropped line from a real account holds the game for 10 minutes, and `/RESUME` brings it back (3 minutes
   to type it once you are in the Chamber again). A drop within 20 seconds of an attack counts as a death.
 - Callsigns are up to 12 characters. A duplicate gets a number from 2 to 999 (`JOINGENIE`, `JOINGENIE2`).
-- A player whose modem falls behind gets fewer, fresher positions of other pods and misses some chat
-  lines, rather than seeing the game later and later and being disconnected. No other game message is
-  skipped.
+- A player whose game falls behind gets fewer, fresher positions of other pods, sees fewer shots and
+  misses some chat lines, rather than seeing the game later and later, losing data or crashing. Damage
+  still lands, and no other game message is skipped.
 - At most 2 guests per address and 24 in all; an idle guest leaves the Chamber after 15 minutes.
 - Three cities (A, a training city with no NPCs; B; C) ship in `config/cities/`.
 
 ### Operators
 - What is written to each connection is paced to a 9600-baud modem's 960 bytes a second
-  (`[limits] client_bytes_per_second`), and the line each connection logs at close now ends with the
-  outbox's peak and how many position reports were replaced.
+  (`[limits] client_bytes_per_second`), and held back in a game while over 2 KB is unacknowledged
+  (`[limits] client_unacked_bytes`). The line each connection logs at close shows how far behind it fell.
 - Configuration in TOML (`config/server.toml` and one file per city), validated at start with errors that
   name the file and key.
 - Logging per layer with an optional rotating file; passwords are never logged.

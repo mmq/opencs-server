@@ -62,6 +62,12 @@ class _Sink:
     def congested(self) -> bool:
         return self._phase.host.congested()
 
+    def backlog(self) -> int:
+        return self._phase.host.io.backlog()
+
+    def shed(self) -> None:
+        self._phase.host.io.note_shed()
+
 
 class InGamePhase(Phase):
     """Binary frames in, city calls and routed events out."""

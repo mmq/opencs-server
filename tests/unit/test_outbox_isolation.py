@@ -22,14 +22,17 @@ from opencs.app import build_services
 from opencs.clock import ManualClock
 from opencs.messages import client, server
 
-#: Marks the last shot of the flood: no other shot has this x offset.
+#: Marks the last grenade of the flood: no other has this x offset.
 MARKER_X = 77
-#: Shots sent in one go: inside the relay budget (``RELAY_LIMIT_SHOT``) and the frame budget. Shots,
-#: because a pod's reports replace each other in the outbox and can never overflow it.
-BATCH = policy.RELAY_LIMIT_POD_STATE[0]
-#: Gives up if the flood has not overflowed the stalled outbox after this many shots (the kernel's
+#: Grenades sent in one go: inside the relay budget (``RELAY_LIMIT_GRENADE``) and the frame budget.
+#: Grenades, because they are tagged: a pod's reports replace each other in the outbox and shots are
+#: shed, so neither can overflow it.
+BATCH = policy.RELAY_LIMIT_GRENADE[0]
+#: Shots sent in one go, for the test that they are shed.
+SHOTS = policy.RELAY_LIMIT_POD_STATE[0]
+#: Gives up if the flood has not overflowed the stalled outbox after this many frames (the kernel's
 #: socket buffers and the transport's high-water mark absorb the first few hundred kilobytes).
-MAX_SHOTS = 400_000
+MAX_FLOOD = 400_000
 
 
 async def connect_with_tiny_receive_buffer(port: int) -> Client:
@@ -51,8 +54,8 @@ async def pong(sender: Client) -> None:
 async def observe(watcher: Client, seen_marker: asyncio.Event) -> None:
     """Read the watcher's frames as they come, and note the flood's last one."""
     while True:
-        message = await watcher.expect_frame("c")
-        if isinstance(message, server.Shot) and message.pos.x_off == MARKER_X:
+        message = await watcher.expect_frame("E")
+        if isinstance(message, server.GrenadeInFlight) and message.pos.x_off == MARKER_X:
             seen_marker.set()
             return
 
@@ -67,7 +70,7 @@ def test_a_client_that_never_reads_is_cut_and_the_others_still_get_everything() 
         )
         # Accounts, not guests: all three come from 127.0.0.1 (policy.MAX_GUESTS_PER_ADDRESS).
         stalled, _ = await enter(port, "RED", "STALLED,secret")
-        sender, hello = await enter(port, "RED", "SENDER,secret")
+        sender, _ = await enter(port, "RED", "SENDER,secret")
         watcher, _ = await enter(port, "RED", "WATCHER,secret")
         for c in (stalled, sender, watcher):
             await c.send(frame(report(4, x_off=75, z_off=75)))
@@ -77,25 +80,55 @@ def test_a_client_that_never_reads_is_cut_and_the_others_still_get_everything() 
         watching = asyncio.create_task(observe(watcher, seen_marker))
         with LogWatch("opencs.net", "outbox over") as cut:
             sent = 0
-            shot = frame(client.Shot(hello.self_id, report(0).pos, 3196, 0, 1))
-            while cut.count == 0 and sent < MAX_SHOTS:
+            grenade = frame(client.Grenade(report(0).pos, 3196, 0))
+            while cut.count == 0 and sent < MAX_FLOOD:
                 clock.advance(policy.RELAY_LIMIT_POD_STATE[0])  # refills the budget
-                await sender.send(shot * BATCH)
+                await sender.send(grenade * BATCH)
                 await sender.send(frame(client.Ping()))  # answered after the batch is handled
                 await pong(sender)
                 sent += BATCH
-            assert cut.count == 1, f"no overflow after {sent} shots"
-        # The sender was never cut, and the watcher still receives the flood's last shot.
+            assert cut.count == 1, f"no overflow after {sent} grenades"
+        # The sender was never cut, and the watcher still receives the flood's last grenade.
         clock.advance(policy.RELAY_LIMIT_POD_STATE[0])
-        await sender.send(
-            frame(client.Shot(hello.self_id, report(0, x_off=MARKER_X).pos, 3196, 0, 1))
-        )
+        await sender.send(frame(client.Grenade(report(0, x_off=MARKER_X).pos, 3196, 0)))
         await asyncio.wait_for(seen_marker.wait(), TIMEOUT)
         watching.cancel()
         # The stalled client's connection is gone once it reads again.
         while await asyncio.wait_for(stalled.reader.read(65536), TIMEOUT):
             pass  # what was already in flight, then the end of the stream
         for c in (stalled, sender, watcher):
+            c.writer.close()
+        stop.set()
+        await asyncio.wait_for(task, TIMEOUT)
+
+    asyncio.run(asyncio.wait_for(scenario(), 20 * TIMEOUT))
+
+
+def test_shots_at_a_client_that_never_reads_are_shed_and_do_not_cut_it() -> None:
+    async def scenario() -> None:
+        clock, gate = ManualClock(1000.0), TickGate()
+        config = local_config()
+        services = build_services(config, clock=clock)
+        stop, task, port = await start(
+            config, clock=clock, services=services, tick_sleep=gate.sleep
+        )
+        stalled, _ = await enter(port, "RED", "STALLED,secret")
+        sender, hello = await enter(port, "RED", "SENDER,secret")
+        for c in (stalled, sender):
+            await c.send(frame(report(4, x_off=75, z_off=75)))
+        await sender.expect_frame("A")
+        shot = frame(client.Shot(hello.self_id, report(0).pos, 3196, 0, 1))
+        with LogWatch("opencs.net", "outbox over") as cut:
+            sent = 0
+            while services.router.shots_shed < policy.OUTBOX_LIMIT and sent < MAX_FLOOD:
+                clock.advance(policy.RELAY_LIMIT_POD_STATE[0])  # refills the budget
+                await sender.send(shot * SHOTS)
+                await sender.send(frame(client.Ping()))
+                await pong(sender)
+                sent += SHOTS
+            assert services.router.shots_shed >= policy.OUTBOX_LIMIT, f"sent {sent}"
+            assert cut.count == 0
+        for c in (stalled, sender):
             c.writer.close()
         stop.set()
         await asyncio.wait_for(task, TIMEOUT)

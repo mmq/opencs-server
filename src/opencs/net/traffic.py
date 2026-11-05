@@ -42,6 +42,8 @@ class Traffic:
         self.frames = 0
         #: Queued messages a newer one replaced before they were written (``Connection._enqueue``).
         self.replaced = 0
+        #: Shots not queued because this client was behind (``routing.Router``).
+        self.shots_shed = 0
         #: The most items ever waiting in the outbox.
         self.peak_outbox = 0
         #: Times the write pump waited for the client's acks, and gave up waiting.
@@ -62,11 +64,11 @@ class Traffic:
 
     def summary(self, now: float) -> str:
         """``sent 4800 bytes, 210 frames in 60 s: avg 80 B/s; peak 410 B/s, 18.0 frames/s (1 s);
-        ...; peak outbox 12, 30 replaced; peak unacked 900 bytes, worst ack 1.2 s, 0 waits, 0
-        stalls``. Each rate's peak is the busiest fixed stretch of that length, averaged over it. A
-        high outbox or many replaced means the client was over its rate: it got fewer positions, not
-        later ones. Waits mean the game was reading slower than the rate; stalls that its acks
-        stopped altogether for a while."""
+        ...; peak outbox 12, 30 replaced, 0 shots shed; peak unacked 900 bytes, worst ack 1.2 s, 0
+        waits, 0 stalls``. Each rate's peak is the busiest fixed stretch of that length, averaged
+        over it. A high outbox or many replaced means the client was over its rate: it got fewer
+        positions, not later ones. Waits mean the game was reading slower than the rate; stalls
+        that its acks stopped altogether for a while."""
         elapsed = now - self._start
         peaks = "; ".join(
             f"peak {w.peak_bytes / w.seconds:.0f} B/s, {w.peak_frames / w.seconds:.1f} frames/s"
@@ -76,7 +78,8 @@ class Traffic:
         return (
             f"sent {self.bytes} bytes, {self.frames} frames in {elapsed:.0f} s:"
             f" avg {self.bytes / max(elapsed, 1.0):.0f} B/s; {peaks};"
-            f" peak outbox {self.peak_outbox}, {self.replaced} replaced;"
+            f" peak outbox {self.peak_outbox}, {self.replaced} replaced,"
+            f" {self.shots_shed} shots shed;"
             f" peak unacked {self.peak_unacked} bytes, worst ack {self.worst_ack_delay:.1f} s,"
             f" {self.ack_waits} waits, {self.ack_stalls} stalls"
         )

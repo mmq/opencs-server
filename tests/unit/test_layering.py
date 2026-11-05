@@ -30,7 +30,7 @@ ALLOWED: dict[str, set[str]] = {
     },
     "net": {"wire", "messages", "policy", "clock", "connlog", "ratelimit"},
     "world": {"wire", "messages", "policy", "config"},
-    "routing": {"messages", "world"},
+    "routing": {"messages", "world", "policy"},
 }
 
 

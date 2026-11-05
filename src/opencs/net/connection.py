@@ -57,6 +57,8 @@ class ConnectionIO(Protocol):
 
     def backlog(self) -> int: ...
 
+    def note_shed(self) -> None: ...
+
     def acked(self, tags: bytes) -> None: ...
 
     def close(self, reason: str) -> None: ...
@@ -171,6 +173,10 @@ class Connection:
     def backlog(self) -> int:
         """Items queued and not yet written: how far behind the client is reading."""
         return len(self._outbox)
+
+    def note_shed(self) -> None:
+        """A shot was not queued for this client, which is behind."""
+        self.traffic.shots_shed += 1
 
     def acked(self, tags: bytes) -> None:
         """The client has handled the frames with these tags."""

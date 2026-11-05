@@ -190,6 +190,18 @@ ACK_PROBE_BYTES = 384
 #: takes to load and start acknowledging. Ours (ADR 11).
 ACK_STALL_SECONDS = 5.0
 
+#: Items queued for one client past which another player's relayed shot is not queued for it if it
+#: was fired beyond ``SHOT_KEEP_FEET``, and past which none is. A shot is only something to see:
+#: the client that fired it reports the hit (I §9.1), so the damage still lands. Above the ~16
+#: reports always queued for a busy client. Shots cannot replace each other as reports do, so unshed
+#: they would fill the outbox of a client held up by its acks. Ours (ADR 11).
+SHOTS_SHED_FAR_BACKLOG = 32
+SHOTS_SHED_ALL_BACKLOG = 64
+
+#: How near, across the ground, a shot must start to a client to be kept longest: a bit under the
+#: normal radar's range of over three blocks. Ours (ADR 11).
+SHOT_KEEP_FEET = 1800
+
 #: Session ticks per second per connection (DESIGN §3.4): fine enough for the 0.3 s login prompt
 #: delay. Ours.
 SESSION_TICK_HZ = 10

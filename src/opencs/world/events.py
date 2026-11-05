@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from opencs.messages import ServerMessage
+from opencs.messages.fields import WirePos
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,8 +69,10 @@ type Audience = ToPlayer | ToPlayers | ToAll | ToAllExcept | ToTeam | ToHolders
 class Event:
     """A server message and its audience. A ``droppable`` one (a player's chat) is not sent to a
     player whose connection is already far behind: losing it costs nothing, while queueing it could
-    overflow the outbox and cut that player off (DESIGN §5)."""
+    overflow the outbox and cut that player off (DESIGN §5). ``shot_from`` marks a player's relayed
+    shot, which is shed sooner, the farther from the player it started (``routing``, ADR 11)."""
 
     message: ServerMessage
     audience: Audience
     droppable: bool = False
+    shot_from: WirePos | None = None

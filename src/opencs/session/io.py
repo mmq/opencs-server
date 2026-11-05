@@ -31,6 +31,10 @@ class SessionIO(Protocol):
         (``policy.DROPPABLE_WATERMARK``), so it cannot fill the outbox and get the client cut."""
         ...
 
+    def note_shed(self) -> None:
+        """A shot was not queued because this client is behind: for the log at close."""
+        ...
+
     def acked(self, tags: bytes) -> None:
         """The client has handled the frames with these tags (``client.Acks``, I §8.26)."""
         ...
