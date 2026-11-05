@@ -193,7 +193,8 @@ TRAFFIC_PEAK_WINDOWS = (1.0, 10.0)
 #: ``Member.congested``) until it catches up. The real client reads through an emulated modem, about
 #: 1 KB a second, so many senders, each within its own budget, can still queue chat faster than one
 #: client reads it; without this the outbox overflows (``OUTBOX_LIMIT``) and that player is cut.
-#: Game state is never dropped. A quarter of the outbox leaves room for it. Ours (DESIGN §5).
+#: Tagged game state is never dropped; only a pod's report can be replaced by its newer one. A
+#: quarter of the outbox leaves room for it. Ours (DESIGN §5).
 DROPPABLE_WATERMARK = OUTBOX_LIMIT // 4
 
 #: TCP keepalive on accepted sockets, so a peer that vanished without a FIN is noticed and its

@@ -66,6 +66,16 @@ class ServerMessage(Message):
     def validate(self) -> None:
         """Raise ``ValueError`` for a field the client cannot take. Override per message."""
 
+    def coalesce_key(self) -> int | None:
+        """The pod this message wholly describes, if a newer one makes a queued one worthless; only
+        a lowercase message may say so, since an uppercase one is acknowledged."""
+        return None
+
+    def barrier_id(self) -> int | None:
+        """The pod whose life this message changes, if any: a newer report of it must stay behind
+        this message in the queue, not replace a report ahead of it."""
+        return None
+
     def __post_init__(self) -> None:
         self.validate()
         body = self.body()  # raises WireError (a ValueError) for an unencodable field

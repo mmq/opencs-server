@@ -7,7 +7,8 @@ fills only its own outbox; when that overflows, that client is cut and nobody el
 
 The write pump keeps to the rate the client can read at. Written any faster, the bytes would only
 wait in the kernels' socket buffers, out of reach; paced, the backlog stays in the outbox, where
-``backlog`` sees it.
+``backlog`` sees it. While it waits, a newer report of a pod replaces the older one where it sits,
+so a client that is behind gets fewer, fresher positions and not the same ones later and later.
 """
 
 from __future__ import annotations
@@ -82,7 +83,18 @@ class _Close:
 
 _CLOSE = _Close()
 
-type Outbound = bytes | ServerMessage | _Close
+
+class _Replaceable:
+    """A queued message that a newer one with the same ``coalesce_key`` takes over, in its place."""
+
+    __slots__ = ("key", "message")
+
+    def __init__(self, key: int, message: ServerMessage) -> None:
+        self.key = key
+        self.message = message
+
+
+type Outbound = bytes | ServerMessage | _Replaceable | _Close
 
 
 class Connection:
@@ -118,6 +130,7 @@ class Connection:
         self._owed_at = clock.now()
         self._log = ConnectionLog(logging.getLogger("opencs.net"), context)
         self._outbox: deque[Outbound] = deque()
+        self._replaceable: dict[int, _Replaceable] = {}  # in the outbox, by ``coalesce_key``
         self._wake = asyncio.Event()
         self._next_tag = BYTE_MIN
         self._closing = False
@@ -167,6 +180,7 @@ class Connection:
         self._log.warning("aborting: %s", reason)
         self._aborted = True
         self._outbox.clear()
+        self._replaceable.clear()
         self._wake.set()
         with contextlib.suppress(Exception):
             self._writer.transport.abort()
@@ -176,13 +190,25 @@ class Connection:
     def _enqueue(self, item: bytes | ServerMessage, *, front: bool = False) -> None:
         if self._closing or self._aborted:
             return
+        queued: Outbound = item
+        if isinstance(item, ServerMessage):
+            if (pod := item.barrier_id()) is not None:
+                self._replaceable.pop(pod, None)  # what follows must stay behind this
+            if (key := item.coalesce_key()) is not None:
+                if (older := self._replaceable.get(key)) is not None:
+                    older.message = item
+                    self.traffic.replaced += 1
+                    return
+                queued = _Replaceable(key, item)
         if len(self._outbox) >= self._limit:
             self.abort(f"outbox over {self._limit} items")
             return
+        if isinstance(queued, _Replaceable):
+            self._replaceable[queued.key] = queued
         if front:
-            self._outbox.appendleft(item)
+            self._outbox.appendleft(queued)
         else:
-            self._outbox.append(item)
+            self._outbox.append(queued)
         self._wake.set()
 
     def encode(self, msg: ServerMessage) -> bytes:
@@ -266,6 +292,8 @@ class Connection:
                 if isinstance(item, _Close):
                     await self._drain()
                     return
+                if isinstance(item, _Replaceable):
+                    item = self._unwrap(item)
                 data = self._frame(item)
                 if data:
                     framed = not isinstance(item, bytes)
@@ -305,6 +333,13 @@ class Connection:
             self._log.info("write failed: %s", exc)
             return False
         return True
+
+    def _unwrap(self, item: _Replaceable) -> ServerMessage:
+        """``item`` is leaving the outbox: its message is final, and a later report queues anew. A
+        barrier may have forgotten it already, and a newer one may hold its key."""
+        if self._replaceable.get(item.key) is item:
+            del self._replaceable[item.key]
+        return item.message
 
     def _frame(self, item: bytes | ServerMessage) -> bytes:
         if isinstance(item, bytes):

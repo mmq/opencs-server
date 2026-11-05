@@ -55,6 +55,9 @@ class ReleaseDrop(ServerMessage):
     def validate(self) -> None:
         check_pod_id("id", self.id)
 
+    def barrier_id(self) -> int | None:
+        return self.id
+
     def body(self) -> bytes:
         return Writer().b10(self.id).bytes()
 
@@ -397,6 +400,9 @@ class Introduce(ServerMessage):
         check_callsign(self.callsign)
         check_b88("v1", self.v1)
 
+    def barrier_id(self) -> int | None:
+        return self.id
+
     def body(self) -> bytes:
         w = Writer().b10(self.id).str(self.callsign).b10(make_slot(self.index, self.team))
         self.pos.write(w)
@@ -420,6 +426,9 @@ class Delete(ServerMessage):
 
     def validate(self) -> None:
         check_pod_id("id", self.id)
+
+    def barrier_id(self) -> int | None:
+        return self.id
 
     def body(self) -> bytes:
         return Writer().b10(self.id).bytes()
@@ -471,6 +480,9 @@ class Destroy(ServerMessage):
 
     TYPE: ClassVar[str] = "J"
     id: int
+
+    def barrier_id(self) -> int | None:
+        return self.id
 
     def body(self) -> bytes:
         return Writer().num(self.id).bytes()
@@ -838,6 +850,9 @@ class PodState(ServerMessage):
         check_b88("fwd_target", self.fwd_target)
         check_range("state", self.state, 0, 1)
         check_range("weight", self.weight, 0, BIAS10_MAX)
+
+    def coalesce_key(self) -> int | None:
+        return self.id  # an absolute position: the newest says everything the older one did
 
     def body(self) -> bytes:
         w = Writer().b10(self.id)

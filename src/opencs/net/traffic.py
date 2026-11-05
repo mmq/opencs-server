@@ -40,6 +40,8 @@ class Traffic:
         self._windows = [_Window(s) for s in windows]
         self.bytes = 0
         self.frames = 0
+        #: Queued messages a newer one replaced before they were written (``Connection._enqueue``).
+        self.replaced = 0
 
     def sent(self, n_bytes: int, now: float, *, frame: bool) -> None:
         self.bytes += n_bytes
