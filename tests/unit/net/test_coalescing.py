@@ -58,6 +58,17 @@ def test_a_newer_report_replaces_the_queued_one_where_it_sits() -> None:
     assert connection.traffic.replaced == 2
 
 
+def test_the_close_summary_shows_how_far_behind_the_client_fell() -> None:
+    def queue(c: Connection) -> None:
+        c.send(report(1, 10))
+        c.send(report(2, 20))
+        c.send(server.PingReply())
+        c.send(report(1, 11))
+
+    _, connection = written_after(queue)
+    assert connection.traffic.summary(1.0).endswith("; peak outbox 3, 1 replaced")
+
+
 def test_a_report_of_stopping_is_never_lost() -> None:
     """With ``state`` 0 the client keeps a remote pod walking at its last speed (I §8.24)."""
 

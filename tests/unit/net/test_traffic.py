@@ -23,7 +23,8 @@ def test_the_peak_is_the_busiest_stretch_averaged_over_its_length() -> None:
         traffic.sent(25, t, frame=True)
     assert traffic.summary(10.0) == (
         "sent 210 bytes, 9 frames in 10 s: avg 21 B/s;"
-        " peak 60 B/s, 3.0 frames/s (1 s); peak 21 B/s, 0.9 frames/s (10 s)"
+        " peak 60 B/s, 3.0 frames/s (1 s); peak 21 B/s, 0.9 frames/s (10 s);"
+        " peak outbox 0, 0 replaced"
     )
 
 
@@ -35,5 +36,6 @@ def test_a_short_connection_does_not_inflate_the_average() -> None:
 
 def test_nothing_sent() -> None:
     assert Traffic(0.0, windows=(1.0,)).summary(5.0) == (
-        "sent 0 bytes, 0 frames in 5 s: avg 0 B/s; peak 0 B/s, 0.0 frames/s (1 s)"
+        "sent 0 bytes, 0 frames in 5 s: avg 0 B/s; peak 0 B/s, 0.0 frames/s (1 s);"
+        " peak outbox 0, 0 replaced"
     )

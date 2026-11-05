@@ -42,6 +42,8 @@ class Traffic:
         self.frames = 0
         #: Queued messages a newer one replaced before they were written (``Connection._enqueue``).
         self.replaced = 0
+        #: The most items ever waiting in the outbox.
+        self.peak_outbox = 0
 
     def sent(self, n_bytes: int, now: float, *, frame: bool) -> None:
         self.bytes += n_bytes
@@ -51,7 +53,9 @@ class Traffic:
 
     def summary(self, now: float) -> str:
         """``sent 4800 bytes, 210 frames in 60 s: avg 80 B/s; peak 410 B/s, 18.0 frames/s (1 s);
-        ...``. Each peak is the busiest fixed stretch of that length, averaged over it."""
+        ...; peak outbox 12, 30 replaced``. Each rate's peak is the busiest fixed stretch of that
+        length, averaged over it. A high outbox or many replaced means the client was over its
+        rate: it got fewer positions, not later ones."""
         elapsed = now - self._start
         peaks = "; ".join(
             f"peak {w.peak_bytes / w.seconds:.0f} B/s, {w.peak_frames / w.seconds:.1f} frames/s"
@@ -60,5 +64,6 @@ class Traffic:
         )
         return (
             f"sent {self.bytes} bytes, {self.frames} frames in {elapsed:.0f} s:"
-            f" avg {self.bytes / max(elapsed, 1.0):.0f} B/s; {peaks}"
+            f" avg {self.bytes / max(elapsed, 1.0):.0f} B/s; {peaks};"
+            f" peak outbox {self.peak_outbox}, {self.replaced} replaced"
         )

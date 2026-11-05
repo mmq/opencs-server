@@ -209,6 +209,7 @@ class Connection:
             self._outbox.appendleft(queued)
         else:
             self._outbox.append(queued)
+        self.traffic.peak_outbox = max(self.traffic.peak_outbox, len(self._outbox))
         self._wake.set()
 
     def encode(self, msg: ServerMessage) -> bytes:
