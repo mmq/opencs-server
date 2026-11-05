@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 from dataclasses import replace
 
+import pytest
+
 from fixtures.loopback import Client, enter, local_config, start
 from fixtures.streams import FakeReader, FakeWriter, until, wait
 from opencs import policy
@@ -223,6 +225,7 @@ def test_an_abort_ends_a_pacing_wait_at_once() -> None:
     assert asyncio.run(scenario()) is False
 
 
+@pytest.mark.judge
 def test_the_real_clock_and_sleep_keep_to_the_rate_over_a_real_socket() -> None:
     """Without pacing the kernel would take all of this at once."""
     rate, size = 40_000, 20_000  # half a second
@@ -270,6 +273,7 @@ def test_the_real_clock_and_sleep_keep_to_the_rate_over_a_real_socket() -> None:
     assert held > 0
 
 
+@pytest.mark.judge
 def test_the_configured_rate_reaches_a_real_servers_connections() -> None:
     rate = 8000
 

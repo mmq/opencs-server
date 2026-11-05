@@ -6,7 +6,7 @@ import asyncio
 from collections.abc import Callable
 
 from fixtures.streams import FakeReader, FakeWriter, until, wait
-from opencs.clock import ManualClock, MonotonicClock
+from opencs.clock import ManualClock
 from opencs.connlog import ConnectionContext
 from opencs.messages import ServerMessage, decode_server, server
 from opencs.messages.fields import WirePos
@@ -174,17 +174,21 @@ def test_a_report_queues_anew_once_the_last_has_been_written() -> None:
 
 
 def test_fifteen_moving_pods_over_a_real_socket_stay_fresh_and_are_not_cut() -> None:
-    """Many times what the rate allows, read by a client that keeps up with the rate: the backlog
-    stays one report a pod and the last position arrives at once. It would otherwise grow without
-    end and arrive later and later, and in the end the outbox limit would cut this client."""
-    pods, rate = 15, 8000  # scaled up from 960 B/s, so the test takes one second, not eight
-    rounds, gap = 200, 0.005  # 3000 reports a second, about 70 KB/s
+    """A brawl at about three times what 960 B/s carries, read by a client that keeps up with that
+    rate: the backlog stays one report a pod and the last positions arrive within a second. Without
+    replacement it grows until the outbox limit cuts this client. Real sockets, a manual clock."""
+    pods, rate = 15, 960
+    gap, rounds = 1 / 8, 480  # 120 reports a second, about 2.8 KB/s, for a minute
 
     async def scenario() -> tuple[int, int, float, bool]:
-        clock = MonotonicClock()
-        peak: list[int] = [0]
-        result: list[Connection] = []
-        finished = asyncio.Event()
+        clock = ManualClock()
+
+        async def pace(seconds: float) -> None:
+            until_then = clock.now() + seconds
+            while clock.now() < until_then:
+                await asyncio.sleep(0)
+
+        served: list[Connection] = []
 
         async def serve(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
             connection = Connection(
@@ -194,45 +198,48 @@ def test_fifteen_moving_pods_over_a_real_socket_stay_fresh_and_are_not_cut() -> 
                 clock,
                 ConnectionContext(1),
                 bytes_per_second=rate,
+                pace_sleep=pace,
             )
-            result.append(connection)
-            running = asyncio.create_task(connection.run())
-            for n in range(rounds):
-                for pod in range(pods):
-                    connection.send(report(pod, n % 100))
-                peak[0] = max(peak[0], connection.backlog())
-                await asyncio.sleep(gap)
-            finished.set()
-            await running
+            served.append(connection)
+            await connection.run()
 
         listening = await asyncio.start_server(serve, "127.0.0.1", 0)
         port = listening.sockets[0].getsockname()[1]
         reader, writer = await asyncio.open_connection("127.0.0.1", port)
-        frames = FrameReader()
         last: dict[int, int] = {}
-        wanted = (rounds - 1) % 100
-        finished_at = None
-        while len([v for v in last.values() if v == wanted]) < pods or not finished.is_set():
-            data = await asyncio.wait_for(reader.read(65536), 10)
-            assert data, "the client was cut"
-            for found in frames.feed(data):
-                message, _ = decode_server(found.payload)
-                assert isinstance(message, server.PodState)
-                last[message.id] = message.pos.x_off
-            if finished.is_set() and finished_at is None:
-                finished_at = clock.now()
-        assert finished_at is not None
-        delay = clock.now() - finished_at
-        connection = result[0]
-        aborted = connection._aborted
-        replaced = connection.traffic.replaced
-        writer.close()
-        connection.abort("done")
-        listening.close()
-        return peak[0], replaced, delay, aborted
 
-    peak, replaced, delay, aborted = asyncio.run(scenario())
+        async def read_all() -> None:
+            frames = FrameReader()
+            while data := await reader.read(65536):
+                for found in frames.feed(data):
+                    message, _ = decode_server(found.payload)
+                    assert isinstance(message, server.PodState)
+                    last[message.id] = message.pos.x_off
+
+        reading = asyncio.create_task(read_all())
+        await until(lambda: bool(served))
+        connection = served[0]
+        final = (rounds - 1) % 100
+        for n in range(rounds):
+            for pod in range(pods):
+                connection.send(report(pod, n % 100))
+            clock.advance(gap)
+            await asyncio.sleep(0)
+        finished_at = clock.now()
+        while sum(v == final for v in last.values()) < pods and not reading.done():
+            clock.advance(0.01)
+            await asyncio.sleep(0.001)
+        delay = clock.now() - finished_at
+        result = connection.traffic.peak_outbox, connection.traffic.replaced
+        aborted = connection._aborted
+        connection.abort("done")
+        writer.close()
+        reading.cancel()
+        listening.close()
+        return *result, delay, aborted
+
+    peak, replaced, delay, aborted = asyncio.run(asyncio.wait_for(scenario(), 30))
+    assert not aborted
     assert peak <= pods
     assert replaced > rounds * pods // 2
     assert delay < 1.0
-    assert not aborted

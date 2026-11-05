@@ -63,5 +63,5 @@ addopts = "-ra --strict-markers -m 'not judge'"
 tmp_path_retention_policy = "failed"
 markers = [
     "e2e: starts a server subprocess",
-    "judge: runs tools/judge.py against a server it starts (slow, real time); deselected by default, run with -m judge",
+    "judge: runs in real time, tools/judge.py against a server it starts and what must be timed on a real clock; deselected by default, run with -m judge",
 ]
