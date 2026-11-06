@@ -203,6 +203,9 @@ in `world/view.py` as one `ClientView` per player, owned by the city. Sessions d
   is counted as failed (`session.cityhealth`, shown by `status`) and rebuilt from its configuration the next
   time its game is empty. Losing a game in play would be worse than a slightly wrong one, and snapshots would
   cost a copy per message.
+- **Slow calls:** everything shares one loop (ADR 3), so a city call or tick, with the save that follows it,
+  that takes over `policy.SLOW_CITY_CALL_SECONDS` holds up every player. `session.cityhealth` counts them, and
+  warns at most once a minute per city.
 
 ## 6. Observability and operations
 

@@ -362,8 +362,9 @@ class InGamePhase(Phase):
         request, drop the request, keep the connection and the city running (DESIGN §5)."""
         city = self._city
         assert city is not None
+        started = self.host.now()
         try:
-            events = city.client_message(self._player_id, message, self.host.now())
+            events = city.client_message(self._player_id, message, started)
             self.host.services.router.deliver(city, events)
         except Exception:
             self.host.log.exception(
@@ -373,6 +374,9 @@ class InGamePhase(Phase):
         # Whatever the call changed in the player's record, even if the handler then
         # raised (the city notes progress in a ``finally``).
         self.host.services.persistence.flush(city)
+        self.host.services.city_health.called(
+            city.config.letter, type(message).__name__, started, self.host.now()
+        )
 
     # --- time --------------------------------------------------------------------------------
 

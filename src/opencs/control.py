@@ -179,7 +179,7 @@ class Control:
                 f"city {letter} {city.config.name}: {services.lobby.count(letter)} players"
                 f"{f' ({teams})' if teams else ''}"
                 f"{'' if offered else ' [closing: no new players]'}"
-                f"{self._failures(letter)}"
+                f"{self._failures(letter)}{self._slow_calls(letter)}"
             )
         held = services.held.live()
         lines.append(f"held games: {len(held)}")
@@ -200,6 +200,14 @@ class Control:
             f" [failures: {health.failures(letter)}, "
             f"rebuilds: {health.rebuilds(letter)}{waiting}]"
         )
+
+    def _slow_calls(self, letter: str) -> str:
+        """What ``status`` adds to a city with slow calls, nothing to one without."""
+        health = self._services.city_health
+        if not health.slow_calls(letter):
+            return ""
+        worst = health.worst_call(letter) * 1000
+        return f" [slow calls: {health.slow_calls(letter)}, worst {worst:.0f} ms]"
 
     # --- accounts (a password made here is shown once and never logged) ---------------------------
 

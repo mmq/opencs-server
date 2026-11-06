@@ -321,7 +321,9 @@ ack N s, N waits, N stalls`. Many replaced means a busy player was getting fewer
 Waits and shots shed mean the game was reading slower than the line; `stalls` means its acks stopped for a
 while, which is normal once at the start of a game. A bug is
 always an `ERROR` with a traceback and the request that triggered it; the connection or city carries on
-(DESIGN §5), so grep for `ERROR` and `Traceback`.
+(DESIGN §5), so grep for `ERROR` and `Traceback`. `city A: Shot took 34 ms; 3 slow since the last warning`, at
+most once a minute per city, means every player on the server waited that long; regular ones point at the
+disk, since a call includes its save.
 
 Passwords, and the admin token, are never logged (tests pin both). Callsigns and addresses are.
 
@@ -394,7 +396,7 @@ port) or restart the server, which resets the limits.
 
 | command | does |
 |---|---|
-| `status` | uptime; connections by phase (logon, Chamber, game); per city its players by team (and `[closing: no new players]`, or `[failures: N, rebuilds: N]` for a city that has hit a bug); held `/RESUME` games with the time left |
+| `status` | uptime; connections by phase (logon, Chamber, game); per city its players by team (and `[closing: no new players]`, `[failures: N, rebuilds: N]` for a city that has hit a bug, `[slow calls: N, worst N ms]` for one that has held up the server); held `/RESUME` games with the time left |
 | `announce <text>` | a system line (`'a'`, sender 100) on every started in-game client and a `*** text` line to each Chamber pilot. Text is made printable ASCII and cut to 230 characters. Says how many received it |
 | `kick <callsign> [reason]` | in a game: the reason as a system line, then an unprompted `'C'` (I §5.5, I §8.5): the client returns to the Chamber exactly as after its own quit, where the reason is shown again. In the Chamber: a line, and the connection is closed; at the logon, just closed (no line is sent). See "Kicks and shutdown" |
 | `guppy <team> home` | the failsafe for a stranded team guppy (below); `<team>` is RED, BLUE, GREEN, BLACK or 0-3; applies in every city that has that team's guppy |

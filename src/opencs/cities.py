@@ -229,15 +229,19 @@ async def run_city(
     health: CityHealth | None = None,
 ) -> None:
     """Tick one city ``TICK_HZ`` times a second and deliver what it says (DESIGN §3.3). A bug in
-    the city's rules is logged, noted in ``health``, and the next tick runs (DESIGN §5). ``sleep``
-    is for tests. ``after_tick`` runs after each tick and returns True to end the ticker."""
+    the city's rules is logged, noted in ``health``, and the next tick runs (DESIGN §5). A slow
+    tick is noted there too. ``sleep`` is for tests. ``after_tick`` runs after each tick and returns
+    True to end the ticker."""
     while True:
         await sleep(1 / policy.TICK_HZ)
+        started = clock.now()
         try:
-            router.deliver(city, city.tick(clock.now()))
+            router.deliver(city, city.tick(started))
         except Exception:
             log.exception("city %s failed on a tick", city.config.letter)
             if health is not None:
                 health.failed(city.config.letter)
+        if health is not None:
+            health.called(city.config.letter, "a tick", started, clock.now())
         if after_tick is not None and after_tick():
             return

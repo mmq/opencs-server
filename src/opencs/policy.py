@@ -911,3 +911,13 @@ HOLD_SECONDS = 600.0
 #: Seconds from entering the Chamber after a drop in which ``/RESUME`` may be typed (D8): the
 #: manual summary's "within 3 minutes", counted from the re-entry (our reading).
 TYPE_SECONDS = 180.0
+
+# --- city health -------------------------------------------------------------------------------
+
+#: A call into a city, or a tick, taking this long is logged and counted. Everything shares one
+#: event loop (ADR 3), so every player on the server waits that long, in every city. Ours: a tenth
+#: of a tick. A call includes the save after it, the first thing to suspect on a slow disk.
+SLOW_CITY_CALL_SECONDS = 0.02
+
+#: At most one such warning per city in this long; the count covers the ones not logged. Ours.
+SLOW_CITY_CALL_LOG_SECONDS = 60.0

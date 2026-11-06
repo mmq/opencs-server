@@ -28,6 +28,7 @@ from opencs.config import AdminConfig, LimitsConfig, load_config
 from opencs.lobby.identity import Refused
 from opencs.messages import ServerMessage, client, client_payload, server
 from opencs.routing import Router
+from opencs.session.cityhealth import CityHealth
 from opencs.store.base import ProgressRecord
 from opencs.store.memory import memory_stores
 from opencs.wire.frame import build_frame
@@ -183,6 +184,41 @@ def test_a_city_ticker_ticks_the_city_and_delivers_its_events() -> None:
     asyncio.run(scenario())
     assert sleeps == [1 / policy.TICK_HZ] * 4
     assert sink.got == [server.ReleaseDrop(result.player_id)] * 3  # one per tick while dropping
+
+
+def test_the_ticker_notes_a_slow_tick_and_a_failed_one() -> None:
+    class Stop(BaseException):
+        pass
+
+    city = City(load_config(SHIPPED).cities[0])
+    clock, health = ManualClock(10.0), CityHealth()
+    letter = city.config.letter
+    durations = [0.0, 0.05, 0.03]
+    sleeps = 0
+
+    async def fake_sleep(seconds: float) -> None:
+        nonlocal sleeps
+        sleeps += 1
+        if sleeps > len(durations):
+            raise Stop
+
+    def tick(now: float) -> list[object]:
+        took = durations[sleeps - 1]
+        clock.advance(took)
+        if took == 0.03:
+            raise RuntimeError("rule bug")
+        return []
+
+    city.tick = tick  # type: ignore[method-assign,assignment]
+
+    async def scenario() -> None:
+        with contextlib.suppress(Stop):
+            await run_city(city, Router(), clock, fake_sleep, health=health)
+
+    asyncio.run(scenario())
+    assert health.slow_calls(letter) == 2  # a tick that raises took its time as well
+    assert health.worst_call(letter) == pytest.approx(0.05)
+    assert health.failures(letter) == 1
 
 
 def test_two_clients_chat_in_the_chamber_and_the_second_gets_a_new_callsign() -> None:

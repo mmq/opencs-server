@@ -38,6 +38,8 @@ play testing.
   (`[limits] client_unacked_bytes`). The line each connection logs at close shows how far behind it fell.
 - A city that hits a bug keeps running, is shown as failed by `status`, and is rebuilt from its
   configuration the next time its game is empty.
+- A city call or tick over 20 ms, which holds up every player on the server, is logged at most once a
+  minute per city and counted in `status`.
 - Configuration in TOML (`config/server.toml` and one file per city), validated at start with errors that
   name the file and key.
 - Logging per layer with an optional rotating file; passwords are never logged.

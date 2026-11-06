@@ -75,6 +75,16 @@ def test_status_shows_a_city_that_has_failed_and_whether_a_rebuild_waits() -> No
     assert "city A CITY A: 0 players [failures: 2, rebuilds: 1]" in ctl.status()
 
 
+def test_status_shows_a_city_with_slow_calls() -> None:
+    world = make_world()
+    ctl, _ = control(world)
+    health = world.services.city_health
+    health.called("A", "a tick", 10.0, 10.019)
+    assert "city A CITY A: 0 players" in ctl.status()
+    health.called("A", "a tick", 10.0, 10.034)
+    assert "city A CITY A: 0 players [slow calls: 1, worst 34 ms]" in ctl.status()
+
+
 def test_status_lists_a_held_game_with_its_time_left() -> None:
     world = make_world()
     ctl, _ = control(world)

@@ -186,6 +186,33 @@ def test_an_exception_in_the_city_drops_the_request_and_keeps_the_connection() -
     assert sent(h) == [server.ReleaseDrop(0), *START]
 
 
+def test_a_slow_city_call_is_noted_with_its_save_and_a_quick_one_is_not() -> None:
+    world = make_world()
+    h = play(world)
+    health = world.services.city_health
+    city = city_a(world)
+    real = city.client_message
+
+    def slowly(player_id: int, msg: ClientMessage, now: float) -> list:  # type: ignore[type-arg]
+        world.clock.advance(0.015)
+        return real(player_id, msg, now)
+
+    city.client_message = slowly  # type: ignore[method-assign]
+    h.feed(frame(report(4)))
+    assert health.slow_calls("A") == 0
+
+    flush = world.services.persistence.flush
+
+    def slow_save(target: object) -> None:
+        world.clock.advance(0.015)
+        flush(target)  # type: ignore[arg-type]
+
+    world.services.persistence.flush = slow_save  # type: ignore[method-assign,assignment]
+    h.feed(frame(report(4)))
+    assert health.slow_calls("A") == 1
+    assert health.worst_call("A") == pytest.approx(0.03)
+
+
 # --- the quit handshake ------------------------------------------------------------------------
 
 
