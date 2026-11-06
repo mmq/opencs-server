@@ -36,6 +36,8 @@ play testing.
 - What is written to each connection is paced to a 9600-baud modem's 960 bytes a second
   (`[limits] client_bytes_per_second`), and held back in a game while over 2 KB is unacknowledged
   (`[limits] client_unacked_bytes`). The line each connection logs at close shows how far behind it fell.
+- A city that hits a bug keeps running, is shown as failed by `status`, and is rebuilt from its
+  configuration the next time its game is empty.
 - Configuration in TOML (`config/server.toml` and one file per city), validated at start with errors that
   name the file and key.
 - Logging per layer with an optional rotating file; passwords are never logged.

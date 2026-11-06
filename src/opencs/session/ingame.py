@@ -135,6 +135,7 @@ class InGamePhase(Phase):
         except Exception:
             # A bug in the world: log it with the request and close; nobody is seated (DESIGN §5).
             self.host.log.exception("city %s failed on a join", city.config.letter)
+            self.host.services.city_health.failed(city.config.letter)
             self.stage = Stage.GONE
             self.host.close("city failed on the join")
             return
@@ -182,6 +183,7 @@ class InGamePhase(Phase):
             self.host.log.exception(
                 "city %s failed on leave of player %d", city.config.letter, self._player_id
             )
+            self.host.services.city_health.failed(city.config.letter)
 
     def closed(self) -> None:
         """The socket ended. While playing, with the server not the one that closed it, that is a
@@ -232,6 +234,7 @@ class InGamePhase(Phase):
         except Exception:
             # A bug in the world: the player must still be gone from the city (DESIGN §5).
             self.host.log.exception("city %s failed on a line drop", city.config.letter)
+            services.city_health.failed(city.config.letter)
             city.leave(self._player_id, self.host.now())
             return
         record = dropped.record
@@ -366,6 +369,7 @@ class InGamePhase(Phase):
             self.host.log.exception(
                 "city %s failed on %r; request dropped", city.config.letter, message
             )
+            self.host.services.city_health.failed(city.config.letter)
         # Whatever the call changed in the player's record, even if the handler then
         # raised (the city notes progress in a ``finally``).
         self.host.services.persistence.flush(city)

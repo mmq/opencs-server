@@ -179,6 +179,7 @@ class Control:
                 f"city {letter} {city.config.name}: {services.lobby.count(letter)} players"
                 f"{f' ({teams})' if teams else ''}"
                 f"{'' if offered else ' [closing: no new players]'}"
+                f"{self._failures(letter)}"
             )
         held = services.held.live()
         lines.append(f"held games: {len(held)}")
@@ -188,6 +189,17 @@ class Control:
             for r, left in held
         )
         return lines
+
+    def _failures(self, letter: str) -> str:
+        """What ``status`` adds to a city that has failed, nothing to one that has not."""
+        health = self._services.city_health
+        if not health.failures(letter):
+            return ""
+        waiting = ", rebuilds when empty" if health.tainted(letter) else ""
+        return (
+            f" [failures: {health.failures(letter)}, "
+            f"rebuilds: {health.rebuilds(letter)}{waiting}]"
+        )
 
     # --- accounts (a password made here is shown once and never logged) ---------------------------
 

@@ -178,6 +178,8 @@ def test_an_exception_in_the_city_drops_the_request_and_keeps_the_connection() -
     city.client_message = broken  # type: ignore[method-assign]
     h.feed(frame(report(4)))
     assert not h.io.closed
+    assert world.services.city_health.failures("A") == 1
+    assert world.services.city_health.tainted("A")
     city.client_message = real  # type: ignore[method-assign]
     sent(h)
     h.feed(frame(report(4)))
@@ -383,6 +385,7 @@ def test_a_join_that_raises_closes_the_connection_and_seats_nobody() -> None:
     h = play(world)
     assert h.io.closed
     assert city_a(world).players() == []
+    assert world.services.city_health.tainted("A")
 
 
 def test_a_leave_that_raises_is_logged_and_the_quit_goes_on() -> None:
@@ -396,6 +399,20 @@ def test_a_leave_that_raises_is_logged_and_the_quit_goes_on() -> None:
     quit_game(h)
     assert sent(h) == [server.QuitAck()]
     assert not h.io.closed
+    assert world.services.city_health.tainted("A")
+
+
+def test_a_line_drop_that_raises_marks_the_city_and_still_removes_the_player() -> None:
+    world = make_world()
+    h = play(world)
+
+    def boom(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("bug")
+
+    city_a(world).line_drop = boom  # type: ignore[method-assign,assignment]
+    h.session.closed()
+    assert city_a(world).players() == []
+    assert world.services.city_health.tainted("A")
     h.session.closed()  # and the line drop afterward does not try again
 
 

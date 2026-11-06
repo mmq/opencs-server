@@ -245,6 +245,134 @@ def running(path: Path) -> tuple[Services, CityManager, AppConfig, TickGate]:
     return services, CityManager(services, clock, _rng(), gate.sleep), app, gate
 
 
+# --- a city that has failed ---------------------------------------------------------------------
+
+
+def fail_one_tick(services: Services, letter: str) -> None:
+    """The city's next tick raises; the ones after it work."""
+    target = services.cities[letter]
+    real = target.tick
+
+    def broken(now: float) -> list:  # type: ignore[type-arg]
+        target.tick = real  # type: ignore[method-assign]
+        raise RuntimeError("rule bug")
+
+    target.tick = broken  # type: ignore[method-assign]
+
+
+def test_a_city_that_failed_is_kept_while_played_and_rebuilt_once_empty() -> None:
+    async def scenario() -> None:
+        services, manager, gate, clock = make(A)
+        manager.start()
+        original = services.cities["A"]
+        pid = seat(services, "A")
+        fail_one_tick(services, "A")
+        await settle(gate)
+        health = services.city_health
+        assert health.failures("A") == 1 and health.tainted("A")
+        await settle(gate)
+        assert services.cities["A"] is original  # a game is never lost to a rebuild
+
+        original.leave(pid, clock.now())
+        await settle(gate)
+        rebuilt = services.cities["A"]
+        assert rebuilt is not original and rebuilt.config == A
+        assert not health.tainted("A")
+        assert (health.failures("A"), health.rebuilds("A")) == (1, 1)  # the record outlasts it
+        assert services.lobby.city("A") == A
+
+        ticks: list[float] = []
+        rebuilt.tick = lambda now: ticks.append(now) or []  # type: ignore[method-assign]
+        await settle(gate)
+        assert ticks == [clock.now()]  # it has a ticker of its own, and only one
+        await settle(gate)
+        assert len(ticks) == 2
+        await manager.stop()
+
+    asyncio.run(scenario())
+
+
+def test_a_city_that_failed_with_nobody_in_it_is_rebuilt_on_that_tick() -> None:
+    async def scenario() -> None:
+        services, manager, gate, _ = make(A)
+        manager.start()
+        original = services.cities["A"]
+        fail_one_tick(services, "A")
+        await settle(gate)
+        assert services.cities["A"] is not original
+        await manager.stop()
+
+    asyncio.run(scenario())
+
+
+def test_a_city_that_never_failed_is_not_rebuilt() -> None:
+    async def scenario() -> None:
+        services, manager, gate, _ = make(A)
+        manager.start()
+        original = services.cities["A"]
+        await settle(gate)
+        await settle(gate)
+        assert services.cities["A"] is original
+        await manager.stop()
+
+    asyncio.run(scenario())
+
+
+def test_a_held_slot_keeps_a_failed_city_from_being_rebuilt() -> None:
+    async def scenario() -> None:
+        services, manager, gate, clock = make(A)
+        manager.start()
+        original = services.cities["A"]
+        pid = seat(services, "A")
+        dropped = original.line_drop(pid, clock.now(), fight_at=clock.now(), hold=True)
+        assert dropped.record is not None
+        services.held.hold(dropped.record, "1.2.3.4")
+        assert original.in_game
+        fail_one_tick(services, "A")
+        await settle(gate)
+        assert services.cities["A"] is original and services.city_health.tainted("A")
+        await manager.stop()
+
+    asyncio.run(scenario())
+
+
+def test_a_failed_city_takes_a_waiting_configuration_in_one_rebuild() -> None:
+    async def scenario() -> None:
+        services, manager, gate, clock = make(A)
+        manager.start()
+        original = services.cities["A"]
+        pid = seat(services, "A")
+        fail_one_tick(services, "A")
+        await settle(gate)
+        changed = replace(A, name="RENAMED")
+        manager.reload([changed])
+        original.leave(pid, clock.now())
+        await settle(gate)
+        assert services.cities["A"].config == changed
+        assert services.city_health.rebuilds("A") == 1 and not services.city_health.tainted("A")
+        await manager.stop()
+
+    asyncio.run(scenario())
+
+
+def test_a_failed_city_that_was_closed_goes_rather_than_being_rebuilt() -> None:
+    async def scenario() -> None:
+        services, manager, gate, clock = make(A, B)
+        manager.start()
+        original = services.cities["B"]
+        pid = seat(services, "B")
+        fail_one_tick(services, "B")
+        await settle(gate)
+        manager.reload([A])
+        original.leave(pid, clock.now())
+        await settle(gate)
+        assert "B" not in services.cities
+        assert services.city_health.failures("B") == 0 and not services.city_health.tainted("B")
+        await manager.stop()
+
+    asyncio.run(scenario())
+
+
 def test_an_invalid_file_changes_nothing_not_even_the_valid_parts(tmp_path: Path) -> None:
     async def scenario() -> None:
         path = copy_config(tmp_path)

@@ -61,6 +61,20 @@ def test_status_counts_connections_players_by_team_and_held_games() -> None:
     assert lines[-1] == "held games: 0"
 
 
+def test_status_shows_a_city_that_has_failed_and_whether_a_rebuild_waits() -> None:
+    world = make_world()
+    ctl, _ = control(world)
+    health = world.services.city_health
+    assert not any("failures" in line for line in ctl.status())
+    health.failed("A")
+    health.failed("A")
+    waiting = "city A CITY A: 0 players [failures: 2, rebuilds: 0, rebuilds when empty]"
+    assert waiting in ctl.status()
+    assert "city B CITY B: 0 players" in ctl.status()
+    health.replaced("A")
+    assert "city A CITY A: 0 players [failures: 2, rebuilds: 1]" in ctl.status()
+
+
 def test_status_lists_a_held_game_with_its_time_left() -> None:
     world = make_world()
     ctl, _ = control(world)

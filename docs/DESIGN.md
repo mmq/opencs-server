@@ -85,6 +85,7 @@ src/opencs/
     persistence.py       loads a record before a join, writes what a city reports changed (II §11.3)
     held.py              the games held for dropped players: windows, reserved slots (II §13)
     registry.py          every live session, for the operator (M12)
+    cityhealth.py        which cities have failed, and so need rebuilding when empty
     budgets.py           a connection's rate limits, which outlive its phases (ADR 9)
   lobby/
     lobby.py             Lobby: members, locations, city choice, teams (S9)
@@ -198,7 +199,10 @@ in `world/view.py` as one `ClientView` per player, owned by the city. Sessions d
   screen.
 - **Passwords:** salted PBKDF2 from `hashlib`, never stored or logged in clear, hashed on a small thread pool (`app.ThreadHasher`) so a login never stalls the loop; the session hands the work over through `Services.hasher` and stays sans-IO.
 - **Bugs vs bad input:** an exception inside a `City` is a bug — logged with the triggering request, the
-  request dropped, the city kept running.
+  request dropped, the city kept running. What the call changed before it raised stays changed, so the city
+  is counted as failed (`session.cityhealth`, shown by `status`) and rebuilt from its configuration the next
+  time its game is empty. Losing a game in play would be worse than a slightly wrong one, and snapshots would
+  cost a copy per message.
 
 ## 6. Observability and operations
 

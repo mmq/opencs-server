@@ -20,6 +20,7 @@ from opencs.lobby.identity import Identity
 from opencs.lobby.lobby import Lobby
 from opencs.ratelimit import KeyedBuckets
 from opencs.routing import Router
+from opencs.session.cityhealth import CityHealth
 from opencs.session.held import HeldGames
 from opencs.session.loginlimits import LoginLimits
 from opencs.session.persistence import Persistence
@@ -64,6 +65,8 @@ class Services:
     login_limits: LoginLimits
     #: Every live session, for the admin channel (DESIGN §6).
     sessions: SessionRegistry = field(default_factory=SessionRegistry)
+    #: Which cities have failed, for the rebuild and the admin channel (DESIGN §5, §6).
+    city_health: CityHealth = field(default_factory=CityHealth)
     #: Chat, per source address, over all of that address's connections (DESIGN §5).
     chat_limits: KeyedBuckets = field(
         default_factory=lambda: KeyedBuckets(*policy.CHAT_PER_ADDRESS)

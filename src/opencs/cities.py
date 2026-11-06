@@ -9,6 +9,9 @@ A reload re-reads ``config/cities/*.toml``. A running game is never changed unde
 * a city that is **removed or disabled** stops taking ``/PLAY`` at once and disappears when its
   game is empty (a player holding a ``/RESUME`` slot keeps it from being empty).
 
+A city that has **failed** (``session.cityhealth``) is rebuilt from its configuration the next time
+its game is empty, for the same reason: a slightly wrong game is better than a lost one.
+
 "Empty" is ``City.in_game`` false: nobody in it and no slot held. Everything here runs on the event
 loop between awaits, like the cities themselves, so a reload is atomic.
 """
@@ -26,6 +29,7 @@ from opencs import policy
 from opencs.clock import Clock
 from opencs.config import CityConfig, ConfigError, ServerConfig, load_config
 from opencs.routing import Router
+from opencs.session.cityhealth import CityHealth
 from opencs.session.held import HeldGames
 from opencs.session.phases import Services
 from opencs.world.city import City
@@ -102,6 +106,7 @@ class CityManager:
                 self._clock,
                 self._sleep,
                 after_tick=lambda: self._settle(letter, city),
+                health=self._services.city_health,
             )
         )
 
@@ -116,6 +121,9 @@ class CityManager:
             self._remove(letter)
             return True
         pending = self._pending.pop(letter, None)
+        if pending is None and self._services.city_health.tainted(letter):
+            log.warning("city %s has failed and is now empty: rebuilding it", letter)
+            pending = city.config
         if pending is not None:
             self._replace(pending)
             return True
@@ -184,12 +192,14 @@ class CityManager:
         letter = config.letter
         self._services.cities[letter] = City(config, self._rng, self._held())
         self._services.lobby.set_city(config)
+        self._services.city_health.replaced(letter)
         self._cancel_ticker(letter)
         self._start_ticker(letter)
 
     def _remove(self, letter: str) -> None:
         del self._services.cities[letter]
         self._closing.discard(letter)
+        self._services.city_health.forget(letter)
         self._cancel_ticker(letter)
 
     def _cancel_ticker(self, letter: str) -> None:
@@ -216,15 +226,18 @@ async def run_city(
     clock: Clock,
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     after_tick: Callable[[], bool] | None = None,
+    health: CityHealth | None = None,
 ) -> None:
     """Tick one city ``TICK_HZ`` times a second and deliver what it says (DESIGN §3.3). A bug in
-    the city's rules is logged and the next tick runs (DESIGN §5). ``sleep`` is for tests.
-    ``after_tick`` runs after each tick and returns True to end the ticker."""
+    the city's rules is logged, noted in ``health``, and the next tick runs (DESIGN §5). ``sleep``
+    is for tests. ``after_tick`` runs after each tick and returns True to end the ticker."""
     while True:
         await sleep(1 / policy.TICK_HZ)
         try:
             router.deliver(city, city.tick(clock.now()))
         except Exception:
             log.exception("city %s failed on a tick", city.config.letter)
+            if health is not None:
+                health.failed(city.config.letter)
         if after_tick is not None and after_tick():
             return
