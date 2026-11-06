@@ -18,7 +18,7 @@ from enum import Enum, auto
 
 from opencs import policy
 from opencs.messages import client, server
-from opencs.world.events import Event, ToAll, ToHolders
+from opencs.world.events import Event, Holders, ToAll
 
 
 class PodPhase(Enum):
@@ -33,8 +33,9 @@ class PodPhase(Enum):
 class Pod:
     """A player's pod as the server tracks it: its phase and last report (I §8.24)."""
 
-    def __init__(self, pod_id: int) -> None:
+    def __init__(self, pod_id: int, holders: Holders) -> None:
         self.id = pod_id
+        self._holders = holders
         self.phase = PodPhase.AWAIT_FIRST_FRAME
         #: The pod's last ``'b'`` (position, orientation, state, power, weight, armor).
         self.last: client.PodState | None = None
@@ -107,4 +108,4 @@ class Pod:
     def _release(self) -> Event:
         """``'A' <id>`` to every client holding this pod: its copies elsewhere wait in drop state
         too (I App. B)."""
-        return Event(server.ReleaseDrop(self.id), ToHolders(self.id))
+        return Event(server.ReleaseDrop(self.id), self._holders(self.id))

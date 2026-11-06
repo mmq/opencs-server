@@ -156,8 +156,7 @@ class Sentinels:
         return self._destroy(sentinel, now)
 
     def _destroy(self, sentinel: Sentinel, now: float) -> list[Event]:
-        """``'J'`` to every client that holds it, then forget it and free its id. The holders are
-        named now: forgetting it leaves ``ToHolders`` nobody to reach."""
+        """``'J'`` to every client that holds it, then forget it and free its id."""
         events = [
             Event(server.Destroy(sentinel.entity_id), ToPlayer(p.id))
             for p in self._host.players()

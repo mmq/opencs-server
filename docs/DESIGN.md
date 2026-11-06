@@ -147,7 +147,7 @@ socket bytes ─► Connection.read_pump ─► FrameReader ─► Frame ─► 
   `list[Event]`; each `Event` is a server message plus an `Audience`. That keeps every rule testable with
   no sockets, and lets the replay tests drive real captured traffic through it.
 - **Audiences are data** (`ToPlayer(id)`, `ToAll`, `ToAllExcept(id)`, `ToTeam(team)`,
-  `ToHolders(entity_id)`), resolved by the router — the spec's A.4 table becomes one small module.
+  `ToPlayers(ids)`), resolved by the router — the spec's A.4 table becomes one small module.
 - **Tags are assigned at the send boundary** (spec I §4.2), never by the code that builds a message.
 
 ### 3.3 Concurrency

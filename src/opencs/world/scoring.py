@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from opencs import policy
 from opencs.messages import client, server
 from opencs.wire.codec import BIAS88_MAX, BIAS88_MIN
-from opencs.world.events import Event, ToHolders
+from opencs.world.events import Event, Holders
 
 
 def multiplier_floor(max_module_level: int, max_multiplier: int) -> int:
@@ -39,8 +39,9 @@ class Bounty:
     is ours (``BOUNTY_PUSH_INTERVAL``).
     """
 
-    def __init__(self, pod_id: int) -> None:
+    def __init__(self, pod_id: int, holders: Holders) -> None:
         self.pod_id = pod_id
+        self._holders = holders
         self._since: float | None = None
         self._next_push = 0.0
 
@@ -78,7 +79,7 @@ class Bounty:
         return [self._push(0)]
 
     def _push(self, value: int) -> Event:
-        return Event(server.SetBounty(self.pod_id, value), ToHolders(self.pod_id))
+        return Event(server.SetBounty(self.pod_id, value), self._holders(self.pod_id))
 
 
 @dataclass(slots=True)

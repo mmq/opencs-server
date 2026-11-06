@@ -191,6 +191,7 @@ class City:
             self._ids,
             self._earliest_start(),
             self._any_client_has_had,
+            self.holders,
             Applicant(callsign, team, identity, saved, resume),
             now,
         )
@@ -214,9 +215,7 @@ class City:
             return []
         self._ids.release(IdRange.PLAYER, player_id, now)
         self._live.pop(player_id, None)
-        # Name the holders now: forgetting the pod below would leave ``ToHolders`` nobody to reach
-        # by the time the router resolves it. The leaver is out of the roster, so its own client is
-        # not among them.
+        # The leaver is out of the roster, so its own client is not among those told.
         events = []
         for other in self.players():
             if other.view.holds(player_id):
@@ -375,6 +374,18 @@ class City:
         self._live.pop(entity_id, None)
         for player in self._players.values():
             player.view.forget(entity_id)
+
+    def holders(self, entity_id: int, *, but: int | None = None) -> ToPlayers:
+        """The clients whose view holds this entity, i.e. that have been told it exists (``'A'``
+        for a pod, a Muncher's ``'K'``; I App. B, I §7.3), as they are now: what the call goes on to
+        change does not move an event already made. ``but`` leaves one out: a relayed ``'b'`` goes
+        to everyone who holds the pod but its owner, whose own echo would drag it to a stale
+        position."""
+        return ToPlayers(
+            frozenset(
+                p.id for p in self._players.values() if p.view.holds(entity_id) and p.id != but
+            )
+        )
 
     def playing(self, *, team: int | None = None, but: int | None = None) -> ToPlayers:
         """The clients that have reported, for messages every client takes (chat, shots,

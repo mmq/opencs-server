@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from opencs.messages import ServerMessage, server
 from opencs.world.attacks import Attacks
 from opencs.world.combat import HitSet, ShotLog
+from opencs.world.events import Holders
 from opencs.world.grace import Grace
 from opencs.world.loadout import Loadout
 from opencs.world.pods import Pod, PodPhase
@@ -29,6 +30,8 @@ class Player:
     team: int
     index: int  # 0-3 within the team; unique per (team, index), I §6.3
     view: ClientView
+    #: Who holds an entity now, for this pod's messages to its holders (``City.holders``).
+    holders: Holders
     #: The key this player's record is stored under, None for a player nothing is kept for.
     identity: str | None = None
     #: The stored record this player starts from, None for a new identity (II §11.3).
@@ -56,7 +59,7 @@ class Player:
     attacks: Attacks = field(init=False)
 
     def __post_init__(self) -> None:
-        self.pod = Pod(self.id)
+        self.pod = Pod(self.id, self.holders)
         self.shots = ShotLog(self.id)
         self.hits = HitSet()
         held = self.resume
@@ -75,7 +78,7 @@ class Player:
         if held is not None:
             self.score.multiplier = held.multiplier
             self.modules_to_restore = list(held.modules)
-        self.bounty = Bounty(self.id)
+        self.bounty = Bounty(self.id, self.holders)
         self.grace = Grace(self.id, self.team)
         self.loadout = Loadout()
         self.attacks = Attacks()

@@ -8,7 +8,7 @@ import pytest
 from opencs import policy
 from opencs.messages import client, server
 from opencs.wire.codec import BIAS88_MAX, BIAS88_MIN
-from opencs.world.events import Event, ToHolders
+from opencs.world.events import Event, ToPlayers
 from opencs.world.scoring import (
     Bounty,
     PlayerScore,
@@ -21,34 +21,38 @@ from opencs.world.scoring import (
 POD = 7
 
 
+def holders(pod_id: int) -> ToPlayers:
+    return ToPlayers(frozenset({pod_id, 9}))
+
+
 def push(value: int) -> Event:
-    return Event(server.SetBounty(POD, value), ToHolders(POD))
+    return Event(server.SetBounty(POD, value), holders(POD))
 
 
 # --- bounty -------------------------------------------------------------------------------------
 
 
 def test_a_bounty_that_has_not_started_is_zero_and_pushes_nothing() -> None:
-    b = Bounty(POD)
+    b = Bounty(POD, holders)
     assert b.value(100.0) == 0 and not b.running
     assert b.tick(100.0) == []
 
 
 def test_the_bounty_is_one_wire_unit_per_second_from_the_start() -> None:
-    b = Bounty(POD)
+    b = Bounty(POD, holders)
     b.start(100.0)
     assert [b.value(t) for t in (100.0, 100.99, 101.0, 150.5, 400.0)] == [0, 0, 1, 50, 300]
 
 
 def test_starting_again_does_not_restart_the_clock() -> None:
-    b = Bounty(POD)
+    b = Bounty(POD, holders)
     b.start(100.0)
     b.start(130.0)
     assert b.value(140.0) == 40
 
 
 def test_pushes_come_every_interval_with_the_value_at_that_moment() -> None:
-    b = Bounty(POD)
+    b = Bounty(POD, holders)
     b.start(100.0)
     step = policy.BOUNTY_PUSH_INTERVAL
     assert b.tick(100.0 + step - 0.01) == []
@@ -58,14 +62,14 @@ def test_pushes_come_every_interval_with_the_value_at_that_moment() -> None:
 
 
 def test_a_late_tick_pushes_once_not_once_per_missed_interval() -> None:
-    b = Bounty(POD)
+    b = Bounty(POD, holders)
     b.start(0.0)
     assert len(b.tick(95.0)) == 1
     assert b.tick(95.5) == []
 
 
 def test_zero_stops_the_clock_and_pushes_zero() -> None:
-    b = Bounty(POD)
+    b = Bounty(POD, holders)
     b.start(0.0)
     b.tick(12.0)
     assert b.zero() == [push(0)]

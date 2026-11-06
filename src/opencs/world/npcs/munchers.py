@@ -215,8 +215,8 @@ class Munchers:
     # --- audiences ---------------------------------------------------------------------------
 
     def _synced(self, m: Muncher) -> list[Player]:
-        """The players whose copy of ``m`` is in step: live traffic goes to them only. Named
-        explicitly rather than ``ToHolders``: a joining client holds the Muncher too (I App. B)."""
+        """The players whose copy of ``m`` is in step: live traffic goes to them only. Not its
+        holders: a joining client holds the Muncher too (I App. B)."""
         return [
             p
             for p in self._host.players()
@@ -364,7 +364,7 @@ class Munchers:
 
     def _remove(self, m: Muncher, now: float) -> list[Event]:
         """``'J'`` to every client that holds it (joining ones too), then forget it and free its
-        id. The holders are named now: forgetting it leaves ``ToHolders`` nobody to reach."""
+        id."""
         holders = frozenset(p.id for p in self._host.players() if p.view.holds(m.entity_id))
         events = [Event(server.Destroy(m.entity_id), ToPlayers(holders))] if holders else []
         self._host.despawn(m.entity_id)

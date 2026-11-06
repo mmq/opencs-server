@@ -165,8 +165,7 @@ class Drops:
 
     def _remove(self, drop: Drop, now: float, *, except_player: int | None = None) -> list[Event]:
         """``'Q'`` destroy to each client that holds the drop (but ``except_player``), then forget
-        it and release its id. The holders are named now: forgetting the drop leaves
-        ``ToHolders`` nobody to reach."""
+        it and release its id."""
         events = [
             Event(server.DestroyObject(drop.entity_id), ToPlayer(p.id))
             for p in self._host.players()

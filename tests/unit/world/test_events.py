@@ -7,7 +7,7 @@ import dataclasses
 import pytest
 
 from opencs.messages import server
-from opencs.world.events import Event, ToAll, ToAllExcept, ToHolders, ToPlayer, ToTeam
+from opencs.world.events import Event, ToAll, ToAllExcept, ToPlayer, ToTeam
 
 
 def test_an_event_pairs_a_message_with_an_audience() -> None:
@@ -19,7 +19,7 @@ def test_an_event_pairs_a_message_with_an_audience() -> None:
 def test_audiences_compare_by_value_and_differ_by_kind() -> None:
     assert ToAllExcept(1) == ToAllExcept(1)
     assert ToAllExcept(1) != ToPlayer(1)
-    assert ToTeam(2) != ToHolders(2)
+    assert ToTeam(2) != ToPlayer(2)
     assert ToAll() == ToAll()
 
 

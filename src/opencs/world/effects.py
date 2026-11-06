@@ -190,8 +190,7 @@ class Effects:
         return events
 
     def _forget(self, mine: Mine, now: float) -> list[Event]:
-        """``'J'`` to each client that holds the mine, then forget it and release its id. The
-        holders are named now: forgetting the mine leaves ``ToHolders`` nobody to reach."""
+        """``'J'`` to each client that holds the mine, then forget it and release its id."""
         events = [
             Event(server.Destroy(mine.entity_id), ToPlayer(p.id))
             for p in self._host.players()

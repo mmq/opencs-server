@@ -13,7 +13,7 @@ from opencs.messages import client, server
 from opencs.world import relay
 from opencs.world.dispatch import check_loadout, start_status
 from opencs.world.entities import inform, introduce
-from opencs.world.events import Event, ToHolders, ToPlayer
+from opencs.world.events import Event, ToPlayer
 from opencs.world.player import Player
 from opencs.world.pods import PodPhase
 
@@ -35,15 +35,8 @@ def pod_state(city: City, player: Player, report: client.PodState, now: float) -
     if phase is not PodPhase.IN_PLAY and player.pod.phase is PodPhase.IN_PLAY:
         events += player.bounty.start(now)  # left drop state: accruing (I §9.2.12, II §11.2)
     if first:
-        # Nobody else holds this pod yet, so its drop 'A' is for its owner alone; the others
-        # are given theirs by the introduction, after their 'G'. ``ToHolders`` resolves after
-        # this call, when the introductions below have made them holders, so it is named.
-        events = [
-            Event(e.message, ToPlayer(player.id))
-            if isinstance(e.message, server.ReleaseDrop)
-            else e
-            for e in events
-        ]
+        # Nobody else held this pod for what was made above, so its drop 'A' went to its owner
+        # alone; the others are given theirs by the introduction, after their 'G'.
         events += go_live(city, player, now)
         # A resumed game is not entered through the city's entry floor (II §13 item 5).
         floor = 1 if player.resume is not None else city.multiplier_floor
@@ -52,10 +45,7 @@ def pod_state(city: City, player: Player, report: client.PodState, now: float) -
         events += restore_modules(player)  # the pod has landed (II §13)
     if player.pod.phase is not PodPhase.DEAD:  # a fly-over's 'b' is not the pod's place
         events.append(
-            Event(
-                relay.pod_state(player.id, report),
-                ToHolders(player.id, except_player=player.id),
-            )
+            Event(relay.pod_state(player.id, report), city.holders(player.id, but=player.id))
         )
     return events
 

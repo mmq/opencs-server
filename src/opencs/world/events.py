@@ -7,6 +7,7 @@ spec's A.4 table is one small module, not logic spread over the rules.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from opencs.messages import ServerMessage
@@ -24,7 +25,8 @@ class ToPlayer:
 class ToPlayers:
     """Exactly these clients, named by the city when it makes the event. For messages that only a
     client past its load can take, e.g. chat and relayed shots: a client that has not sent its
-    first ``'b'`` is still filling its receive ring with the ``'B'`` repeat (I §7.1, II §7)."""
+    first ``'b'`` is still filling its receive ring with the ``'B'`` repeat (I §7.1, II §7). Also
+    the clients holding an entity (``City.holders``)."""
 
     player_ids: frozenset[int]
 
@@ -48,21 +50,10 @@ class ToTeam:
     team: int
 
 
-@dataclass(frozen=True, slots=True)
-class ToHolders:
-    """Every client whose view holds this entity, i.e. has been told it exists (``'A'`` for a pod,
-    a Muncher's ``'K'``; I App. B, I §7.3). Holders are those at *delivery*: the router resolves
-    this after the whole city call, against the views as that call left them. A call that changes
-    who holds an entity and also says something about it to the holders as they were (a leave, a
-    first report) must name them with ``ToPlayer`` instead. ``except_player`` leaves one holder
-    out: a relayed ``'b'`` goes to everyone who holds the pod but its owner, whose own echo would
-    drag it to a stale position."""
+type Audience = ToPlayer | ToPlayers | ToAll | ToAllExcept | ToTeam
 
-    entity_id: int
-    except_player: int | None = None
-
-
-type Audience = ToPlayer | ToPlayers | ToAll | ToAllExcept | ToTeam | ToHolders
+#: The clients holding an entity as they are now (``City.holders``), for what has no city at hand.
+type Holders = Callable[[int], ToPlayers]
 
 
 @dataclass(frozen=True, slots=True)

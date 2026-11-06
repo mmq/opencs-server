@@ -6,7 +6,7 @@ The world cannot know sessions, yet each event must reach the right players (spe
 
 ## Decision
 
-An event carries an audience value (`ToPlayer`, `ToAll`, `ToAllExcept`, `ToTeam`, `ToHolders`). The routing module turns it into sessions.
+An event carries an audience value (`ToPlayer`, `ToAll`, `ToPlayers`, `ToAllExcept`, `ToTeam`). The routing module turns it into sessions.
 
 ## Consequences
 

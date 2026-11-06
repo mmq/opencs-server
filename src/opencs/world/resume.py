@@ -18,7 +18,7 @@ from opencs import policy
 from opencs.messages.catalog import module_level
 from opencs.world import death
 from opencs.world.attacks import in_fight_range
-from opencs.world.events import Event, ToHolders, ToPlayer
+from opencs.world.events import Event
 from opencs.world.orders import Strike
 from opencs.world.player import Player
 from opencs.world.pods import PodPhase
@@ -121,8 +121,7 @@ def drop_player(
     reason = battle_reason(player, city.orders.strikes, fight_at)
     events: list[Event] = []
     if reason:
-        died = death.player_died(city, player, now, as_of=fight_at)
-        events = _name_holders(city, died, player.id)
+        events = death.player_died(city, player, now, as_of=fight_at)
     record = None
     multiplier = player.score.live_multiplier
     if player.score.floor_pending_since is not None:
@@ -145,20 +144,3 @@ def drop_player(
         )
     events += city.leave(player.id, now, keep_alive=hold and not reason)
     return Dropped(events, record)
-
-
-def _name_holders(city: City, events: list[Event], entity_id: int) -> list[Event]:
-    """Name the holders of ``entity_id`` as they are now: the pod is deleted from their views in
-    the same call, and ``ToHolders`` resolves after it (I App. B, the M5 convention)."""
-    named: list[Event] = []
-    for event in events:
-        audience = event.audience
-        if isinstance(audience, ToHolders) and audience.entity_id == entity_id:
-            named += [
-                Event(event.message, ToPlayer(p.id))
-                for p in city.players()
-                if p.view.holds(entity_id) and p.id not in (entity_id, audience.except_player)
-            ]
-        else:
-            named.append(event)
-    return named

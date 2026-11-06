@@ -9,7 +9,7 @@ from fixtures.pods import report
 from opencs.messages import ClientMessage, client, server, server_payload
 from opencs.wire.frame import build_frame
 from opencs.world.city import City
-from opencs.world.events import Event, ToAll, ToHolders, ToPlayer
+from opencs.world.events import Event, ToAll, ToPlayer, ToPlayers
 from opencs.world.ids import IdRange
 from opencs.world.seating import JoinRefused, JoinResult
 
@@ -17,6 +17,11 @@ from opencs.world.seating import JoinRefused, JoinResult
 A3_B_FRAME = bytes.fromhex(
     "43534eb13b42111010184a4f494e47454e491547454e49451d435942455243495459204f4e4518111210100d"
 )
+
+
+def owner(pid: int) -> ToPlayers:
+    """Only the pod's own client holds it."""
+    return ToPlayers(frozenset({pid}))
 
 
 def cyber_city_one() -> City:
@@ -94,19 +99,19 @@ def handshake(c: City, pid: int, msg: ClientMessage, now: float) -> list[Event]:
 def test_the_drop_handshake_through_the_city() -> None:
     c = cyber_city_one()
     pid = joined(c).player_id
-    release = Event(server.ReleaseDrop(pid), ToHolders(pid))
+    release = Event(server.ReleaseDrop(pid), owner(pid))
     # The first report: nobody else holds the pod yet, so the release is its owner's alone.
     first = handshake(c, pid, report(4), 1.0)
-    assert first[0] == Event(server.ReleaseDrop(pid), ToPlayer(pid))
+    assert first[0] == release
     # I §9.2.11, II §11.3
     assert [type(e.message) for e in first[1:]] == [server.SetBays, server.SetStatus]
     assert c.tick(1.2) == [release]
     # Leaving drop state starts the bounty: the holders are told 0 (I §9.2.9).
-    assert handshake(c, pid, report(1), 1.5) == [Event(server.SetBounty(pid, 0), ToHolders(pid))]
+    assert handshake(c, pid, report(1), 1.5) == [Event(server.SetBounty(pid, 0), owner(pid))]
     assert c.tick(1.6) == []
     assert handshake(c, pid, client.Died(), 30.0) == [
         Event(server.Destroy(pid), ToAll()),
-        Event(server.SetBounty(pid, 0), ToHolders(pid)),  # after the 'J' (I §9.2.9 step 3)
+        Event(server.SetBounty(pid, 0), owner(pid)),  # after the 'J' (I §9.2.9 step 3)
     ]
     assert handshake(c, pid, report(4), 31.0) == []  # the fly-over: no answer, and no relay
     assert c.client_message(pid, report(4), 31.5) == []

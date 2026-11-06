@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from fixtures.delivery import deliveries, to
 from fixtures.lobbies import city
 from fixtures.pods import report
@@ -12,8 +10,7 @@ from opencs import policy
 from opencs.messages import ServerMessage, client, server, server_payload
 from opencs.wire.frame import build_frame
 from opencs.world.city import City
-from opencs.world.events import Event, ToAll, ToPlayer
-from opencs.world.pods import Pod
+from opencs.world.events import Event, ToPlayers
 from opencs.world.seating import JoinResult
 
 
@@ -220,19 +217,15 @@ def test_a_spawn_and_a_late_joiners_sync_use_the_same_path_once_per_client() -> 
     assert not c.player(a).view.holds(8192)  # type: ignore[union-attr]
 
 
-def test_only_the_release_a_is_narrowed_to_the_owner_on_a_first_report(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # Another event a pod might one day return on its first report keeps its own audience.
-    other = Event(server.Destroy(7), ToAll())
-    real = Pod.on_report
-
-    def on_report(self: Pod, rep: client.PodState, now: float) -> list[Event]:
-        return [*real(self, rep, now), other]
-
-    monkeypatch.setattr(Pod, "on_report", on_report)
+def test_what_a_first_report_says_of_the_pod_goes_only_to_its_owner() -> None:
+    # Whoever the report goes on to introduce the pod to is told by the introduction, after its 'G'.
     c = City(city("A"))
-    a = join(c, "AAA")
-    events = c.client_message(a, report(4), 1.0)
-    assert Event(server.ReleaseDrop(a), ToPlayer(a)) in events
-    assert other in events
+    a, b, d = join(c, "AAA"), join(c, "BBB"), join(c, "DDD")
+    c.client_message(a, report(4), 1.0)
+    dropping = c.client_message(b, report(4), 2.0)
+    assert Event(server.ReleaseDrop(b), ToPlayers(frozenset({b}))) in dropping
+    events = c.client_message(d, report(1), 3.0)  # already falling: its bounty starts instead
+    assert Event(server.SetBounty(d, 0), ToPlayers(frozenset({d}))) in events
+    told_a = to(deliveries(c, events), a)
+    introduced = next(i for i, m in enumerate(told_a) if isinstance(m, server.Introduce))
+    assert not any(isinstance(m, server.SetBounty) for m in told_a[:introduced])

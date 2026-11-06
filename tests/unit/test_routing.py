@@ -11,7 +11,7 @@ from opencs.messages import ServerMessage, server
 from opencs.messages.fields import WirePos
 from opencs.routing import Router
 from opencs.world.city import City
-from opencs.world.events import Event, ToAll, ToAllExcept, ToHolders, ToPlayer, ToPlayers, ToTeam
+from opencs.world.events import Event, ToAll, ToAllExcept, ToPlayer, ToPlayers, ToTeam
 from opencs.world.seating import JoinResult
 
 
@@ -95,16 +95,26 @@ def test_to_team_reaches_only_that_team() -> None:
 
 def test_to_holders_reaches_those_whose_view_holds_the_entity() -> None:
     t = table()
-    assert who(t, ToHolders(2)) == [2, 3]  # its owner and the client that was introduced
-    assert who(t, ToHolders(0)) == [0]
-    assert who(t, ToHolders(200)) == []
+    assert who(t, t.city.holders(2)) == [2, 3]  # its owner and the client that was introduced
+    assert who(t, t.city.holders(0)) == [0]
+    assert who(t, t.city.holders(200)) == []
 
 
 def test_to_holders_except_leaves_out_one_holder() -> None:
     t = table()
-    assert who(t, ToHolders(2, except_player=2)) == [3]  # the owner is left out
-    assert who(t, ToHolders(2, except_player=3)) == [2]
-    assert who(t, ToHolders(2, except_player=0)) == [2, 3]  # not a holder: changes nothing
+    assert who(t, t.city.holders(2, but=2)) == [3]  # the owner is left out
+    assert who(t, t.city.holders(2, but=3)) == [2]
+    assert who(t, t.city.holders(2, but=0)) == [2, 3]  # not a holder: changes nothing
+
+
+def test_holders_are_those_when_the_event_is_made_not_when_it_is_delivered() -> None:
+    t = table()
+    told = t.city.holders(2)
+    t.city.player(3).view.forget(2)  # type: ignore[union-attr]  # the rest of the call goes on
+    assert who(t, told) == [2, 3]  # the client that held it still hears about it
+    assert who(t, t.city.holders(2)) == [2]
+    t.city.player(0).view.hold(2)  # type: ignore[union-attr]
+    assert who(t, told) == [2, 3]  # and one told it exists later does not
 
 
 def test_to_a_player_who_is_not_in_the_city_nobody_is_reached() -> None:

@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from opencs import policy
 from opencs.config import CityConfig
 from opencs.messages import server
+from opencs.world.events import Holders
 from opencs.world.ids import IdRange, IdSpace
 from opencs.world.player import Player
 from opencs.world.progress import SavedProgress
@@ -52,13 +53,14 @@ class Applicant:
     resume: ResumeRecord | None
 
 
-def seat(
+def seat(  # noqa: PLR0913, PLR0917  (the city's parts, one argument each)
     config: CityConfig,
     players: Mapping[int, Player],
     held_teams: list[int],
     ids: IdSpace,
     earliest_start: float | None,
     holds: Callable[[int], bool],
+    holders: Holders,
     applicant: Applicant,
     now: float,
 ) -> tuple[Player, server.Session] | JoinRefused:
@@ -109,6 +111,7 @@ def seat(
         team,
         index,
         ClientView(player_id, now),
+        holders,
         identity=applicant.identity,
         saved=applicant.saved,
         resume=applicant.resume if applicant.identity is not None else None,
