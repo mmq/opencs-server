@@ -72,7 +72,7 @@ class AccountStore(Protocol):
         ...
 
     def count(self) -> int:
-        """How many accounts there are (``policy.MAX_ACCOUNTS``)."""
+        """How many accounts there are (``policy.MAX_ACCOUNTS``); ``Identity`` asks once."""
         ...
 
     def touch_login(self, name: str) -> None:

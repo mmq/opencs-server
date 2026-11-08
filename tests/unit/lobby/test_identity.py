@@ -397,6 +397,23 @@ def test_past_the_cap_no_account_is_registered_but_existing_ones_log_in() -> Non
     assert isinstance(identity.login("FIRST,sesame"), Pilot)
 
 
+def test_the_account_count_starts_from_the_store_and_follows_every_change() -> None:
+    store = MemoryAccountStore()
+    salt = b"s" * 16
+    store.create(Account("EARLIER", salt, hash_password("pw", salt, FAST), FAST))
+    identity = Identity(store, kdf=FAST, max_accounts=3)
+    assert identity.account_count() == 1
+    identity.release(pilot(identity.login("FIRST,tangerine2")))
+    assert not isinstance(identity.register("SECOND"), Refused)
+    assert identity.account_count() == store.count() == 3
+    assert isinstance(identity.register("THIRD"), Refused)  # full
+    assert identity.delete_account("SECOND")
+    assert not identity.delete_account("SECOND")  # already gone: not counted twice
+    assert identity.prune_unplayed(float("inf"), lambda key: key == "acct:FIRST") == ["EARLIER"]
+    assert identity.account_count() == store.count() == 1
+    assert not isinstance(identity.register("THIRD"), Refused)  # room again
+
+
 def test_with_registration_closed_an_unknown_name_is_refused() -> None:
     store = MemoryAccountStore()
     identity = Identity(store, kdf=FAST, registration="closed")

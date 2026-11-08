@@ -182,6 +182,9 @@ class Identity:
         self._max_accounts = max_accounts
         self._callsigns: set[str] = set()
         self._accounts: set[str] = set()
+        #: How many accounts there are, kept here so a registration does not count the table. Every
+        #: account is made and removed through this class (ADR 10).
+        self._count = store.count()
 
     def login(self, line: str, gate: LoginGate | None = None) -> Pilot | Refused:
         """``begin`` and, for an account, ``complete`` with the hash made here and now. The
@@ -250,7 +253,7 @@ class Identity:
         ran: the account may have logged in elsewhere, or been registered by another login."""
         if check.stored is None:
             account = Account(check.name, check.salt, digest, check.kdf)
-            if not self._store.create(account):
+            if not self._create(account):
                 if gate is not None:
                     gate.account_not_tried(check.name)  # a lost race to register, not a guess
                 return Refused("THAT NAME WAS JUST TAKEN: TRY AGAIN")
@@ -294,7 +297,7 @@ class Identity:
             or (None if password is None else self._new_password_problem(name, password))
         ) is not None:
             return Refused(reason)
-        if self._store.count() >= self._max_accounts:
+        if self._count >= self._max_accounts:
             return Refused("THIS SERVER HAS NO ROOM FOR NEW ACCOUNTS")
         return None
 
@@ -354,7 +357,7 @@ class Identity:
         if password is None:
             password = make_password()
         account = self._new_hash(name, password)
-        if not self._store.create(account):
+        if not self._create(account):
             return Refused("THAT NAME IS TAKEN")
         return account, password
 
@@ -377,7 +380,7 @@ class Identity:
         return name in self._accounts
 
     def account_count(self) -> int:
-        return self._store.count()
+        return self._count
 
     def account_exists(self, name: str) -> bool:
         return self._store.get(name) is not None
@@ -392,7 +395,10 @@ class Identity:
 
     def delete_account(self, name: str) -> bool:
         """Remove account ``name`` (upper case); its progress is the caller's to erase."""
-        return self._store.delete(name)
+        if not self._store.delete(name):
+            return False
+        self._count -= 1
+        return True
 
     def prune_unplayed(self, before: float, has_progress: Callable[[str], bool]) -> list[str]:
         """Delete the accounts nobody has created or logged in to since ``before`` (wall-clock
@@ -403,9 +409,15 @@ class Identity:
         for name in self._store.stale(before):
             if name in self._accounts or has_progress(identity_key(name, name)):
                 continue
-            if self._store.delete(name):
+            if self.delete_account(name):
                 gone.append(name)
         return gone
+
+    def _create(self, account: Account) -> bool:
+        if not self._store.create(account):
+            return False
+        self._count += 1
+        return True
 
     def _account(self, name: str, password: str, gate: LoginGate | None) -> Refused | PasswordCheck:
         if (refusal := self._refuse_account(name, password, gate)) is not None:
