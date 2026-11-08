@@ -197,8 +197,7 @@ class Control:
             return ""
         waiting = ", rebuilds when empty" if health.tainted(letter) else ""
         return (
-            f" [failures: {health.failures(letter)}, "
-            f"rebuilds: {health.rebuilds(letter)}{waiting}]"
+            f" [failures: {health.failures(letter)}, rebuilds: {health.rebuilds(letter)}{waiting}]"
         )
 
     def _slow_calls(self, letter: str) -> str:
