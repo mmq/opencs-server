@@ -489,12 +489,16 @@ MAX_PASSWORD_LENGTH = 64
 #: an account's callsign is always its whole name, and never one a guest could be given
 #: (``JOINGENIE2``). Passwords: at least 6
 #: characters; the client sends whatever its ``CS.CFG`` holds, so a guess must cost more than a few
-#: tries. A password set outside a login also has no lower case: the client's entry turns what is
-#: typed into capitals, so ``secret`` could never be sent, while a first login has shown its
-#: password can be. Ours; the capitals are the client's.
+#: tries; at most 12, because the client's password entry takes no more (a longer one could be
+#: chosen on the web but never typed in), and printable ASCII without spaces, which is all the
+#: entry can type. A password set outside a login also has no lower case: the client's entry turns
+#: what is typed into capitals, so ``secret`` could never be sent, while a first login has shown
+#: its password can be. Ours; the 12 and the capitals are the client's.
 ACCOUNT_NAME_CHARACTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"
 MIN_ACCOUNT_NAME_LENGTH = 3
 MIN_PASSWORD_LENGTH = 6
+MAX_NEW_PASSWORD_LENGTH = 12
+NEW_PASSWORD_CHARACTERS = frozenset(chr(c) for c in range(0x21, 0x7F))
 
 #: Names no new account may take: a player called ADMIN or SERVER could pass for the operator. Ours.
 #: A name is also refused when it reads as one of these, or as a guest name, once the digits that

@@ -360,8 +360,10 @@ class Identity:
             return (
                 f"A NEW ACCOUNT NEEDS A PASSWORD OF {self._min_password_length} CHARACTERS OR MORE"
             )
-        if len(password) > policy.MAX_PASSWORD_LENGTH:
-            return "PASSWORD TOO LONG"
+        if len(password) > policy.MAX_NEW_PASSWORD_LENGTH:
+            return f"A PASSWORD MAY BE AT MOST {policy.MAX_NEW_PASSWORD_LENGTH} CHARACTERS"
+        if any(ch not in policy.NEW_PASSWORD_CHARACTERS for ch in password):
+            return "A PASSWORD MAY HOLD ONLY LETTERS, DIGITS AND PUNCTUATION, NO SPACES"
         shouted = password.upper()  # the client capitalises what it sends
         if shouted == name:
             return "A PASSWORD MUST NOT BE THE ACCOUNT NAME"
@@ -377,10 +379,10 @@ class Identity:
             return begun
         return self.complete_password(begun, begun.hash())
 
-    def reset_password(self, name: str) -> str | Refused:
+    def reset_password(self, name: str, password: str | None = None) -> str | Refused:
         """``begin_reset_password`` and ``complete_password`` here and now, for callers that may
         block. Returns the new password."""
-        begun = self.begin_reset_password(name)
+        begun = self.begin_reset_password(name, password)
         if isinstance(begun, Refused):
             return begun
         done = self.complete_password(begun, begun.hash())
@@ -401,14 +403,18 @@ class Identity:
         salt = os.urandom(policy.PASSWORD_SALT_BYTES)
         return NewPassword(name, password, salt, self._kdf, new_account=True)
 
-    def begin_reset_password(self, name: str) -> NewPassword | Refused:
-        """Start giving account ``name`` a new, made-up password. A player logged in stays
-        logged in."""
+    def begin_reset_password(self, name: str, password: str | None = None) -> NewPassword | Refused:
+        """Start giving account ``name`` a new password: ``password``, which must pass the rules
+        for a new account's, or a made-up one. A player logged in stays logged in."""
         name = name.strip().upper()
         if self._store.get(name) is None:
             return Refused("NO SUCH ACCOUNT")
+        if password is None:
+            password = make_password()
+        elif (reason := self._new_password_problem(name, password)) is not None:
+            return Refused(reason)
         salt = os.urandom(policy.PASSWORD_SALT_BYTES)
-        return NewPassword(name, make_password(), salt, self._kdf, new_account=False)
+        return NewPassword(name, password, salt, self._kdf, new_account=False)
 
     def complete_password(self, new: NewPassword, digest: bytes) -> tuple[Account, str] | Refused:
         """Store ``new`` with its hash, ``new.hash()``: the account and its password, to be shown

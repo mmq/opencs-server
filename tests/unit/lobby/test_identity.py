@@ -119,11 +119,13 @@ def test_a_second_simultaneous_login_is_refused_and_a_release_allows_it() -> Non
 
 
 def test_the_password_may_hold_commas_and_must_not_be_empty_or_huge() -> None:
-    identity, _ = make()
+    identity, store = make()
     assert isinstance(identity.login("ALICE,a,b,cdef"), Pilot)
     identity.release(Pilot("ALICE", "ALICE"))
     assert isinstance(identity.login("ALICE,a,b,cdef"), Pilot)
     assert isinstance(identity.login("BOB,"), Refused)
+    salt = b"0" * 16  # an account from before the 12-character rule still logs in
+    store.create(Account("CAROL", salt, hash_password("x" * 64, salt, FAST), FAST))
     assert isinstance(identity.login("CAROL," + "x" * 64), Pilot)
     assert isinstance(identity.login("DAN," + "x" * 65), Refused)
 
@@ -311,6 +313,9 @@ def test_a_guest_key_cannot_equal_an_account_key() -> None:
         ("J01NGEN1E2,sesame", "RESERVED"),  # and a numbered guest
         ("ALICE,", "PASSWORD REQUIRED"),
         ("ALICE,short", "6 CHARACTERS OR MORE"),
+        ("ALICE,thirteenchars", "AT MOST 12 CHARACTERS"),
+        ("ALICE,two words", "NO SPACES"),
+        ("ALICE,pässwörd", "NO SPACES"),
     ],
 )
 def test_a_new_account_must_have_a_plain_name_and_a_real_password(line: str, fragment: str) -> None:
@@ -489,6 +494,20 @@ def test_a_reset_password_replaces_the_old_one() -> None:
     assert isinstance(identity.login("ALICE,oldsecret"), Refused)
     assert pilot(identity.login(f"ALICE,{new}")).account == "ALICE"
     assert isinstance(identity.reset_password("NOBODY"), Refused)
+
+
+def test_a_chosen_password_must_pass_the_new_password_rules() -> None:
+    identity, _ = make()
+    made = identity.register("PILOT", "MY,PW!12")
+    assert not isinstance(made, Refused) and made[1] == "MY,PW!12"
+    assert pilot(identity.login("PILOT,MY,PW!12")).account == "PILOT"
+    identity.release(Pilot("PILOT", "PILOT"))
+    for bad, fragment in (("SHORT", "OR MORE"), ("X" * 13, "AT MOST 12"), ("A B C D", "SPACES")):
+        refused = identity.reset_password("PILOT", bad)
+        assert isinstance(refused, Refused) and fragment in refused.reason
+        assert isinstance(identity.register("OTHER", bad), Refused)
+    assert identity.reset_password("PILOT", "ANOTHER1") == "ANOTHER1"
+    assert pilot(identity.login("PILOT,ANOTHER1")).account == "PILOT"
 
 
 def test_unplayed_accounts_are_pruned_but_not_played_or_online_ones() -> None:

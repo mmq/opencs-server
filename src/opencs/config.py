@@ -461,7 +461,7 @@ def _parse_limits(table: _Table) -> LimitsConfig:
         ),
         max_accounts=section.integer("max_accounts", d.max_accounts, low=1, high=10_000_000),
         min_password_length=section.integer(
-            "min_password_length", d.min_password_length, low=1, high=policy.MAX_PASSWORD_LENGTH
+            "min_password_length", d.min_password_length, low=1, high=policy.MAX_NEW_PASSWORD_LENGTH
         ),
         unplayed_account_days=section.integer(
             "unplayed_account_days", d.unplayed_account_days, low=1, high=36_500

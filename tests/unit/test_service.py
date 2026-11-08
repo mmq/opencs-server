@@ -275,6 +275,28 @@ def test_an_account_registered_over_the_channel_logs_in_and_its_password_is_neve
     run(scenario())
 
 
+def test_the_web_may_choose_the_password_within_the_servers_rules(
+    sock_dir: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    async def scenario() -> None:
+        async with running(sock_dir) as (path, world, _):
+            c = await hello(path)
+            with caplog.at_level(logging.DEBUG):
+                made = await c.result("register", name="chooser", password="PICK,ME!1")
+                assert made == {"name": "CHOOSER", "password": "PICK,ME!1"}
+                again = await c.result("reset-password", name="CHOOSER", password="SECOND2")
+                assert again["password"] == "SECOND2"
+            assert "PICK,ME!1" not in caplog.text and "SECOND2" not in caplog.text
+            assert enter_lobby(world, "CHOOSER,SECOND2").session.pilot is not None
+            for password, reason in (("X" * 13, "A PASSWORD MAY BE AT MOST 12"), ("ABC", "A NEW")):
+                reply = await c.ask("register", name="OTHER", password=password)
+                assert (reply["error"], reply["message"][: len(reason)]) == ("refused", reason)
+            reply = await c.ask("reset-password", name="CHOOSER", password=12345678)
+            assert reply["error"] == "bad-request"
+
+    run(scenario())
+
+
 @pytest.mark.parametrize(
     ("op", "name", "reason"),
     [
@@ -342,7 +364,7 @@ def test_requests_over_the_rate_are_refused_and_the_connection_stays(sock_dir: P
         ({"id": 1, "op": "register", "name": "TWO WORDS"}, "bad-request"),
         ({"id": 1, "op": "register", "name": "X" * 33}, "bad-request"),
         ({"id": 1, "op": "register", "name": "BELL\u0007"}, "bad-request"),
-        ({"id": 1, "op": "register", "name": "NEW", "password": "mine"}, "bad-request"),
+        ({"id": 1, "op": "register", "name": "NEW", "password": ["mine"]}, "bad-request"),
         ({"id": 1, "op": "announce", "text": " "}, "bad-request"),
         ({"id": 1, "op": "announce", "text": "line\nbreak"}, "bad-request"),
         ({"id": 1, "op": "kick", "callsign": "ALICE", "reason": 5}, "bad-request"),

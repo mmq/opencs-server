@@ -20,8 +20,12 @@ The web front end is a separate process, as its own user, with its own database 
 decided by the socket file: mode 0660, so the web process's user must be in the server's group.
 
 Each request goes through the same `Identity` and `Control` methods as a first login or the admin
-channel. The web cannot do anything an operator cannot, and it never opens `opencs.db`. A connection opens
-with a hello naming a protocol version, so the web process and the server can be upgraded apart.
+channel. `register` and `reset-password` make up the password unless the request carries one; whether
+players may choose their own is the web's setting, and the server holds a chosen one to the same rules as
+a first login's. The default is a made-up one, because the game sends passwords in the clear and a chosen
+one is likely used elsewhere. The web cannot do anything an operator cannot, and it never opens
+`opencs.db`. A connection opens with a hello naming a protocol version, so the web process and the server
+can be upgraded apart.
 
 The channel is on the game's loop, so everything it does there is bounded:
 
@@ -38,7 +42,9 @@ The channel is on the game's loop, so everything it does there is bounded:
   framework and is deployed, restarted and sandboxed on its own.
 - A bug or a flood in the web process can reach the game only through bounded requests. A compromised web
   process can do what the operator can, but cannot read the password hashes.
-- The Unix socket needs a platform that has one; on others the channel cannot be turned on.
+- The Unix socket needs a platform that has one; on others (Windows) the channel cannot be turned on yet.
+  The protocol is only lines on a stream, so a second listener can be added: loopback TCP, with a secret
+  from a file both accounts can read carried in the hello, since a port has no file permissions.
 - The protocol is a second interface to keep stable. A change a client could misread gets a new version
   number, and the server may speak several.
 - The web's own records can fall out of step with the server's (an account deleted or pruned on the

@@ -234,7 +234,7 @@ start; **only the city files are re-read by `reload`** (below).
 | `cities_dir` | `"cities"` | a directory | one `*.toml` per city |
 | `default_city` | `"B"` | a loaded city | what a bare `/PLAY` picks when every city is empty |
 | `guest_names` | `["JOINGENIE"]` | names; `[]` turns guests off | the guest names (II §3): no password check, the only names several players may share, never saved |
-| `registration` | `"open"` | `"open"`, `"closed"` | open: a first login with an unknown name registers it (new names: 3-12 of `A-Z 0-9 _ -`, not reserved, which includes look-alikes such as `ADM1N` and `ADM-IN`; passwords of 6 or more). Closed: it is refused, and the operator makes accounts with `create-account`. Either way at most `[limits] max_accounts`, and accounts never played are removed after `[limits] unplayed_account_days` |
+| `registration` | `"open"` | `"open"`, `"closed"` | open: a first login with an unknown name registers it (new names: 3-12 of `A-Z 0-9 _ -`, not reserved, which includes look-alikes such as `ADM1N` and `ADM-IN`; passwords of 6 to 12 printable characters, no spaces, not the account name nor a common one). Closed: it is refused, and the operator makes accounts with `create-account`. Either way at most `[limits] max_accounts`, and accounts never played are removed after `[limits] unplayed_account_days` |
 | `[limits] max_connections` | `128` | 1-10000 | connections at once, in all |
 | `[limits] max_connections_per_address` | `4` | 3 to the subnet limit | connections at once from one IP address |
 | `[limits] max_connections_per_subnet` | `12` | the address limit to the total | connections at once from one /24 (IPv4) or /64 (IPv6) |
@@ -243,7 +243,7 @@ start; **only the city files are re-read by `reload`** (below).
 | `[limits] max_guests` | `24` | 0 to the total | guests online at once |
 | `[limits] max_guests_per_address` | `2` | 0 to the address limit | guests online at once from one address |
 | `[limits] max_accounts` | `10000` | 1 to 1e7 | accounts in all; past it a first login is refused |
-| `[limits] min_password_length` | `6` | 1-64 | the shortest password a player chooses for a new account (existing ones are not checked). A chosen password may also not be the account name or one of about 110 common ones (`COMMON_PASSWORDS` in `policy.py`). These rules do not apply to the 10-character passwords `create-account` and `reset-password` make up |
+| `[limits] min_password_length` | `6` | 1-12 | the shortest password a player chooses for a new account (existing ones are not checked). A chosen password may also not be the account name or one of about 110 common ones (`COMMON_PASSWORDS` in `policy.py`). These rules do not apply to the 10-character passwords `create-account` and `reset-password` make up |
 | `[limits] unplayed_account_days` | `30` | 1-36500 | an account with no saved progress and no login for this long is removed |
 | `[limits] client_bytes_per_second` | `960` | 0 to 1e8 | what is written to each connection, the rate of a 9600-baud modem; 0 does not pace. Any faster and a busy game's backlog moves to where the server cannot thin it |
 | `[limits] client_unacked_bytes` | `2048` | 0 to 1e8 | what a client in a game may have written to it and not acknowledged, which keeps its 4096-byte receive ring from overflowing and crashing it; 0 does not wait |
@@ -439,8 +439,8 @@ printf '%s\n' '{"hello":"opencs-service","version":1}' '{"id":1,"op":"snapshot"}
 |---|---|---|
 | `snapshot` | | uptime, account count, cap and registration mode, connections in game and in the Chamber, each city's name, capacity, whether it is open and its pilots (callsign, team, guest or not), held games. No addresses, account details or chat |
 | `account` | `name` | whether that account exists and is online |
-| `register` | `name` | a new account with a made-up password, `{"name", "password"}`; the password is in the reply only, never logged. The name rules are those of every new account; a refusal (`"refused"`) says why |
-| `reset-password` | `name` | a new made-up password for an account, as `register` |
+| `register` | `name`, `password` | a new account, `{"name", "password"}`: with `password` the one given, without it a made-up one. The password is in the reply only, never logged. The rules are those of every new account (a chosen password too: 6 to 12 printable characters, no spaces); a refusal (`"refused"`) says why. Whether players may choose is the web's setting; the game sends passwords in the clear, so a made-up one is the safer default |
+| `reset-password` | `name`, `password` | a new password for an account, chosen or made up, as `register` |
 | `status`, `reload` | | the admin command's reply lines, `{"lines": [...]}` |
 | `announce` | `text` | as the admin command |
 | `kick` | `callsign`, `reason` (optional) | as the admin command |

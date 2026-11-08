@@ -85,8 +85,8 @@ class ServiceServer:
         self._ops: dict[str, tuple[tuple[str, ...], _Handler]] = {
             "snapshot": ((), self._snapshot),
             "account": (("name",), self._account),
-            "register": (("name",), lambda r: self._password("register", r)),
-            "reset-password": (("name",), lambda r: self._password("reset-password", r)),
+            "register": (("name", "password"), lambda r: self._password("register", r)),
+            "reset-password": (("name", "password"), lambda r: self._password("reset-password", r)),
             "status": ((), lambda _: self._admin("status")),
             "announce": (("text",), lambda r: self._admin(f"announce {_text(r, 'text')}")),
             "kick": (("callsign", "reason"), self._kick),
@@ -281,14 +281,19 @@ class ServiceServer:
         }
 
     async def _password(self, op: str, request: dict[str, Any]) -> dict[str, Any]:
-        """``register`` or ``reset-password``: a made-up password, hashed off the loop, returned
-        once. Refusals cost no hash and no allowance."""
+        """``register`` or ``reset-password``: the password the web chose, or a made-up one,
+        hashed off the loop and returned once. Whether players may choose is the web's setting;
+        the server only holds a chosen one to the rules for a new password. Refusals cost no hash
+        and no allowance."""
         name = _name(request)
+        chosen = request.get("password")
+        if chosen is not None and not isinstance(chosen, str):
+            raise RequestError("bad-request", "password must be text")
         identity = self._services.identity
         begun: NewPassword | Refused = (
-            identity.begin_register(name)
+            identity.begin_register(name, chosen)
             if op == "register"
-            else identity.begin_reset_password(name)
+            else identity.begin_reset_password(name, chosen)
         )
         if isinstance(begun, Refused):
             raise RequestError("refused", begun.reason)

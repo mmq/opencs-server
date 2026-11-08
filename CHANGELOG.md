@@ -17,6 +17,10 @@ upgrading.
 - The daily removal of unplayed accounts goes in small batches, and guest callsign checks use an index,
   so neither slows the games as the account table grows.
 
+### Players
+- A new password is 6 to 12 printable characters without spaces, the most the client's password entry
+  takes; the web may let a player choose it. Accounts made before keep their passwords.
+
 ## 1.0.0rc2 (release candidate)
 
 Writes paced to the client's modem, fixes for four ways one client could harm others, and harder

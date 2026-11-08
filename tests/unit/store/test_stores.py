@@ -202,7 +202,7 @@ def test_a_database_from_a_newer_server_is_refused(tmp_path: Path) -> None:
 def test_passwords_are_never_in_the_file(tmp_path: Path) -> None:
     path = tmp_path / "t.db"
     db = SqliteStore(path)
-    password = "Hunter2-Unmistakable"
+    password = "Hunter2-Unmi"
     identity = Identity(db, kdf=Kdf.argon2id(8, 1, 1, 32))
     assert isinstance(identity.login(f"ALICE,{password}"), Pilot)
     db.close()
