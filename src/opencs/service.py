@@ -95,6 +95,7 @@ class ServiceServer:
             "reload": ((), lambda _: self._admin("reload")),
             "reset-progress": (("name",), lambda r: self._admin(f"reset-progress {_name(r)}")),
             "delete-account": (("name",), lambda r: self._admin(f"delete-account {_name(r)}")),
+            "set-callsign": (("name", "callsign", "force"), self._set_callsign),
         }
 
     async def start(self, path: Path) -> None:
@@ -278,7 +279,22 @@ class ServiceServer:
             "name": name,
             "exists": identity.account_exists(name),
             "online": identity.account_online(name),
+            "callsign": identity.callsign_of(name),
         }
+
+    def _set_callsign(self, request: dict[str, Any]) -> dict[str, Any]:
+        """A callsign for an offline account, in the case given, under the rules a player's
+        ``/CALLSIGN`` meets; ``force`` (the web's admin pages) skips the wait between changes."""
+        name = _name(request)
+        callsign = _callsign(request)
+        force = request.get("force", False)
+        if not isinstance(force, bool):
+            raise RequestError("bad-request", "force must be true or false")
+        result = self._control.change_callsign(name, callsign, force=force)
+        if isinstance(result, Refused):
+            raise RequestError("refused", result.reason)
+        log.info("callsign of %s set to %s over the service channel", name, result)
+        return {"name": name, "callsign": result}
 
     async def _password(self, op: str, request: dict[str, Any]) -> dict[str, Any]:
         """``register`` or ``reset-password``: the password the web chose, or a made-up one,
@@ -354,6 +370,16 @@ def _word(request: dict[str, Any], key: str) -> str:
 
 def _name(request: dict[str, Any]) -> str:
     return _word(request, "name")
+
+
+def _callsign(request: dict[str, Any]) -> str:
+    """A callsign in the case given: ``Identity`` holds it to the rules and says why not."""
+    value = request.get("callsign")
+    if not isinstance(value, str) or not value or not _printable(value) or " " in value:
+        raise RequestError("bad-request", "callsign must be one word of printable text")
+    if len(value) > policy.MAX_ACCOUNT_NAME_LENGTH:
+        raise RequestError("bad-request", "callsign is too long")
+    return value
 
 
 def _text(request: dict[str, Any], key: str) -> str:

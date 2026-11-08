@@ -44,6 +44,7 @@ HELP = (
     "reset-password <name>       give an account a new password, shown once",
     "reset-progress <name>       wipe an account's saved progress (it must be offline)",
     "delete-account <name>       remove an account and its progress (it must be offline)",
+    "set-callsign <name> <cs>    give an account a callsign, in the case typed (offline)",
     "help                        this list",
     "quit                        close this connection",
 )
@@ -64,6 +65,7 @@ COMMAND_NAMES = (
     "reset-password",
     "reset-progress",
     "delete-account",
+    "set-callsign",
 )
 
 
@@ -182,6 +184,7 @@ class Control:
             "reset-password": lambda: self.reset_password(rest),
             "reset-progress": lambda: self.reset_progress(rest),
             "delete-account": lambda: self.delete_account(rest),
+            "set-callsign": lambda: self.set_callsign(rest),
         }
         if not word:
             return []
@@ -325,6 +328,25 @@ class Control:
         log.info("account %s deleted by the operator", name)
         return [f"deleted {name}"]
 
+    def set_callsign(self, args: str) -> list[str]:
+        name, _, callsign = args.partition(" ")
+        callsign = callsign.strip()
+        if not name or not callsign or " " in callsign:
+            return ["usage: set-callsign <name> <callsign>"]
+        result = self.change_callsign(name, callsign, force=True)
+        if isinstance(result, Refused):
+            return [f"refused: {result.reason}"]
+        log.info("callsign of %s set to %s by the operator", name.upper(), result)
+        return [f"{name.upper()} now plays as {result}"]
+
+    def change_callsign(self, name: str, callsign: str, *, force: bool) -> str | Refused:
+        """Give offline account ``name`` the callsign ``callsign``: the callsign, or why not.
+        ``force`` (the operator) skips the wait between changes; the web's change does not."""
+        name = name.upper()
+        if (refusal := self._offline_account(name)) is not None:
+            return Refused(refusal.removeprefix("refused: "))
+        return self._services.identity.change_callsign(name, callsign, force=force)
+
     def _offline_account(self, name: str) -> str | None:
         """Why account ``name`` cannot be changed now, None if it can."""
         identity = self._services.identity
@@ -349,13 +371,15 @@ class Control:
             return ["usage: kick <callsign> [reason]"]
         reason = reason.strip()
         notice = f"{policy.ADMIN_KICK_NOTICE}: {reason}" if reason else policy.ADMIN_KICK_NOTICE
-        sessions = self._services.sessions.by_callsign(callsign.upper())
+        sessions = self._services.sessions.by_callsign(callsign)  # ignoring case
         if not sessions:
-            return [f"no pilot {callsign.upper()} is connected"]
+            return [f"no pilot {callsign} is connected"]
+        pilot = sessions[0].pilot
+        callsign = pilot.callsign if pilot is not None else callsign
         for session in sessions:
             session.remove(notice, close=False)
-        log.info("kicked %s: %s", callsign.upper(), reason or "no reason given")
-        return [f"kicked {callsign.upper()} ({len(sessions)} connection(s))"]
+        log.info("kicked %s: %s", callsign, reason or "no reason given")
+        return [f"kicked {callsign} ({len(sessions)} connection(s))"]
 
     def guppy(self, args: str) -> list[str]:
         words = args.split()

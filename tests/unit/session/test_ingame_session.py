@@ -688,3 +688,13 @@ def test_a_rate_far_above_the_real_clients_send_rate_is_never_limited() -> None:
         h.advance(1.0)
     assert phase(h)._bad.total == 0 and not h.io.closed
     assert replies(h) == 1000
+
+
+def test_a_chosen_callsign_is_sent_in_b_as_chosen() -> None:
+    world = make_world()
+    assert world.identity.register("ALICE", "SECRET1") is not None
+    assert world.identity.change_callsign("ALICE", "Al:ce") == "Al:ce"
+    h = play(world, account="ALICE,SECRET1")
+    (hello,) = h.io.messages
+    assert isinstance(hello, server.Session) and hello.callsign == b"Al:ce"
+    assert world.lobby.find("AL:CE") is not None

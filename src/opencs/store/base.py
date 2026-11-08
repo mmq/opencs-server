@@ -61,6 +61,16 @@ class Account:
     kdf: Kdf
 
 
+@dataclass(frozen=True, slots=True)
+class Callsign:
+    """The callsign an account plays under, in the case it was chosen, and when it was last
+    chosen (wall-clock seconds), None while it is still the one the account was made with: its
+    name cut to ``policy.MAX_CALLSIGN_LENGTH``."""
+
+    callsign: str
+    changed: float | None
+
+
 class AccountStore(Protocol):
     """Accounts by name."""
 
@@ -69,12 +79,22 @@ class AccountStore(Protocol):
         ...
 
     def create(self, account: Account) -> bool:
-        """Store a new account; False, storing nothing, if the name is taken."""
+        """Store a new account, whose callsign is its name cut to ``policy.MAX_CALLSIGN_LENGTH``;
+        False, storing nothing, if the name is taken."""
         ...
 
-    def callsign_registered(self, callsign: str, length: int) -> bool:
-        """True if some account's name cut to ``length`` characters equals ``callsign``: that
-        callsign belongs to the account, so no guest may take it (II §3)."""
+    def callsign(self, name: str) -> Callsign | None:
+        """The callsign of account ``name``, None if there is no such account."""
+        ...
+
+    def callsign_owner(self, callsign: str) -> str | None:
+        """The account whose callsign is ``callsign`` ignoring case, None if none: that callsign
+        is the account's, so no guest or other account may take it (II §3)."""
+        ...
+
+    def set_callsign(self, name: str, callsign: str, changed: float) -> bool:
+        """Give account ``name`` this callsign, chosen at ``changed``; False if there is no such
+        account. Whether another account holds it is the caller's to check first."""
         ...
 
     def count(self) -> int:

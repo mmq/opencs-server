@@ -138,7 +138,7 @@ def make_world(
     accounts: AccountStore | None = None,
 ) -> World:
     clock = ManualClock(start)
-    identity = Identity(accounts or MemoryAccountStore(), kdf=FAST_KDF)
+    identity = Identity(accounts or MemoryAccountStore(), kdf=FAST_KDF, wall=clock.now)
     configs = cities or (city("A"), city("B"), city("C"))
     held = HeldGames(clock)
     lobby = Lobby(configs, default, random.Random(seed), held)

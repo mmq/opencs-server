@@ -140,7 +140,7 @@ def test_only_listed_callsigns_are_captured(tmp_path: Path) -> None:
     other.client_bytes(b"hi\r", 100.0)
     other.close()
     assert other.path is None
-    listed, context = make(tmp_path, callsigns=frozenset({"ALPHA"}), callsign="ALPHA")
+    listed, context = make(tmp_path, callsigns=frozenset({"AL:PHA"}), callsign="Al:pha")
     context.stream = STREAM_CHAMBER
     listed.client_bytes(b"hi\r", 100.0)
     assert len(lines(listed)) == 2

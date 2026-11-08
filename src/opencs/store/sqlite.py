@@ -23,7 +23,15 @@ from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
 
 from opencs import policy
-from opencs.store.base import PBKDF2_SHA256, Account, Kdf, ProgressRecord, StaleCursor, Stores
+from opencs.store.base import (
+    PBKDF2_SHA256,
+    Account,
+    Callsign,
+    Kdf,
+    ProgressRecord,
+    StaleCursor,
+    Stores,
+)
 
 log = logging.getLogger("opencs.store")
 
@@ -59,11 +67,19 @@ MIGRATIONS: tuple[tuple[str, ...], ...] = (
         # The prune sweeps the stale accounts in batches, oldest first.
         "CREATE INDEX accounts_seen ON accounts (coalesce(last_login, created), name)",
     ),
+    # 4: callsigns chosen apart from the account name.
+    (
+        # The callsign an account plays under, chosen apart from its name (in any case), and when
+        # it was last chosen; until then it is the name cut to 12 (policy.MAX_CALLSIGN_LENGTH).
+        "ALTER TABLE accounts ADD COLUMN callsign TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE accounts ADD COLUMN callsign_changed REAL",
+        "UPDATE accounts SET callsign = substr(name, 1, 12)",
+        # Callsigns are looked up ignoring case. Not UNIQUE: two accounts made before names were
+        # cut to 12 may share a cut name, and Identity checks before it sets one.
+        "DROP INDEX accounts_callsign",
+        "CREATE INDEX accounts_callsign_folded ON accounts (upper(callsign))",
+    ),
 )
-
-#: The length ``accounts_callsign`` cuts names to. A query must spell its expression the same way
-#: to use it.
-_CALLSIGN_INDEX_LENGTH = 12
 
 
 class SchemaError(Exception):
@@ -192,20 +208,41 @@ class SqliteStore:
     def create(self, account: Account) -> bool:
         kdf, iterations = _kdf_columns(account.kdf)
         cursor = self._write(
-            "INSERT OR IGNORE INTO accounts (name, salt, password_hash, iterations, kdf, created) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (account.name, account.salt, account.password_hash, iterations, kdf, self._now()),
+            "INSERT OR IGNORE INTO accounts "
+            "(name, salt, password_hash, iterations, kdf, created, callsign) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                account.name,
+                account.salt,
+                account.password_hash,
+                iterations,
+                kdf,
+                self._now(),
+                account.name[: policy.MAX_CALLSIGN_LENGTH],
+            ),
         )
         return cursor.rowcount == 1
 
-    def callsign_registered(self, callsign: str, length: int) -> bool:
-        if length == _CALLSIGN_INDEX_LENGTH:
-            sql = "SELECT 1 FROM accounts WHERE substr(name, 1, 12) = ? LIMIT 1"
-            row = self._db.execute(sql, (callsign,)).fetchone()
-        else:
-            sql = "SELECT 1 FROM accounts WHERE substr(name, 1, ?) = ? LIMIT 1"
-            row = self._db.execute(sql, (length, callsign)).fetchone()
-        return row is not None
+    def callsign(self, name: str) -> Callsign | None:
+        row = self._db.execute(
+            "SELECT callsign, callsign_changed FROM accounts WHERE name = ?", (name,)
+        ).fetchone()
+        return None if row is None else Callsign(row[0], row[1])
+
+    def callsign_owner(self, callsign: str) -> str | None:
+        # upper() folds ASCII only, as str.upper does on the ASCII a callsign is made of; the
+        # expression is spelled as the index's so the lookup uses it.
+        row = self._db.execute(
+            "SELECT name FROM accounts WHERE upper(callsign) = ? LIMIT 1", (callsign.upper(),)
+        ).fetchone()
+        return None if row is None else str(row[0])
+
+    def set_callsign(self, name: str, callsign: str, changed: float) -> bool:
+        cursor = self._write(
+            "UPDATE accounts SET callsign = ?, callsign_changed = ? WHERE name = ?",
+            (callsign, changed, name),
+        )
+        return cursor.rowcount == 1
 
     def count(self) -> int:
         return int(self._db.execute("SELECT count(*) FROM accounts").fetchone()[0])

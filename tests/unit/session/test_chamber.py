@@ -12,6 +12,7 @@ from opencs.session.login import LoginPhase
 from opencs.store.base import ProgressRecord
 from opencs.store.memory import MemoryProgressStore
 from opencs.wire.frame import build_frame
+from opencs.world.resume import ResumeRecord
 
 PRESS_RETURN = b"\x05PRESS RETURN\r"
 ENTER_A = b"\x05A\r"
@@ -265,7 +266,7 @@ def test_who_callsign_gives_location_and_the_record() -> None:
     for expected in (b"LAST GAME SCORE: 1670", b"CAREER TOTAL: 500", b"BAY POINTS: 957"):
         assert expected in out
     assert b"BAYS: 3 2 1 1 5 4 0 1 2" in out and b"BATTLE MARKER: -2" in out
-    assert b"NO SUCH PILOT: NOBODY" in ask(h, "/WHO nobody")
+    assert b"NO SUCH PILOT: nobody" in ask(h, "/WHO nobody")
 
 
 def test_who_callsign_reads_the_record_of_that_pilot_not_the_askers() -> None:
@@ -752,3 +753,47 @@ def test_a_listener_that_has_stopped_reading_is_skipped_not_cut_off() -> None:
     listener.io.queued = 0  # caught up
     talker.feed("again\r")
     assert b"again" in listener.take()
+
+
+# --- /CALLSIGN ---------------------------------------------------------------------------------
+
+
+def test_callsign_renames_an_account_in_the_chamber_in_the_case_typed() -> None:
+    world = make_world()
+    alice = enter_lobby(world, "ALICE,sesame")
+    bob = enter_lobby(world, "BOB,sesame")
+    assert b"YOUR CALLSIGN IS NOW Al:ce" in ask(alice, "/callsign Al:ce")
+    assert alice.session.pilot == Pilot("Al:ce", "ALICE")
+    assert alice.session.log.callsign == "Al:ce"
+    roster = ask(bob, "/WHO")
+    assert b"Al:ce   " in roster and b"ALICE" not in roster  # listed under the new callsign
+    assert b"Al:ce" in ask(bob, "/WHO al:CE")
+    assert b"TAKEN" in ask(bob, "/CALLSIGN AL:CE")
+    bob.take()
+    alice.feed("hello\r")
+    assert b"Al:ce: hello" in bob.take()
+    assert b"IN 7 DAYS" in ask(alice, "/CALLSIGN Again")
+
+
+def test_callsign_is_refused_to_a_guest_and_while_a_game_is_held() -> None:
+    world = make_world()
+    guest = enter_lobby(world)
+    assert b"A GUEST CANNOT CHOOSE A CALLSIGN" in ask(guest, "/CALLSIGN Guesty")
+    assert b"USAGE: /CALLSIGN" in ask(guest, "/CALLSIGN two words")
+    alice = enter_lobby(world, "ALICE,sesame")
+    world.services.held.hold(
+        ResumeRecord(
+            identity="acct:ALICE",
+            city="A",
+            team=0,
+            callsign="ALICE",
+            score=0,
+            multiplier=1,
+            bay_points=0,
+            modules=(),
+            dropped_at=world.clock.now(),
+            eligible=True,
+        )
+    )
+    assert b"GAME HELD" in ask(alice, "/CALLSIGN Ace")
+    assert alice.session.pilot == Pilot("ALICE", "ALICE")

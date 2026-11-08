@@ -110,12 +110,13 @@ class Lobby:
             self._members.remove(member)
 
     def members(self) -> list[Member]:
-        """Everyone connected, by callsign."""
-        return sorted(self._members, key=lambda m: m.callsign)
+        """Everyone connected, by callsign ignoring case."""
+        return sorted(self._members, key=lambda m: m.callsign.upper())
 
     def find(self, callsign: str) -> Member | None:
-        """The member with this (upper-case) callsign."""
-        return next((m for m in self._members if m.callsign == callsign), None)
+        """The member with this callsign, ignoring case: a player types ``/WHO ace`` for ``Ace``."""
+        folded = callsign.upper()
+        return next((m for m in self._members if m.callsign.upper() == folded), None)
 
     def chamber(self) -> list[Member]:
         """Members in the Chamber."""

@@ -421,13 +421,13 @@ def test_session_string_limits() -> None:
     bad(lambda: replace(SESSION, city=b""))
 
 
-def test_session_strings_are_printable_and_callsign_upper_case() -> None:
+def test_session_strings_are_printable_and_a_callsign_any_case() -> None:
     for field in ("callsign", "network", "city"):
         for byte in (0x01, 0x05, 0x0D, 0x7F, 0xE9):
             bad(lambda field=field, byte=byte: replace(SESSION, **{field: b"A" + bytes([byte])}))
-    bad(lambda: replace(SESSION, callsign=b"Joe"))
+    replace(SESSION, callsign=b"Joe")  # shown as sent (I §8.4)
     replace(SESSION, callsign=b"AB 12~!")
-    replace(SESSION, city=b"Cyber City")  # only the callsign must be upper case
+    replace(SESSION, city=b"Cyber City")
 
 
 def test_session_city_settings() -> None:
@@ -548,7 +548,7 @@ def test_introduce_callsign_and_velocity() -> None:
     bad(lambda: make(b"A" * 13))
     bad(lambda: make(b""))
     bad(lambda: make(b"A\n"))
-    bad(lambda: make(b"Joe"))  # one rule for 'B' and 'G': no lower case
+    make(b"Joe:(1)")  # one rule for 'B' and 'G': printable, any case
     bad(lambda: make(v1=120))
     bad(lambda: replace(make(), index=4))
     bad(lambda: replace(make(), team=4))

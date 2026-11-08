@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 from opencs import policy
 from opencs.connlog import STREAM_CHAMBER
 from opencs.lobby import commands, replies
+from opencs.lobby.identity import Refused
 from opencs.lobby.lobby import Denied, Member, Placement
 from opencs.session.phases import TextPhase
 from opencs.wire.text import arm_line
@@ -214,6 +215,7 @@ class ChamberPhase(TextPhase):
             commands.CityInfo: self._city_info,
             commands.Status: lambda c: self._say(replies.status(lobby)),
             commands.WhoIs: self._who_is,
+            commands.ChooseCallsign: self._choose_callsign,
             commands.Score: self._score,
             commands.Play: lambda c: self._play(c.letter, c.team),
             commands.Resume: lambda c: self._resume(),
@@ -242,6 +244,29 @@ class ChamberPhase(TextPhase):
             self._say([replies.body(f"{found.callsign}: {replies.where(found)}"), *_UNREADABLE])
             return
         self._say(replies.who_is(found, command.callsign, record))
+
+    def _choose_callsign(self, command: commands.ChooseCallsign) -> None:
+        """``/CALLSIGN <callsign>``: an account takes a new callsign, kept in the case typed. Only
+        here, between games: no client in a city has seen it under another, and a held game
+        must end first, since its pod is known by the old one."""
+        services = self.host.services
+        if self.member.account is not None and services.held.get(self.member.key) is not None:
+            self._say(replies.denied("YOU HAVE A GAME HELD: /RESUME OR /PLAY IT FIRST"))
+            return
+        assert self.host.pilot is not None
+        old = self.host.pilot.callsign
+        try:
+            result = services.identity.rename(self.host.pilot, command.callsign)
+        except Exception:
+            self.host.log.exception("could not change the callsign of %s", old)
+            self._say(replies.denied("THE CALLSIGN CANNOT BE CHANGED RIGHT NOW"))
+            return
+        if isinstance(result, Refused):
+            self._say(replies.denied(result.reason))
+            return
+        self.host.rename(result)
+        self.host.log.info("callsign %s is now %s", old, result.callsign)
+        self._say([replies.body(f"YOUR CALLSIGN IS NOW {result.callsign}")])
 
     def _score(self, command: commands.Score) -> None:
         """``/SCORE``: the player's own record (II §4.2)."""

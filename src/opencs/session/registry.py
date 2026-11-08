@@ -30,5 +30,8 @@ class SessionRegistry:
         return list(self._sessions)
 
     def by_callsign(self, callsign: str) -> list[Session]:
-        """The sessions whose pilot has this (upper-case) callsign."""
-        return [s for s in self._sessions if s.pilot is not None and s.pilot.callsign == callsign]
+        """The sessions whose pilot has this callsign, ignoring case."""
+        folded = callsign.upper()
+        return [
+            s for s in self._sessions if s.pilot is not None and s.pilot.callsign.upper() == folded
+        ]

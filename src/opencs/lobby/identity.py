@@ -7,9 +7,11 @@ so a second login is refused and callsigns stay unique server-wide.
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import hmac
 import logging
+import math
 import os
 import secrets
 from collections.abc import Callable
@@ -199,6 +201,7 @@ class Identity:
         registration: str = policy.DEFAULT_REGISTRATION,
         min_password_length: int = policy.MIN_PASSWORD_LENGTH,
         max_accounts: int = policy.MAX_ACCOUNTS,
+        wall: Callable[[], float] = lambda: 0.0,
     ) -> None:
         self._store = store
         self._guest_names = frozenset(name.upper() for name in guest_names)
@@ -206,6 +209,10 @@ class Identity:
         self._registration_open = registration == "open"
         self._min_password_length = min_password_length
         self._max_accounts = max_accounts
+        #: The wall clock (the server passes ``time.time``): when a callsign was chosen must
+        #: outlive a restart. This layer does no I/O, so it is given one.
+        self._wall = wall
+        #: The callsigns online, upper-cased: two may not differ only in case.
         self._callsigns: set[str] = set()
         self._accounts: set[str] = set()
         #: How many accounts there are, kept here so a registration does not count the table. Every
@@ -253,24 +260,22 @@ class Identity:
 
     def release(self, pilot: Pilot) -> None:
         """The pilot has gone: free its callsign and account for the next login."""
-        self._callsigns.discard(pilot.callsign)
+        self._callsigns.discard(pilot.callsign.upper())
         if pilot.account is not None:
             self._accounts.discard(pilot.account)
 
     def callsign_online(self, callsign: str) -> bool:
-        """True if ``callsign`` (upper case) is in use."""
-        return callsign in self._callsigns
+        """True if ``callsign``, in any case, is in use."""
+        return callsign.upper() in self._callsigns
 
     def _guest(self, name: str, gate: LoginGate | None) -> Pilot | Refused:
         # Compare callsigns, not names: ALPHAXYZW would otherwise be played as ALPHAXYZ's callsign.
         base = name[: policy.MAX_CALLSIGN_LENGTH]
-        if name != policy.GUEST_ACCOUNT_NAME and self._store.callsign_registered(
-            base, policy.MAX_CALLSIGN_LENGTH
-        ):
+        if name != policy.GUEST_ACCOUNT_NAME and self._store.callsign_owner(base) is not None:
             return Refused("THAT NAME IS A REGISTERED ACCOUNT: LOG IN WITH ITS PASSWORD")
         if gate is not None and not gate.may_admit_guest():
             return Refused("TOO MANY GUESTS ONLINE: TRY AGAIN LATER")
-        return self._admit(name, None)
+        return self._admit(base, None)
 
     def complete(
         self, check: PasswordCheck, digest: bytes, gate: LoginGate | None = None
@@ -279,7 +284,7 @@ class Identity:
         ran: the account may have logged in elsewhere, or been registered by another login."""
         if check.stored is None:
             account = Account(check.name, check.salt, digest, check.kdf)
-            if not self._create(account):
+            if self._store.callsign_owner(check.name) is not None or not self._create(account):
                 if gate is not None:
                     gate.account_not_tried(check.name)  # a lost race to register, not a guess
                 return Refused("THAT NAME WAS JUST TAKEN: TRY AGAIN")
@@ -291,7 +296,8 @@ class Identity:
             return Refused("THAT ACCOUNT IS ALREADY LOGGED IN")
         if check.stored is not None:
             self._store.touch_login(check.name)
-        return self._admit(check.name, check.name)
+        callsign = self.callsign_of(check.name) or check.name[: policy.MAX_CALLSIGN_LENGTH]
+        return self._admit(callsign, check.name)
 
     def rehash(self, check: PasswordCheck) -> PasswordCheck | None:
         """After ``check`` let a player in: a hash of the same password made the current way, to
@@ -323,6 +329,8 @@ class Identity:
             or (None if password is None else self._new_password_problem(name, password))
         ) is not None:
             return Refused(reason)
+        if self._store.callsign_owner(name) is not None:  # another account's chosen callsign
+            return Refused("THAT NAME IS TAKEN")
         if self._count >= self._max_accounts:
             return Refused("THIS SERVER HAS NO ROOM FOR NEW ACCOUNTS")
         return None
@@ -343,8 +351,8 @@ class Identity:
         return None
 
     def _a_guest_could_be(self, callsign: str) -> bool:
-        """Whether ``_allocate_callsign`` could give ``callsign`` to a guest: a guest name cut to
-        12 characters, or with its tail replaced by a number (``JOINGENIE2``)."""
+        """Whether ``_allocate_callsign`` could give ``callsign`` (upper case) to a guest: a guest
+        name cut to 12 characters, or with its tail replaced by a number (``JOINGENIE2``)."""
         for guest in self._guest_names:
             base = guest[: policy.MAX_CALLSIGN_LENGTH]
             if callsign == base:
@@ -431,6 +439,73 @@ class Identity:
         elif not self._store.set_password(account):
             return Refused("NO SUCH ACCOUNT")
         return account, new.password
+
+    # --- callsigns ---------------------------------------------------------------------------
+
+    def callsign_of(self, name: str) -> str | None:
+        """The callsign account ``name`` (upper case) plays under, None if there is no account."""
+        found = self._store.callsign(name)
+        return None if found is None else found.callsign
+
+    def change_callsign(self, name: str, callsign: str, *, force: bool = False) -> str | Refused:
+        """Give account ``name``, which must be offline, the callsign ``callsign``, in the case
+        given: the web's or the operator's change. ``force`` (the operator) skips the wait between
+        changes. The answer is the callsign, or why not."""
+        name = name.strip().upper()
+        if name in self._accounts:
+            return Refused("THAT ACCOUNT IS ONLINE: IT CHOOSES ITS CALLSIGN WITH /CALLSIGN")
+        if (reason := self._callsign_problem(name, callsign, force=force)) is not None:
+            return Refused(reason)
+        self._store.set_callsign(name, callsign, self._wall())
+        return callsign
+
+    def rename(self, pilot: Pilot, callsign: str) -> Pilot | Refused:
+        """A logged-in account's ``/CALLSIGN``: the pilot under its new callsign, or why not.
+        Whether it may change now (not in a game, nor with one held) is the caller's to know."""
+        if pilot.account is None:
+            return Refused("A GUEST CANNOT CHOOSE A CALLSIGN: LOG IN WITH AN ACCOUNT")
+        if (reason := self._callsign_problem(pilot.account, callsign, force=False)) is not None:
+            return Refused(reason)
+        self._store.set_callsign(pilot.account, callsign, self._wall())
+        self._callsigns.discard(pilot.callsign.upper())
+        self._callsigns.add(callsign.upper())
+        return dataclasses.replace(pilot, callsign=callsign)
+
+    def _callsign_problem(self, name: str, callsign: str, *, force: bool) -> str | None:
+        current = self._store.callsign(name)
+        if current is None:
+            return "NO SUCH ACCOUNT"
+        if callsign == current.callsign:
+            return f"YOUR CALLSIGN IS ALREADY {callsign}"
+        if (problem := self._new_callsign_problem(callsign)) is not None:
+            return problem
+        own = callsign.upper() == current.callsign.upper()  # only its case changes
+        if not own and (
+            self._store.callsign_owner(callsign) is not None or callsign.upper() in self._callsigns
+        ):
+            return "THAT CALLSIGN IS TAKEN"
+        if not force and current.changed is not None:
+            wait = current.changed + policy.CALLSIGN_CHANGE_INTERVAL - self._wall()
+            if wait > 0:
+                days = math.ceil(wait / 86400)
+                return f"YOU MAY CHOOSE A NEW CALLSIGN IN {days} DAY{'S' if days > 1 else ''}"
+        return None
+
+    def _new_callsign_problem(self, callsign: str) -> str | None:
+        """Why ``callsign`` cannot be chosen whoever asks (``policy.CALLSIGN_CHARACTERS``)."""
+        if not policy.MIN_CALLSIGN_LENGTH <= len(callsign) <= policy.MAX_CALLSIGN_LENGTH:
+            return (
+                f"A CALLSIGN MUST BE {policy.MIN_CALLSIGN_LENGTH} TO "
+                f"{policy.MAX_CALLSIGN_LENGTH} CHARACTERS"
+            )
+        if any(ch not in policy.CALLSIGN_CHARACTERS for ch in callsign):
+            return "A CALLSIGN MAY HOLD LETTERS, DIGITS AND PUNCTUATION, NO SPACES"
+        if not any(ch.isalnum() for ch in callsign):
+            return "A CALLSIGN NEEDS A LETTER OR A DIGIT"
+        folded = callsign.upper()
+        if folded in policy.RESERVED_ACCOUNT_NAMES or self._a_guest_could_be(folded):
+            return "THAT CALLSIGN IS RESERVED"
+        return None
 
     def account_online(self, name: str) -> bool:
         """True if account ``name`` (upper case) is logged in."""
@@ -525,28 +600,27 @@ class Identity:
             return Refused("TOO MANY LOGIN ATTEMPTS: WAIT A MOMENT")
         return None
 
-    def _admit(self, name: str, account: str | None) -> Pilot | Refused:
-        callsign = self._allocate_callsign(name, guest=account is None)
+    def _admit(self, base: str, account: str | None) -> Pilot | Refused:
+        callsign = self._allocate_callsign(base, guest=account is None)
         if callsign is None:
             return Refused("TOO MANY PILOTS WITH THAT NAME ARE ONLINE")
-        self._callsigns.add(callsign)
+        self._callsigns.add(callsign.upper())
         if account is not None:
             self._accounts.add(account)
         return Pilot(callsign, account)
 
-    def _allocate_callsign(self, name: str, *, guest: bool) -> str | None:
-        """The name cut to 12 characters, or with its tail replaced by a number until free
-        (II §3: ``JOINGENIE``, ``JOINGENIE2`` ... ``JOINGENIE999``). A guest also passes over
-        every registered account's callsign, so an account always plays under its own name."""
+    def _allocate_callsign(self, base: str, *, guest: bool) -> str | None:
+        """``base`` (at most 12 characters: a guest name cut, or an account's callsign), or with its
+        tail replaced by a number until free (II §3: ``JOINGENIE``, ``JOINGENIE2`` ...
+        ``JOINGENIE999``), ignoring case. A guest also passes over every account's callsign, so an
+        account always plays under its own; an account needs a number only if two made before
+        names were cut to 12 share one."""
 
         def free(callsign: str) -> bool:
-            if callsign in self._callsigns:
+            if callsign.upper() in self._callsigns:
                 return False
-            return not (
-                guest and self._store.callsign_registered(callsign, policy.MAX_CALLSIGN_LENGTH)
-            )
+            return not (guest and self._store.callsign_owner(callsign) is not None)
 
-        base = name[: policy.MAX_CALLSIGN_LENGTH]
         if free(base):
             return base
         for n in range(policy.CALLSIGN_FIRST_SUFFIX, policy.CALLSIGN_LAST_SUFFIX + 1):

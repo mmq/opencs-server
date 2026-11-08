@@ -136,6 +136,13 @@ class Session:
             self.address,
         )
 
+    def rename(self, pilot: Pilot) -> None:
+        """The pilot has a new callsign (``/CALLSIGN``, in the Chamber)."""
+        self.pilot = pilot
+        self.log.callsign = pilot.callsign
+        if self.member is not None:
+            self.member.callsign = pilot.callsign
+
     def join_lobby(self) -> Member:
         """Enter the Chamber's roster (the pilot must be known)."""
         assert self.pilot is not None

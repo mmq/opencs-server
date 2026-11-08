@@ -12,7 +12,7 @@ import pytest
 
 from opencs import policy
 from opencs.lobby.identity import Identity, Pilot, hash_password
-from opencs.store.base import Account, Kdf, ProgressRecord, Stores
+from opencs.store.base import Account, Callsign, Kdf, ProgressRecord, Stores
 from opencs.store.memory import MemoryAccountStore, MemoryProgressStore
 from opencs.store.sqlite import MIGRATIONS, SchemaError, SqliteStore, open_stores
 
@@ -52,12 +52,23 @@ def test_an_account_is_created_once_and_read_back(stores: Stores) -> None:
     assert stores.accounts.get("ALICE") == account
 
 
-def test_callsign_registered_compares_the_cut_names(stores: Stores) -> None:
-    stores.accounts.create(Account("ALPHAXYZ", b"s", b"h", Kdf.pbkdf2(1)))
-    assert stores.accounts.callsign_registered("ALPHAXYZ", 8)
-    assert not stores.accounts.callsign_registered("ALPHAXY", 8)
-    assert stores.accounts.callsign_registered("ALPHA", 5)
-    assert not stores.accounts.callsign_registered("BRAVO", 5)
+def test_an_accounts_callsign_starts_as_its_name_and_is_found_ignoring_case(
+    stores: Stores,
+) -> None:
+    accounts = stores.accounts
+    accounts.create(Account("ALPHA", b"s", b"h", Kdf.pbkdf2(1)))
+    assert accounts.callsign("ALPHA") == Callsign("ALPHA", None)
+    assert accounts.callsign("NOBODY") is None
+    assert accounts.callsign_owner("alpha") == "ALPHA"
+    assert accounts.set_callsign("ALPHA", "Al:pha*", 50.0)
+    assert accounts.callsign("ALPHA") == Callsign("Al:pha*", 50.0)
+    assert accounts.callsign_owner("AL:PHA*") == "ALPHA"
+    assert accounts.callsign_owner("ALPHA") is None  # the old one is free
+    assert not accounts.set_callsign("NOBODY", "X", 1.0)
+    assert accounts.set_password(Account("ALPHA", b"s2", b"h2", Kdf.pbkdf2(2)))
+    assert accounts.callsign("ALPHA") == Callsign("Al:pha*", 50.0)  # a new password keeps it
+    assert accounts.delete("ALPHA")
+    assert accounts.callsign_owner("al:pha*") is None
 
 
 def test_progress_round_trips_every_field_and_is_stamped(stores: Stores) -> None:
@@ -277,15 +288,32 @@ def test_stale_accounts_can_be_swept_a_batch_at_a_time_and_deleted_at_once(
         assert accounts.count() == 3
 
 
-def test_a_callsign_is_found_among_names_cut_to_its_length(tmp_path: Path) -> None:
-    for accounts in (MemoryAccountStore(), SqliteStore(tmp_path / "callsigns.db")):
-        # made before the 12 limit
-        accounts.create(Account("ALPHABRAVOCHARLIE", b"s", b"h", Kdf.pbkdf2(1)))
-        accounts.create(Account("ACE", b"s", b"h", Kdf.pbkdf2(1)))
-        assert accounts.callsign_registered("ALPHABRAVOCH", 12)
-        assert accounts.callsign_registered("ACE", 12)
-        assert not accounts.callsign_registered("ALPHABRAVOC", 12)
-        assert accounts.callsign_registered("ALPHABRAVOC", 11)  # not the indexed length
+def test_an_account_named_before_the_12_limit_has_its_name_cut_for_a_callsign(
+    stores: Stores,
+) -> None:
+    stores.accounts.create(Account("ALPHABRAVOCHARLIE", b"s", b"h", Kdf.pbkdf2(1)))
+    assert stores.accounts.callsign("ALPHABRAVOCHARLIE") == Callsign("ALPHABRAVOCH", None)
+    assert stores.accounts.callsign_owner("alphabravoch") == "ALPHABRAVOCHARLIE"
+    assert stores.accounts.callsign_owner("ALPHABRAVOC") is None
+
+
+def test_the_callsign_migration_gives_old_accounts_their_cut_names(tmp_path: Path) -> None:
+    path = tmp_path / "v3.db"
+    old = SqliteStore(path, migrations=MIGRATIONS[:3])
+    old._db.execute(
+        "INSERT INTO accounts (name, salt, password_hash, iterations, created) "
+        "VALUES ('ALPHABRAVOCHARLIE', x'00', x'00', 1, 0), ('ACE', x'00', x'00', 1, 0)"
+    )
+    old.close()
+    db = SqliteStore(path)
+    assert db.schema_version == len(MIGRATIONS)
+    assert db.callsign("ALPHABRAVOCHARLIE") == Callsign("ALPHABRAVOCH", None)
+    assert db.callsign_owner("ace") == "ACE"
+    plan = db._db.execute(
+        "EXPLAIN QUERY PLAN SELECT name FROM accounts WHERE upper(callsign) = ?", ("ACE",)
+    ).fetchall()
+    assert "accounts_callsign_folded" in str(plan)
+    db.close()
 
 
 def test_a_password_can_be_replaced_only_on_an_existing_account(stores: Stores) -> None:

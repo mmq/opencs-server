@@ -255,7 +255,7 @@ start; **only the city files are re-read by `reload`** (below).
 | `[logging] format` | `"%(asctime)s %(levelname)s %(name)s: %(message)s"` | a Python logging format | the line layout |
 | `[capture] enabled` | `false` | boolean | record each connection's wire traffic |
 | `[capture] dir` | `"../captures"` | a directory, created | one file per connection |
-| `[capture] callsigns` | `[]` (everyone) | upper-case callsigns | capture only these pilots |
+| `[capture] callsigns` | `[]` (everyone) | callsigns, in any case | capture only these pilots |
 | `[capture] max_bytes` | `4000000` | 1000 to 1e9 | a capture stops at this size |
 | `[admin] port` | none (off) | 0-65535, not the game port | the admin channel's port |
 | `[admin] token` | none | at least 16 characters | the admin token, in the file. Prefer the environment variable: with a token here, the server logs a warning at start if `server.toml` is readable by group or others (`chmod 600` it) |
@@ -391,6 +391,7 @@ port) or restart the server, which resets the limits.
 | `reset-password <name>` | give an account a new random password, shown once and never logged. It does not end a session that is already open: a player logged in stays logged in, so `kick` them if the old password may be known |
 | `reset-progress <name>` | erase an account's saved progress (bays, points, score). Refused while it is online or has a game held for `/RESUME` |
 | `delete-account <name>` | remove an account and its progress, freeing the name. Refused while it is online or held |
+| `set-callsign <name> <callsign>` | give an account the callsign it plays under, in the case typed. The rules are a player's (`/CALLSIGN`) without the week's wait. Refused while it is online or held |
 | `help`, `quit` | |
 
 ### The stranded guppy
@@ -438,15 +439,16 @@ printf '%s\n' '{"hello":"opencs-service","version":1}' '{"id":1,"op":"snapshot"}
 | op | arguments | result |
 |---|---|---|
 | `snapshot` | | uptime, account count, cap and registration mode, connections in game and in the Chamber, each city's name, capacity, whether it is open and its pilots (callsign, team, guest or not), held games. No addresses, account details or chat |
-| `account` | `name` | whether that account exists and is online |
+| `account` | `name` | whether that account exists and is online, and its callsign (`null` if there is no account) |
 | `register` | `name`, `password` | a new account, `{"name", "password"}`: with `password` the one given, without it a made-up one. The password is in the reply only, never logged. The rules are those of every new account (a chosen password too: 6 to 12 printable characters, no spaces, and no lower case, since the client's entry types capitals); a refusal (`"refused"`) says why. Whether players may choose is the web's setting; the game sends passwords in the clear, so a made-up one is the safer default |
 | `reset-password` | `name`, `password` | a new password for an account, chosen or made up, as `register` |
 | `status`, `reload` | | the admin command's reply lines, `{"lines": [...]}` |
 | `announce` | `text` | as the admin command |
-| `kick` | `callsign`, `reason` (optional) | as the admin command |
+| `kick` | `callsign`, `reason` (optional) | as the admin command; the callsign in any case |
 | `guppy-home` | `team` | as `guppy <team> home` |
 | `shutdown` | `seconds` (optional), or `cancel: true` | as the admin command |
 | `reset-progress`, `delete-account` | `name` | as the admin commands |
+| `set-callsign` | `name`, `callsign`, `force` (optional) | the account's new callsign, `{"name", "callsign"}`, in the case given, under a player's rules (`/CALLSIGN`) including the week between changes; `force: true` (for the web's admin pages) skips the wait. Refused while the account is online or held |
 
 Bounds: lines of at most 4096 bytes (a longer one closes the connection), 4 connections at once, 50
 requests in a burst and 20 a second per connection (more are refused with `"rate"`), and over every

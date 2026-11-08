@@ -62,6 +62,13 @@ class WhoIs:
 
 
 @dataclass(frozen=True, slots=True)
+class ChooseCallsign:
+    """``/CALLSIGN <callsign>``, in the case typed."""
+
+    callsign: str
+
+
+@dataclass(frozen=True, slots=True)
 class Score:
     """``/SCORE``."""
 
@@ -126,6 +133,7 @@ type Command = (
     | CityInfo
     | Status
     | WhoIs
+    | ChooseCallsign
     | Score
     | Play
     | Resume
@@ -139,6 +147,7 @@ type Command = (
 
 _USAGE_CITY = "USAGE: /CITY [LETTER]"
 _USAGE_PLAY = "USAGE: /PLAY [LETTER [RED|BLUE|GREEN|BLACK]]"
+_USAGE_CALLSIGN = "USAGE: /CALLSIGN <NEW CALLSIGN>  (NO SPACES)"
 
 #: Longest unknown command word echoed back; keeps the reply line short.
 _WORD_ECHO_LIMIT = 16
@@ -193,16 +202,25 @@ _NO_ARGUMENTS: dict[str, Callable[[], Command]] = {
 }
 
 
+def _city(args: list[str]) -> Command:
+    letter = _letter(args[0]) if len(args) == 1 else None
+    return CityInfo(letter) if letter else Usage(_USAGE_CITY)
+
+
+def _who(args: list[str]) -> Command:
+    return WhoIs(args[0]) if args else Status()  # in the case typed: the lookup ignores it
+
+
+def _callsign(args: list[str]) -> Command:
+    return ChooseCallsign(args[0]) if len(args) == 1 else Usage(_USAGE_CALLSIGN)
+
+
 def _slash(word: str, args: list[str]) -> Command:
     if word in _NO_ARGUMENTS:
         return _NO_ARGUMENTS[word]()
-    if word == "CITY":
-        letter = _letter(args[0]) if len(args) == 1 else None
-        return CityInfo(letter) if letter else Usage(_USAGE_CITY)
-    if word == "WHO":
-        return WhoIs(args[0].upper()) if args else Status()
-    if word == "PLAY":
-        return _play(args)
+    with_arguments = _WITH_ARGUMENTS.get(word)
+    if with_arguments is not None:
+        return with_arguments(args)
     if word == "GO" and len(args) == 1 and args[0].isdecimal():
         return Go(int(args[0]))
     return Unknown(word[:_WORD_ECHO_LIMIT])
@@ -218,3 +236,11 @@ def _play(args: list[str]) -> Command:
         return Play(letter)
     team = team_from_word(args[1])
     return Play(letter, team) if team is not None else Usage(_USAGE_PLAY)
+
+
+_WITH_ARGUMENTS: dict[str, Callable[[list[str]], Command]] = {
+    "CITY": _city,
+    "WHO": _who,
+    "CALLSIGN": _callsign,
+    "PLAY": _play,
+}

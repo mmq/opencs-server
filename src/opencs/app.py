@@ -97,6 +97,7 @@ def build_services(
         registration=config.server.registration,
         min_password_length=limits.min_password_length,
         max_accounts=limits.max_accounts,
+        wall=time.time,
     )
     rng = rng or random.Random()
     held = HeldGames(clock)

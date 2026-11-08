@@ -150,7 +150,7 @@ class Capture:
         """Create the file at the first recorded line; False when this connection is not to be
         captured (its callsign is not on the list) or the file cannot be made."""
         callsign = self._context.callsign
-        if self._callsigns and callsign not in self._callsigns:
+        if self._callsigns and callsign.upper() not in self._callsigns:  # the list is upper case
             self._off = True
             return False
         name = _UNSAFE.sub("_", callsign)

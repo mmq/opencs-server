@@ -6,7 +6,7 @@ What changed for players and operators, newest first. How the code is built is i
 
 ## Unreleased
 
-A database opened by this version moves to schema version 3, which `1.0.0rc2` refuses: back it up before
+A database opened by this version moves to schema version 4, which `1.0.0rc2` refuses: back it up before
 upgrading.
 
 ### Operators
@@ -18,6 +18,9 @@ upgrading.
   so neither slows the games as the account table grows.
 
 ### Players
+- An account chooses its callsign with `/CALLSIGN` in the Chamber, once a week: 3 to 12 letters in
+  either case, digits and punctuation, no spaces, shown as typed and unique ignoring case. It starts as
+  the account name. The operator's `set-callsign` and the service channel's `set-callsign` set one too.
 - A new password is 6 to 12 printable characters without spaces, the most the client's password entry
   takes; the web may let a player choose it. Accounts made before keep their passwords.
 

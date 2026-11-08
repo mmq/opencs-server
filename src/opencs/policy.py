@@ -712,6 +712,20 @@ ACCOUNT_KEY_PREFIX = "acct:"
 CALLSIGN_FIRST_SUFFIX = 2
 CALLSIGN_LAST_SUFFIX = 999
 
+#: What a callsign an account chooses (``/CALLSIGN``, the operator, the web) must be. The client
+#: draws every byte from ``!`` to ``~`` as sent, in either case, and never reads a callsign back out
+#: of text (cyberstrike research, 2026-11-07, pending its live test), and the old screenshots show
+#: ``:``, ``^``, ``*``, ``\\``, ``/`` and parentheses. A space is left out: a callsign holding one
+#: could pass for a chat line (``BOB: GG``) and would split ``/WHO <callsign>``. At least one
+#: letter or digit, so ``...`` is no one's name. Callsigns are unique, and compared, ignoring
+#: case. Ours.
+CALLSIGN_CHARACTERS = frozenset(chr(c) for c in range(0x21, 0x7F))
+MIN_CALLSIGN_LENGTH = 3
+
+#: How long an account waits between choosing callsigns, so a name stays one others can know a
+#: pilot by. The operator is not held to it. Ours.
+CALLSIGN_CHANGE_INTERVAL = 7 * 24 * 3600.0
+
 # --- Wire (I §5.2, I §4.1; DESIGN §5) ------------------------------------------------------------
 
 #: Longest inbound Chamber line kept, in bytes; longer lines are discarded and counted. The

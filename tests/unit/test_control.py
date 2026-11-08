@@ -198,7 +198,7 @@ def test_kick_leaves_other_pilots_alone() -> None:
 
 def test_kick_of_nobody_or_nothing() -> None:
     ctl, _ = control(make_world())
-    assert ctl.execute("kick ghost") == ["no pilot GHOST is connected"]
+    assert ctl.execute("kick ghost") == ["no pilot ghost is connected"]
     assert ctl.execute("kick") == ["usage: kick <callsign> [reason]"]
 
 
@@ -489,3 +489,22 @@ def test_progress_and_accounts_are_wiped_only_while_the_player_is_offline() -> N
     assert world.identity.account_exists("ALICE") is False
     assert ctl.execute("delete-account ALICE") == ["refused: no account ALICE"]
     assert ctl.execute("delete-account") == ["usage: delete-account <name>"]
+
+
+# --- callsigns ---------------------------------------------------------------------------------
+
+
+def test_the_operator_sets_a_callsign_without_the_wait_and_only_offline() -> None:
+    world = make_world()
+    ctl, _ = control(world)
+    assert world.identity.register("ALICE", "SECRET1") is not None
+    assert ctl.execute("set-callsign alice Al:ce") == ["ALICE now plays as Al:ce"]
+    assert ctl.execute("set-callsign alice Ace") == ["ALICE now plays as Ace"]  # no week's wait
+    assert ctl.execute("set-callsign alice") == ["usage: set-callsign <name> <callsign>"]
+    assert ctl.execute("set-callsign nobody Ace2") == ["refused: no account NOBODY"]
+    assert ctl.execute("set-callsign alice a b") == ["usage: set-callsign <name> <callsign>"]
+    assert ctl.execute("set-callsign alice ...")[0].startswith("refused: A CALLSIGN NEEDS")
+    h = enter_lobby(world, "ALICE,SECRET1")
+    assert h.session.pilot is not None and h.session.pilot.callsign == "Ace"
+    assert ctl.execute("set-callsign alice Other") == ["refused: ALICE is online; kick it first"]
+    assert ctl.execute("kick ACE") == ["kicked Ace (1 connection(s))"]

@@ -265,6 +265,7 @@ def test_an_account_registered_over_the_channel_logs_in_and_its_password_is_neve
                 "name": "NEWPILOT",
                 "exists": True,
                 "online": True,
+                "callsign": "NEWPILOT",
             }
             h.session.closed()
             again = await c.result("reset-password", name="NEWPILOT")
@@ -297,6 +298,30 @@ def test_the_web_may_choose_the_password_within_the_servers_rules(
                 assert (reply["error"], reply["message"][: len(reason)]) == ("refused", reason)
             reply = await c.ask("reset-password", name="CHOOSER", password=12345678)
             assert reply["error"] == "bad-request"
+
+    run(scenario())
+
+
+def test_the_web_sets_a_callsign_under_the_players_rules_unless_forced(sock_dir: Path) -> None:
+    async def scenario() -> None:
+        async with running(sock_dir) as (path, _, _):
+            c = await hello(path)
+            await c.result("register", name="alice")
+            made = await c.result("set-callsign", name="alice", callsign="Al:ce")
+            assert made == {"name": "ALICE", "callsign": "Al:ce"}
+            assert (await c.result("account", name="ALICE"))["callsign"] == "Al:ce"
+            again = await c.ask("set-callsign", name="alice", callsign="Ace")
+            assert (again["error"], again["message"]) == (
+                "refused",
+                "YOU MAY CHOOSE A NEW CALLSIGN IN 7 DAYS",
+            )
+            forced = await c.result("set-callsign", name="alice", callsign="Ace", force=True)
+            assert forced["callsign"] == "Ace"
+            for bad in ({"callsign": "two words"}, {"callsign": 7}, {"force": "yes"}):
+                request = {"name": "alice", "callsign": "Ok1", **bad}
+                assert (await c.ask("set-callsign", **request))["error"] == "bad-request"
+            reply = await c.ask("set-callsign", name="nobody", callsign="Ace2")
+            assert reply["error"] == "refused"
 
     run(scenario())
 
@@ -436,6 +461,7 @@ def test_the_operators_commands_work_over_the_channel(sock_dir: Path) -> None:
                 "name": "BOB",
                 "exists": False,
                 "online": False,
+                "callsign": None,
             }
             assert (await c.result("reload"))["lines"] == [
                 "no config file is known: nothing to reload"

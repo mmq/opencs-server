@@ -551,3 +551,91 @@ def test_a_password_the_server_makes_up_is_never_refused_by_the_rules_for_chosen
     assert pilot(identity.login(f"NEWPILOT,{made[1]}")).account == "NEWPILOT"
     refused = identity.register("OTHER", "SHORT1")  # a chosen one is held to them
     assert isinstance(refused, Refused) and "12 CHARACTERS" in refused.reason
+
+
+# --- chosen callsigns --------------------------------------------------------------------------
+
+
+def clocked() -> tuple[Identity, list[float]]:
+    now = [1000.0]
+    return Identity(MemoryAccountStore(), kdf=FAST, wall=lambda: now[0]), now
+
+
+def refusal(result: object) -> str:
+    assert isinstance(result, Refused), result
+    return result.reason
+
+
+def test_an_account_plays_under_the_callsign_it_chose_in_the_case_chosen() -> None:
+    identity, _ = clocked()
+    identity.release(pilot(identity.login("ALICE,sesame")))
+    assert identity.callsign_of("ALICE") == "ALICE"
+    assert identity.change_callsign("alice", "Al:ce(1)") == "Al:ce(1)"
+    alice = pilot(identity.login("ALICE,sesame"))
+    assert (alice.callsign, alice.account, alice.key) == ("Al:ce(1)", "ALICE", "acct:ALICE")
+    assert identity.callsign_online("AL:CE(1)") and not identity.callsign_online("ALICE")
+    identity.release(alice)
+    assert not identity.callsign_online("al:ce(1)")
+
+
+def test_a_callsign_is_unique_ignoring_case_and_frees_the_old_one() -> None:
+    identity, _ = clocked()
+    for name in ("ALICE", "BOB"):
+        identity.release(pilot(identity.login(f"{name},sesame")))
+    assert identity.change_callsign("ALICE", "Ace") == "Ace"
+    assert "TAKEN" in refusal(identity.change_callsign("BOB", "ACE"))
+    assert "TAKEN" in refusal(identity.login("ACE,sesame"))  # nor a new account's name
+    assert identity.change_callsign("BOB", "Alice") == "Alice"  # ALICE's old one came free
+
+
+@pytest.mark.parametrize(
+    ("callsign", "fragment"),
+    [
+        ("AB", "3 TO 12"),
+        ("THIRTEENCHARS", "3 TO 12"),
+        ("TWO WORDS", "NO SPACES"),
+        ("CAFÉ", "NO SPACES"),
+        ("...", "A LETTER OR A DIGIT"),
+        ("-_-", "A LETTER OR A DIGIT"),
+        ("admin", "RESERVED"),
+        ("JoinGenie", "RESERVED"),
+        ("joingenie42", "RESERVED"),
+        ("ALICE", "ALREADY"),
+    ],
+)
+def test_a_chosen_callsign_must_be_one_the_rules_allow(callsign: str, fragment: str) -> None:
+    identity, _ = clocked()
+    identity.release(pilot(identity.login("ALICE,sesame")))
+    assert fragment in refusal(identity.change_callsign("ALICE", callsign))
+
+
+def test_any_printable_punctuation_is_allowed_with_a_letter_or_digit() -> None:
+    identity, _ = clocked()
+    identity.release(pilot(identity.login("ALICE,sesame")))
+    assert identity.change_callsign("ALICE", "^*\\/()<>:!7", force=True) == "^*\\/()<>:!7"
+
+
+def test_a_callsign_may_change_once_a_week_unless_the_operator_changes_it() -> None:
+    identity, now = clocked()
+    identity.release(pilot(identity.login("ALICE,sesame")))
+    assert identity.change_callsign("ALICE", "First") == "First"  # the first choice is free
+    assert "IN 7 DAYS" in refusal(identity.change_callsign("ALICE", "Second"))
+    now[0] += policy.CALLSIGN_CHANGE_INTERVAL - 3600
+    assert "IN 1 DAY" in refusal(identity.change_callsign("ALICE", "Second"))
+    assert identity.change_callsign("ALICE", "Forced", force=True) == "Forced"
+    now[0] += policy.CALLSIGN_CHANGE_INTERVAL
+    assert identity.change_callsign("ALICE", "FORCED") == "FORCED"  # a change of case counts too
+
+
+def test_an_online_account_renames_itself_and_not_through_the_offline_change() -> None:
+    identity, _ = clocked()
+    alice = pilot(identity.login("ALICE,sesame"))
+    assert "ONLINE" in refusal(identity.change_callsign("ALICE", "Ace"))
+    renamed = pilot(identity.rename(alice, "Ace"))
+    assert (renamed.callsign, renamed.account) == ("Ace", "ALICE")
+    assert identity.callsign_online("ace") and not identity.callsign_online("ALICE")
+    guest = pilot(identity.login("JOINGENIE"))
+    assert "GUEST" in refusal(identity.rename(guest, "Guesty"))
+    identity.release(renamed)
+    assert not identity.callsign_online("ACE")
+    assert pilot(identity.login("ALICE,sesame")).callsign == "Ace"

@@ -135,7 +135,7 @@ src/opencs/
   lobby/
     lobby.py             Lobby: members, locations, city choice, teams
     commands.py          parsing /PLAY, /CITY, … (pure)
-    identity.py          accounts vs JOINGENIE, callsigns
+    identity.py          accounts vs JOINGENIE, callsigns: an account's is chosen apart from its name
     replies.py           the text the Chamber shows in answer to lobby commands
   routing.py             Audience → sessions
   session/

@@ -6,7 +6,8 @@ import time
 from collections.abc import Callable, Iterable
 from dataclasses import replace
 
-from opencs.store.base import Account, ProgressRecord, StaleCursor, Stores
+from opencs import policy
+from opencs.store.base import Account, Callsign, ProgressRecord, StaleCursor, Stores
 
 
 class MemoryAccountStore:
@@ -15,6 +16,8 @@ class MemoryAccountStore:
     def __init__(self, now: Callable[[], float] = time.time) -> None:
         self._accounts: dict[str, Account] = {}
         self._seen: dict[str, float] = {}  # created or last logged in to
+        self._callsigns: dict[str, Callsign] = {}
+        self._owners: dict[str, str] = {}  # upper-cased callsign -> account name
         self._now = now
 
     def get(self, name: str) -> Account | None:
@@ -25,10 +28,29 @@ class MemoryAccountStore:
             return False
         self._accounts[account.name] = account
         self._seen[account.name] = self._now()
+        callsign = account.name[: policy.MAX_CALLSIGN_LENGTH]
+        self._callsigns[account.name] = Callsign(callsign, None)
+        self._owners.setdefault(callsign.upper(), account.name)
         return True
 
-    def callsign_registered(self, callsign: str, length: int) -> bool:
-        return any(name[:length] == callsign for name in self._accounts)
+    def callsign(self, name: str) -> Callsign | None:
+        return self._callsigns.get(name)
+
+    def callsign_owner(self, callsign: str) -> str | None:
+        return self._owners.get(callsign.upper())
+
+    def set_callsign(self, name: str, callsign: str, changed: float) -> bool:
+        if name not in self._accounts:
+            return False
+        self._disown(name)
+        self._callsigns[name] = Callsign(callsign, changed)
+        self._owners.setdefault(callsign.upper(), name)
+        return True
+
+    def _disown(self, name: str) -> None:
+        old = self._callsigns.get(name)
+        if old is not None and self._owners.get(old.callsign.upper()) == name:
+            del self._owners[old.callsign.upper()]
 
     def count(self) -> int:
         return len(self._accounts)
@@ -51,10 +73,12 @@ class MemoryAccountStore:
         if account.name not in self._accounts:
             return False
         self._accounts[account.name] = account
-        return True
+        return True  # the callsign is kept apart, so a new password leaves it as it was
 
     def delete(self, name: str) -> bool:
         self._seen.pop(name, None)
+        self._disown(name)
+        self._callsigns.pop(name, None)
         return self._accounts.pop(name, None) is not None
 
     def delete_many(self, names: Iterable[str]) -> list[str]:

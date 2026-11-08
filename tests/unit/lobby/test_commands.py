@@ -6,6 +6,7 @@ import pytest
 
 from opencs.lobby.commands import (
     BareLetter,
+    ChooseCallsign,
     CityInfo,
     CityList,
     Colors,
@@ -36,7 +37,10 @@ from opencs.lobby.commands import (
         ("  /Help  ", Help()),
         ("/STATUS", Status()),
         ("/WHO", Status()),
-        ("/who alpha", WhoIs("ALPHA")),
+        ("/who alpha", WhoIs("alpha")),  # kept as typed; the lookup ignores case
+        ("/callsign Ace:1", ChooseCallsign("Ace:1")),
+        ("/CALLSIGN", Usage("USAGE: /CALLSIGN <NEW CALLSIGN>  (NO SPACES)")),
+        ("/callsign two words", Usage("USAGE: /CALLSIGN <NEW CALLSIGN>  (NO SPACES)")),
         ("/SCORE", Score()),
         ("/RESUME", Resume()),
         ("/COLORS", Colors()),
