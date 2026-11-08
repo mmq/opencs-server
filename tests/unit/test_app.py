@@ -30,7 +30,7 @@ from opencs.lobby.identity import Refused
 from opencs.messages import ServerMessage, client, client_payload, server
 from opencs.routing import Router
 from opencs.session.cityhealth import CityHealth
-from opencs.store.base import ProgressRecord
+from opencs.store.base import Account, ProgressRecord
 from opencs.store.memory import memory_stores
 from opencs.tasks import watch
 from opencs.wire.frame import build_frame
@@ -451,10 +451,28 @@ def test_unplayed_accounts_are_pruned_at_the_interval_and_played_ones_kept() -> 
         services.identity.release(pilot)  # type: ignore[arg-type]
     services.persistence._store.save("acct:PLAYER", ProgressRecord((1,) * 9, 0, 0, 0, 0))
     soon = time.time() + 60
-    assert prune_accounts(services, soon) == []
+    assert asyncio.run(prune_accounts(services, soon)) == []
     later = soon + policy.UNPLAYED_ACCOUNT_DAYS * 24 * 3600
-    assert prune_accounts(services, later) == ["IDLER"]
+    assert asyncio.run(prune_accounts(services, later)) == ["IDLER"]
     assert services.identity.account_exists("PLAYER")
+
+
+def test_the_prune_pauses_for_the_games_between_batches() -> None:
+    stores = memory_stores()
+    count = policy.ACCOUNT_PRUNE_BATCH * 2 + 1
+    for i in range(count):
+        stores.accounts.create(Account(f"IDLE{i}", b"s", b"h", 1))
+    services = build_services(local_config(), stores=stores)
+    pauses: list[float] = []
+
+    async def pause(seconds: float) -> None:
+        pauses.append(seconds)
+
+    later = time.time() + (policy.UNPLAYED_ACCOUNT_DAYS + 1) * 24 * 3600
+    gone = asyncio.run(prune_accounts(services, later, pause=pause))
+    assert len(gone) == count
+    assert pauses == [policy.ACCOUNT_PRUNE_PAUSE] * 2
+    assert services.identity.account_count() == 0
 
 
 def test_the_configured_limits_reach_identity_and_the_login_limits() -> None:

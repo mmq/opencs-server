@@ -19,11 +19,11 @@ from __future__ import annotations
 import logging
 import sqlite3
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
 
 from opencs import policy
-from opencs.store.base import PBKDF2_SHA256, Account, Kdf, ProgressRecord, Stores
+from opencs.store.base import PBKDF2_SHA256, Account, Kdf, ProgressRecord, StaleCursor, Stores
 
 log = logging.getLogger("opencs.store")
 
@@ -51,7 +51,19 @@ MIGRATIONS: tuple[tuple[str, ...], ...] = (
     # 2: how each password hash was made. '' is PBKDF2-HMAC-SHA256 with the row's ``iterations``,
     # which is every row made before this column; any other value is ``_kdf_columns``'s.
     ("ALTER TABLE accounts ADD COLUMN kdf TEXT NOT NULL DEFAULT ''",),
+    # 3: indexes for the callsign lookup and the prune.
+    (
+        # A guest login looks up its callsign among the accounts' names cut to 12 characters
+        # (policy.MAX_CALLSIGN_LENGTH); without this it scans the table.
+        "CREATE INDEX accounts_callsign ON accounts (substr(name, 1, 12))",
+        # The prune sweeps the stale accounts in batches, oldest first.
+        "CREATE INDEX accounts_seen ON accounts (coalesce(last_login, created), name)",
+    ),
 )
+
+#: The length ``accounts_callsign`` cuts names to. A query must spell its expression the same way
+#: to use it.
+_CALLSIGN_INDEX_LENGTH = 12
 
 
 class SchemaError(Exception):
@@ -187,9 +199,12 @@ class SqliteStore:
         return cursor.rowcount == 1
 
     def callsign_registered(self, callsign: str, length: int) -> bool:
-        row = self._db.execute(
-            "SELECT 1 FROM accounts WHERE substr(name, 1, ?) = ? LIMIT 1", (length, callsign)
-        ).fetchone()
+        if length == _CALLSIGN_INDEX_LENGTH:
+            sql = "SELECT 1 FROM accounts WHERE substr(name, 1, 12) = ? LIMIT 1"
+            row = self._db.execute(sql, (callsign,)).fetchone()
+        else:
+            sql = "SELECT 1 FROM accounts WHERE substr(name, 1, ?) = ? LIMIT 1"
+            row = self._db.execute(sql, (length, callsign)).fetchone()
         return row is not None
 
     def count(self) -> int:
@@ -198,12 +213,17 @@ class SqliteStore:
     def touch_login(self, name: str) -> None:
         self._write("UPDATE accounts SET last_login = ? WHERE name = ?", (self._now(), name))
 
-    def stale(self, before: float) -> list[str]:
+    def stale(
+        self, before: float, *, after: StaleCursor | None = None, limit: int | None = None
+    ) -> list[tuple[StaleCursor, str]]:
+        seen, name = after if after is not None else (float("-inf"), "")
+        # Spelled out, not as a row value, so the index range starts at the cursor.
         rows = self._db.execute(
-            "SELECT name FROM accounts WHERE coalesce(last_login, created) < ? ORDER BY name",
-            (before,),
+            "SELECT coalesce(last_login, created) AS seen, name FROM accounts "
+            "WHERE seen < ? AND seen >= ? AND (seen > ? OR name > ?) ORDER BY seen, name LIMIT ?",
+            (before, seen, seen, name, -1 if limit is None else limit),
         ).fetchall()
-        return [row[0] for row in rows]
+        return [((row[0], row[1]), row[1]) for row in rows]
 
     def set_password(self, account: Account) -> bool:
         kdf, iterations = _kdf_columns(account.kdf)
@@ -216,6 +236,19 @@ class SqliteStore:
 
     def delete(self, name: str) -> bool:
         return self._write("DELETE FROM accounts WHERE name = ?", (name,)).rowcount == 1
+
+    def delete_many(self, names: Iterable[str]) -> list[str]:
+        gone = []
+        self._db.execute("BEGIN")
+        try:
+            for name in names:
+                if self._db.execute("DELETE FROM accounts WHERE name = ?", (name,)).rowcount:
+                    gone.append(name)
+            self._db.execute("COMMIT")
+        except BaseException:
+            self._rollback()
+            raise
+        return gone
 
     # --- ProgressStore -----------------------------------------------------------------------
 

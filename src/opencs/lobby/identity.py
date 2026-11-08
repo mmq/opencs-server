@@ -19,7 +19,7 @@ from typing import Protocol
 from argon2.low_level import Type, hash_secret_raw
 
 from opencs import policy
-from opencs.store.base import ARGON2ID, PBKDF2_SHA256, Account, AccountStore, Kdf
+from opencs.store.base import ARGON2ID, PBKDF2_SHA256, Account, AccountStore, Kdf, StaleCursor
 
 log = logging.getLogger("opencs.lobby")
 
@@ -103,6 +103,15 @@ class PasswordCheck:
 
     def hash(self) -> bytes:
         return hash_password(self.password, self.salt, self.kdf)
+
+
+@dataclass(frozen=True, slots=True)
+class PruneBatch:
+    """One batch of ``Identity.prune_unplayed``: the accounts it deleted, and where the next batch
+    starts, None when the sweep is done."""
+
+    gone: list[str]
+    resume: StaleCursor | None
 
 
 #: How new password hashes are made (DESIGN §5, ADR 13).
@@ -400,18 +409,28 @@ class Identity:
         self._count -= 1
         return True
 
-    def prune_unplayed(self, before: float, has_progress: Callable[[str], bool]) -> list[str]:
+    def prune_unplayed(
+        self,
+        before: float,
+        has_progress: Callable[[str], bool],
+        *,
+        after: StaleCursor | None = None,
+        limit: int = policy.ACCOUNT_PRUNE_BATCH,
+    ) -> PruneBatch:
         """Delete the accounts nobody has created or logged in to since ``before`` (wall-clock
         seconds) that hold no progress (``has_progress`` of their record key) and are not online,
-        so names claimed and never played come free (``policy.UNPLAYED_ACCOUNT_DAYS``). Returns
-        their names."""
-        gone = []
-        for name in self._store.stale(before):
-            if name in self._accounts or has_progress(identity_key(name, name)):
-                continue
-            if self.delete_account(name):
-                gone.append(name)
-        return gone
+        so names claimed and never played come free (``policy.UNPLAYED_ACCOUNT_DAYS``). One batch:
+        at most ``limit`` stale accounts past ``after`` are looked at, and the deletions are one
+        write. Pass the batch's ``resume`` as ``after`` for the next."""
+        stale = self._store.stale(before, after=after, limit=limit)
+        doomed = [
+            name
+            for _, name in stale
+            if name not in self._accounts and not has_progress(identity_key(name, name))
+        ]
+        gone = self._store.delete_many(doomed) if doomed else []
+        self._count -= len(gone)
+        return PruneBatch(gone, stale[-1][0] if len(stale) == limit else None)
 
     def _create(self, account: Account) -> bool:
         if not self._store.create(account):

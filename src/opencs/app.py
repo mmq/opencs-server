@@ -242,14 +242,27 @@ def _on_sighup(cities: CityManager, config_file: ConfigFile | None) -> Callable[
     return remove
 
 
-def prune_accounts(
-    services: Services, now: float, days: int = policy.UNPLAYED_ACCOUNT_DAYS
+async def prune_accounts(
+    services: Services,
+    now: float,
+    days: int = policy.UNPLAYED_ACCOUNT_DAYS,
+    *,
+    pause: Callable[[float], Awaitable[None]] = asyncio.sleep,
 ) -> list[str]:
-    """Delete the accounts left unplayed for ``days`` (wall-clock ``now``)."""
+    """Delete the accounts left unplayed for ``days`` (wall-clock ``now``), a batch at a time with
+    a ``pause`` between batches, so the games go on meanwhile."""
     before = now - days * 24 * 3600
-    gone = services.identity.prune_unplayed(
-        before, lambda key: services.persistence.record(key) is not None
-    )
+    gone: list[str] = []
+    after = None
+    while True:
+        batch = services.identity.prune_unplayed(
+            before, lambda key: services.persistence.record(key) is not None, after=after
+        )
+        gone += batch.gone
+        if batch.resume is None:
+            break
+        after = batch.resume
+        await pause(policy.ACCOUNT_PRUNE_PAUSE)
     if gone:
         log.info("removed %d accounts never played in %d days", len(gone), days)
     return gone
@@ -259,7 +272,7 @@ async def _prune_accounts_daily(services: Services, days: int) -> None:
     """``prune_accounts`` now and every ``ACCOUNT_PRUNE_INTERVAL``; a failure waits for the next."""
     while True:
         try:
-            prune_accounts(services, time.time(), days)
+            await prune_accounts(services, time.time(), days)
         except Exception:
             log.exception("could not prune unplayed accounts")
         await asyncio.sleep(policy.ACCOUNT_PRUNE_INTERVAL)

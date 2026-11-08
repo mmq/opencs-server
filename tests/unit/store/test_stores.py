@@ -248,12 +248,44 @@ def test_accounts_are_counted_touched_found_stale_and_deleted(tmp_path: Path) ->
         assert accounts.create(Account("NEW", b"s", b"h", Kdf.pbkdf2(1)))
         accounts.touch_login("BACK")
         assert accounts.count() == 3
-        assert accounts.stale(1500.0) == ["OLD"]
+        assert accounts.stale(1500.0) == [((1000.0, "OLD"), "OLD")]
         assert accounts.delete("OLD")
         assert not accounts.delete("OLD")
         assert accounts.get("OLD") is None
         assert accounts.count() == 2
         now[0] = 1000.0
+
+
+def test_stale_accounts_can_be_swept_a_batch_at_a_time_and_deleted_at_once(
+    tmp_path: Path,
+) -> None:
+    now = [0.0]
+    for accounts in (
+        MemoryAccountStore(lambda: now[0]),
+        SqliteStore(tmp_path / "sweep.db", now=lambda: now[0]),
+    ):
+        for seen, name in ((1.0, "B"), (1.0, "A"), (2.0, "C"), (3.0, "D"), (9.0, "LATE")):
+            now[0] = seen
+            assert accounts.create(Account(name, b"s", b"h", Kdf.pbkdf2(1)))
+        swept, after = [], None
+        while batch := accounts.stale(5.0, after=after, limit=2):
+            swept.append([name for _, name in batch])
+            after = batch[-1][0]
+        assert swept == [["A", "B"], ["C", "D"]]  # oldest first, then by name; LATE is not stale
+        assert accounts.delete_many(["A", "C", "NOBODY"]) == ["A", "C"]
+        assert [name for _, name in accounts.stale(5.0)] == ["B", "D"]
+        assert accounts.count() == 3
+
+
+def test_a_callsign_is_found_among_names_cut_to_its_length(tmp_path: Path) -> None:
+    for accounts in (MemoryAccountStore(), SqliteStore(tmp_path / "callsigns.db")):
+        # made before the 12 limit
+        accounts.create(Account("ALPHABRAVOCHARLIE", b"s", b"h", Kdf.pbkdf2(1)))
+        accounts.create(Account("ACE", b"s", b"h", Kdf.pbkdf2(1)))
+        assert accounts.callsign_registered("ALPHABRAVOCH", 12)
+        assert accounts.callsign_registered("ACE", 12)
+        assert not accounts.callsign_registered("ALPHABRAVOC", 12)
+        assert accounts.callsign_registered("ALPHABRAVOC", 11)  # not the indexed length
 
 
 def test_a_password_can_be_replaced_only_on_an_existing_account(stores: Stores) -> None:

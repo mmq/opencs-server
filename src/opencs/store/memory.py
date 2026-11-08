@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import replace
 
-from opencs.store.base import Account, ProgressRecord, Stores
+from opencs.store.base import Account, ProgressRecord, StaleCursor, Stores
 
 
 class MemoryAccountStore:
@@ -37,8 +37,15 @@ class MemoryAccountStore:
         if name in self._accounts:
             self._seen[name] = self._now()
 
-    def stale(self, before: float) -> list[str]:
-        return sorted(name for name, seen in self._seen.items() if seen < before)
+    def stale(
+        self, before: float, *, after: StaleCursor | None = None, limit: int | None = None
+    ) -> list[tuple[StaleCursor, str]]:
+        found = sorted(
+            ((seen, name), name)
+            for name, seen in self._seen.items()
+            if seen < before and (after is None or (seen, name) > after)
+        )
+        return found if limit is None else found[:limit]
 
     def set_password(self, account: Account) -> bool:
         if account.name not in self._accounts:
@@ -49,6 +56,9 @@ class MemoryAccountStore:
     def delete(self, name: str) -> bool:
         self._seen.pop(name, None)
         return self._accounts.pop(name, None) is not None
+
+    def delete_many(self, names: Iterable[str]) -> list[str]:
+        return [name for name in names if self.delete(name)]
 
 
 class MemoryProgressStore:

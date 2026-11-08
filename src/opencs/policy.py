@@ -608,6 +608,12 @@ MAX_ACCOUNTS = 10_000
 UNPLAYED_ACCOUNT_DAYS = 30
 ACCOUNT_PRUNE_INTERVAL = 24 * 3600.0
 
+#: The prune runs on the event loop, so it goes a batch at a time: this many stale accounts looked
+#: at and their deletions written in one transaction, then a pause of this many seconds for the
+#: games before the next batch. A batch is about a millisecond of work. Ours (DESIGN §3.3).
+ACCOUNT_PRUNE_BATCH = 200
+ACCOUNT_PRUNE_PAUSE = 0.5
+
 #: Whether a first login with an unknown name registers it (II §3, "open") or is refused
 #: ("closed": accounts are made by the operator, ``create-account``). Ours.
 REGISTRATION_MODES = ("open", "closed")

@@ -8,6 +8,7 @@ and writes, DESIGN §3.3).
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -39,6 +40,11 @@ class Kdf:
     @classmethod
     def argon2id(cls, memory_kib: int, time_cost: int, parallelism: int, hash_bytes: int) -> Kdf:
         return cls(ARGON2ID, time_cost, memory_kib, parallelism, hash_bytes)
+
+
+#: Where a sweep of stale accounts has got to: the last one's ``(seen, name)``, where ``seen`` is
+#: when it was created or last logged in to (``AccountStore.stale``).
+type StaleCursor = tuple[float, str]
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,8 +85,12 @@ class AccountStore(Protocol):
         """Note that ``name`` has just logged in (it is not stale)."""
         ...
 
-    def stale(self, before: float) -> list[str]:
-        """The accounts neither created nor logged in to since ``before`` (wall-clock seconds)."""
+    def stale(
+        self, before: float, *, after: StaleCursor | None = None, limit: int | None = None
+    ) -> list[tuple[StaleCursor, str]]:
+        """The accounts neither created nor logged in to since ``before`` (wall-clock seconds),
+        each with its cursor, oldest first and then by name: at most ``limit``, and only those
+        past ``after``, so a sweep can go a batch at a time."""
         ...
 
     def set_password(self, account: Account) -> bool:
@@ -89,6 +99,10 @@ class AccountStore(Protocol):
 
     def delete(self, name: str) -> bool:
         """Remove the account; False if there was none. Its progress is the caller's to delete."""
+        ...
+
+    def delete_many(self, names: Iterable[str]) -> list[str]:
+        """Remove these accounts at once (one transaction); the names of those there were."""
         ...
 
 

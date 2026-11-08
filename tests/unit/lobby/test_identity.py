@@ -397,6 +397,27 @@ def test_past_the_cap_no_account_is_registered_but_existing_ones_log_in() -> Non
     assert isinstance(identity.login("FIRST,sesame"), Pilot)
 
 
+def test_the_prune_sweeps_past_accounts_it_keeps_a_batch_at_a_time() -> None:
+    now = [0.0]
+    store = MemoryAccountStore(lambda: now[0])
+    identity = Identity(store, kdf=FAST)
+    names = ["KEPT1", "KEPT2", "KEPT3", "IDLE1", "IDLE2"]  # created in this order: oldest first
+    for i, name in enumerate(names):
+        now[0] = float(i)
+        identity.release(pilot(identity.login(f"{name},sesame")))
+    gone, after, batches = [], None, 0
+    while True:
+        batch = identity.prune_unplayed(100.0, lambda key: "KEPT" in key, after=after, limit=2)
+        gone += batch.gone
+        batches += 1
+        if batch.resume is None:
+            break
+        after = batch.resume
+    assert gone == ["IDLE1", "IDLE2"]  # the kept accounts filling a batch did not stop the sweep
+    assert batches == 3
+    assert identity.account_count() == 3
+
+
 def test_the_account_count_starts_from_the_store_and_follows_every_change() -> None:
     store = MemoryAccountStore()
     salt = b"s" * 16
@@ -409,7 +430,8 @@ def test_the_account_count_starts_from_the_store_and_follows_every_change() -> N
     assert isinstance(identity.register("THIRD"), Refused)  # full
     assert identity.delete_account("SECOND")
     assert not identity.delete_account("SECOND")  # already gone: not counted twice
-    assert identity.prune_unplayed(float("inf"), lambda key: key == "acct:FIRST") == ["EARLIER"]
+    pruned = identity.prune_unplayed(float("inf"), lambda key: key == "acct:FIRST")
+    assert pruned.gone == ["EARLIER"]
     assert identity.account_count() == store.count() == 1
     assert not isinstance(identity.register("THIRD"), Refused)  # room again
 
@@ -478,8 +500,9 @@ def test_unplayed_accounts_are_pruned_but_not_played_or_online_ones() -> None:
     online = pilot(identity.login("ONLINE,sesame"))  # logs in again at 0: still old enough
     now[0] = 1000.0
     identity.release(pilot(identity.login("RECENT,sesame")))  # touched at 1000
-    gone = identity.prune_unplayed(500.0, lambda key: key == "acct:PLAYER")
-    assert gone == ["IDLER"]
+    batch = identity.prune_unplayed(500.0, lambda key: key == "acct:PLAYER")
+    assert batch.gone == ["IDLER"]
+    assert batch.resume is None  # fewer than a batch: the sweep is done
     assert store.get("IDLER") is None
     assert {n for n in ("PLAYER", "ONLINE", "RECENT") if store.get(n)} == {
         "PLAYER",
