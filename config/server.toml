@@ -72,3 +72,9 @@ enabled = false
 # port = 2400
 # token = "a long secret"
 # token_env = "OPENCS_ADMIN_TOKEN"
+
+# The service channel for the web front end (docs/OPERATING.md, ADR 12): JSON lines over a Unix
+# socket, off unless `socket` is set (relative to this file, or absolute). The socket is made mode
+# 0660, so the web process must run in the server's group.
+# [service]
+# socket = "/run/opencs/service.sock"

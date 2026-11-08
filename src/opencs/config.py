@@ -80,6 +80,14 @@ class AdminConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class ServiceConfig:
+    """``[service]``: the Unix socket the web process talks to the server over (ADR 12). Off
+    unless ``socket`` is given."""
+
+    socket: Path | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class ServerConfig:
     """Process-wide settings (``server.toml``)."""
 
@@ -96,6 +104,7 @@ class ServerConfig:
     #: ``policy.REGISTRATION_MODES``: whether a first login registers its name.
     registration: str = policy.DEFAULT_REGISTRATION
     limits: LimitsConfig = LimitsConfig()
+    service: ServiceConfig = ServiceConfig()
 
 
 @dataclass(frozen=True, slots=True)
@@ -411,6 +420,13 @@ def _parse_admin(table: _Table, game_port: int) -> AdminConfig:
     return config
 
 
+def _parse_service(path: Path, table: _Table) -> ServiceConfig:
+    section = table.table("service")
+    socket = section.string("socket", "")
+    section.done()
+    return ServiceConfig(path.parent / socket if socket else None)
+
+
 def _parse_limits(table: _Table) -> LimitsConfig:
     section = table.table("limits")
     d = LimitsConfig()
@@ -482,6 +498,7 @@ def _parse_server(path: Path, data: Mapping[str, Any]) -> ServerConfig:
         ),
         registration=table.string("registration", policy.DEFAULT_REGISTRATION),
         limits=_parse_limits(table),
+        service=_parse_service(path, table),
     )
     if config.registration not in policy.REGISTRATION_MODES:
         raise table.fail("registration", f"must be one of {', '.join(policy.REGISTRATION_MODES)}")

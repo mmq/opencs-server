@@ -1,5 +1,6 @@
 """Layering guard (DESIGN §3): a layer imports only the layers above it in the table, and the root
-modules too: nothing below ``cities``, ``control``, ``admin`` and ``app`` imports them."""
+modules too: nothing below ``cities``, ``control``, ``admin``, ``service`` and ``app`` imports
+them."""
 
 from __future__ import annotations
 
@@ -40,8 +41,8 @@ ALLOWED: dict[str, set[str]] = {
     "ratelimit": {"policy"},
     "config": {"messages", "policy"},
     "logsetup": {"config"},
-    # The root modules above the sessions: the city tickers, the operator's commands and the admin
-    # channel, then the app that builds everything.
+    # The root modules above the sessions: the city tickers, the operator's commands, the admin
+    # channel and the web's service channel, then the app that builds everything.
     "cities": {"clock", "config", "policy", "routing", "session", "tasks", "world"},
     "control": {
         "cities",
@@ -56,6 +57,16 @@ ALLOWED: dict[str, set[str]] = {
         "world",
     },
     "admin": {"clock", "config", "control", "policy", "ratelimit"},
+    "service": {
+        "__version__",
+        "clock",
+        "connlog",
+        "control",
+        "lobby",
+        "policy",
+        "ratelimit",
+        "session",
+    },
     "app": {
         "__version__",
         "admin",
@@ -69,6 +80,7 @@ ALLOWED: dict[str, set[str]] = {
         "net",
         "policy",
         "routing",
+        "service",
         "session",
         "store",
         "tasks",

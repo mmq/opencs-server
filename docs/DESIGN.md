@@ -52,7 +52,7 @@ imports what its layer may not.
 | **Lobby** | `opencs.lobby` | who is connected and where; `/PLAY`, `/CITY`, `/WHO`…; team choice; identity and callsigns | in-game rules |
 | **Routing** | `opencs.routing` | turns an event's audience (spec I App. B) into the sessions that receive it | rules |
 | **Sessions** | `opencs.session` | the connection's phases as explicit state machines (spec I §7.8): `Login` → `Chamber` → `InGame` → `Chamber`. Turns decoded client messages into calls on the lobby or a city | game rules |
-| **Root modules** | `opencs.cities`, `opencs.control`, `opencs.admin` | the city tickers and reloading city files; the operator's commands as text in, text out; the loopback admin channel that carries them | sockets of players, game rules |
+| **Root modules** | `opencs.cities`, `opencs.control`, `opencs.admin`, `opencs.service` | the city tickers and reloading city files; the operator's commands as text in, text out; the loopback admin channel that carries them; the web front end's service channel | sockets of players, game rules |
 | **App** | `opencs.app` | reads config, builds every service, wires them, starts the listener, handles shutdown | — |
 
 ### 3.1 Package layout
@@ -67,6 +67,7 @@ src/opencs/
   cities.py              the city tickers and reloading city config
   control.py             the operator's commands as text in, text out
   admin.py               the loopback admin channel: token, bounds, carries Control
+  service.py             the web front end's channel: JSON lines on a Unix socket, carries Control
   tasks.py               long-lived background tasks: a failure is logged, not silent
   logsetup.py            [logging] applied to the opencs logger tree
   connlog.py             the per-connection log context: connection id and callsign on every record

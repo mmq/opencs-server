@@ -60,6 +60,7 @@ LOG_LAYERS = (
     "store",
     "app",
     "admin",
+    "service",
     "capture",
 )
 
@@ -116,6 +117,42 @@ ADMIN_MAX_SHUTDOWN_SECONDS = 3600
 
 #: What a kicked pilot is told; the operator's reason, if any, follows ``": "``. Ours.
 ADMIN_KICK_NOTICE = "REMOVED BY AN ADMINISTRATOR"
+
+# --- The service channel (ADR 12) ---------------------------------------------------------------
+
+#: The versions of the service channel's protocol this server speaks; a client names one in its
+#: hello. A change a client could misread gets a new number. Ours.
+SERVICE_PROTOCOL_VERSIONS = (1,)
+
+#: The mode of the service socket: the server's user and group may connect, nobody else. The web
+#: process is in the group (docs/OPERATING.md). Ours.
+SERVICE_SOCKET_MODE = 0o660
+
+#: Longest request line in bytes; a longer one closes the connection. Ours: an announcement or a
+#: kick reason with JSON escaping fits several times over.
+SERVICE_MAX_LINE = 4096
+
+#: Most service connections at once; more are closed at once. Ours: the web process and a tool.
+SERVICE_MAX_CONNECTIONS = 4
+
+#: Seconds a new service connection has to send its hello. Ours.
+SERVICE_HELLO_TIMEOUT = 10.0
+
+#: Requests per connection: a burst and a sustained rate per second (``TokenBucket``). Over it a
+#: request is refused, not run. The web process asks for a snapshot about once a second. Ours.
+SERVICE_REQUEST_LIMIT = (50, 20.0)
+
+#: Requests that hash a password (``register``, ``reset-password``), over every service
+#: connection: a burst and a sustained rate per second. Well under what the ``HASH_WORKERS`` can
+#: do and under ``LOGIN_ATTEMPTS_GLOBAL``, so the web's signups cannot crowd out game logins. The
+#: web process limits each address and email address before this. Ours.
+SERVICE_HASH_LIMIT = (5, 0.2)
+
+#: A service request whose work on the event loop (not its wait for a hash) takes longer than this
+#: is logged, at most once per ``SLOW_SERVICE_LOG_SECONDS`` with a count of the rest. Ours, the
+#: same bound as a city call (``SLOW_CITY_CALL_SECONDS``).
+SLOW_SERVICE_REQUEST_SECONDS = 0.02
+SLOW_SERVICE_LOG_SECONDS = 60.0
 
 #: What every player is told when the server is going down; ``shutdown <n>`` adds
 #: ``" IN n SECONDS"``. Ours.

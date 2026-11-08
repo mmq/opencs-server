@@ -22,7 +22,7 @@ from opencs.lobby import replies
 from opencs.lobby.identity import NewPassword, Refused, identity_key
 from opencs.messages import server
 from opencs.routing import Router
-from opencs.session.phases import Services
+from opencs.session.phases import Hasher, Services
 from opencs.tasks import watch
 from opencs.world import chat
 from opencs.world.city import City
@@ -83,6 +83,19 @@ def announce(services: Services, text: str, router: Router | None = None) -> int
         member.deliver(line)
         received += 1
     return received
+
+
+async def hash_off_loop(hasher: Hasher, new: NewPassword) -> bytes:
+    """``new.hash()`` run on ``hasher``, waited for without holding up the loop. Raises
+    ``TimeoutError`` after ``policy.HASH_TIMEOUT``: the threads are swamped, or the hash failed."""
+    future: asyncio.Future[bytes] = asyncio.get_running_loop().create_future()
+
+    def done(digest: bytes) -> None:
+        if not future.done():
+            future.set_result(digest)
+
+    hasher.submit(new.hash, done)
+    return await asyncio.wait_for(future, policy.HASH_TIMEOUT)
 
 
 def remove_everyone(services: Services, notice: str) -> int:
@@ -146,21 +159,11 @@ class Control:
         if isinstance(begun, list):
             return begun
         try:
-            digest = await self._hash(begun)
+            digest = await hash_off_loop(self._services.hasher, begun)
         except TimeoutError:
             log.warning("a password hash for %s did not finish in time", begun.name)
             return ["error: the password hash did not finish in time; try again"]
         return self._finish_password(begun, digest)
-
-    async def _hash(self, new: NewPassword) -> bytes:
-        future: asyncio.Future[bytes] = asyncio.get_running_loop().create_future()
-
-        def done(digest: bytes) -> None:
-            if not future.done():
-                future.set_result(digest)
-
-        self._services.hasher.submit(new.hash, done)
-        return await asyncio.wait_for(future, policy.HASH_TIMEOUT)
 
     def execute(self, line: str) -> list[str]:
         """Run one command line; the lines to show. Never raises on operator input."""
@@ -187,12 +190,16 @@ class Control:
 
     # --- commands ----------------------------------------------------------------------------
 
+    def uptime(self) -> float:
+        """Seconds since the server started."""
+        return self._services.clock.now() - self._started
+
     def status(self) -> list[str]:
         services = self._services
         sessions = services.sessions.all()
         streams = [s.log.context.stream for s in sessions]
         lines = [
-            f"uptime: {services.clock.now() - self._started:.0f} s",
+            f"uptime: {self.uptime():.0f} s",
             f"connections: {len(sessions)} (in game {streams.count(STREAM_GAME)}, "
             f"Chamber {streams.count(STREAM_CHAMBER)}, "
             f"logon {len(sessions) - streams.count(STREAM_GAME) - streams.count(STREAM_CHAMBER)})",

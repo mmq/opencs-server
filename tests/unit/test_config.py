@@ -469,6 +469,22 @@ def test_bad_admin_values_name_the_key(tmp_path: Path, body: str, key: str) -> N
         load_config(write_config(tmp_path, {"A": CITY}, server=text))
 
 
+def test_the_service_channel_is_off_by_default_and_its_socket_is_relative_to_the_file(
+    tmp_path: Path,
+) -> None:
+    assert load_config(write_config(tmp_path, {"A": CITY})).server.service.socket is None
+    for given, expected in (
+        ("run/service.sock", tmp_path / "run" / "service.sock"),
+        ("/run/opencs/service.sock", Path("/run/opencs/service.sock")),
+    ):
+        text = f'default_city = "A"\n[service]\nsocket = "{given}"\n'
+        service = load_config(write_config(tmp_path, {"A": CITY}, server=text)).server.service
+        assert service.socket == expected
+    text = 'default_city = "A"\n[service]\nbogus = 1\n'
+    with pytest.raises(ConfigError, match=r"service\.bogus:"):
+        load_config(write_config(tmp_path, {"A": CITY}, server=text))
+
+
 def test_registration_is_open_by_default_and_may_be_closed(tmp_path: Path) -> None:
     assert load_config(write_config(tmp_path, {"A": CITY})).server.registration == "open"
     path = write_config(

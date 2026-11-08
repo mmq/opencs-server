@@ -31,6 +31,7 @@ from opencs.net.capture import CaptureFactory
 from opencs.net.connection import ConnectionIO, SessionFactory
 from opencs.net.listener import ConnectionLimits, Listener
 from opencs.routing import Router
+from opencs.service import ServiceServer
 from opencs.session.held import HeldGames
 from opencs.session.loginlimits import LoginLimits
 from opencs.session.persistence import Persistence
@@ -278,6 +279,23 @@ async def _prune_accounts_daily(services: Services, days: int) -> None:
         await asyncio.sleep(policy.ACCOUNT_PRUNE_INTERVAL)
 
 
+def _admin_token(config: AppConfig, config_file: ConfigFile | None, seams: Seams) -> str | None:
+    """The admin channel's token, None if the channel is off; warns if others can read it in
+    ``server.toml``."""
+    token = (
+        None
+        if config.server.admin.port is None
+        else resolve_token(
+            config.server.admin, os.environ if seams.environ is None else seams.environ
+        )
+    )
+    if config_file is not None and (
+        warning := token_file_warning(config.server.admin, config_file.path)
+    ):
+        log.warning("%s", warning)
+    return token
+
+
 async def _listen(
     config: AppConfig,
     services: Services,
@@ -288,17 +306,8 @@ async def _listen(
     seams: Seams,
 ) -> None:
     """Listen until ``stop`` is set, ticking the cities, then shut down gracefully."""
-    token = (
-        None
-        if config.server.admin.port is None
-        else resolve_token(
-            config.server.admin, os.environ if seams.environ is None else seams.environ
-        )
-    )  # before anything starts: a channel without a token must stop the server, not run open
-    if config_file is not None and (
-        warning := token_file_warning(config.server.admin, config_file.path)
-    ):
-        log.warning("%s", warning)
+    # Before anything starts: a channel without a token must stop the server, not run open.
+    token = _admin_token(config, config_file, seams)
     limits = config.server.limits
     listener = Listener(
         build_session_factory(services),
@@ -325,6 +334,7 @@ async def _listen(
     cities.start()
     control = Control(services, cities, stop, config_file, delay=seams.delay)
     admin: AdminServer | None = None
+    service: ServiceServer | None = None
     reload_signal = _on_sighup(cities, config_file)
     pruning = watch(
         asyncio.create_task(
@@ -344,6 +354,15 @@ async def _listen(
                 ) from exc
             if seams.admin_ready is not None:
                 seams.admin_ready(admin_port)
+        if (service_path := config.server.service.socket) is not None:
+            service = ServiceServer(services, control, clock)
+            try:
+                await service.start(service_path)
+            except OSError as exc:
+                raise StartupError(
+                    f"cannot listen for the service channel on {service_path}: "
+                    f"{exc.strerror or exc}"
+                ) from exc
         bound = [sock.getsockname()[:2] for sock in server.sockets]
         for address, bound_port in bound:
             log.info("listening on %s:%d", address, bound_port)
@@ -357,6 +376,8 @@ async def _listen(
         control.close()
         if admin is not None:
             await admin.stop()
+        if service is not None:
+            await service.stop()
         await _shutdown(services, listener, cities, seams.shutdown_deadline)
         if isinstance(services.hasher, ThreadHasher):
             services.hasher.close()
