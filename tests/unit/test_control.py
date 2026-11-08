@@ -10,11 +10,20 @@ import random
 import pytest
 
 from fixtures.pods import report
-from fixtures.sessions import Harness, World, connect, enter_lobby, make_world, play
+from fixtures.sessions import (
+    DeferredHasher,
+    Harness,
+    World,
+    connect,
+    enter_lobby,
+    make_world,
+    play,
+)
 from opencs import policy
 from opencs.cities import CityManager
 from opencs.control import SHUTDOWN_NOTICE, Control
 from opencs.lobby import replies
+from opencs.lobby.identity import Refused
 from opencs.messages import ClientMessage, WirePos, client, client_payload, server
 from opencs.store.base import ProgressRecord
 from opencs.wire.frame import build_frame
@@ -401,6 +410,69 @@ def test_a_reset_password_opens_an_account_the_guessers_locked() -> None:
     assert b"TOO MANY WRONG PASSWORDS" in locked.take()
     password = ctl.execute("reset-password alice")[0].rsplit(" ", 1)[1]
     assert enter_lobby(world, f"ALICE,{password}", address="10.6.0.1").session.pilot is not None
+
+
+def test_from_a_channel_the_password_commands_hash_off_the_loop() -> None:
+    hasher = DeferredHasher()
+    world = make_world(hasher=hasher)
+    ctl, _ = control(world)
+
+    async def scenario() -> None:
+        creating = asyncio.create_task(ctl.run("create-account newpilot"))
+        while not hasher.waiting:
+            await asyncio.sleep(0)
+        assert await ctl.run("accounts") == [  # the loop serves others while the hash waits
+            f"accounts: 0 of at most {policy.MAX_ACCOUNTS}; registration open"
+        ]
+        hasher.run()
+        created = await creating
+        assert created[0].startswith("created NEWPILOT; password (shown once): ")
+        resetting = asyncio.create_task(ctl.run("reset-password NEWPILOT"))
+        while not hasher.waiting:
+            await asyncio.sleep(0)
+        hasher.run()
+        password = (await resetting)[0].rsplit(" ", 1)[1]
+        h = enter_lobby(world, f"NEWPILOT,{password}")
+        hasher.run()  # the login's own check
+        assert h.session.pilot is not None
+        assert await ctl.run("reset-password NOBODY") == ["refused: NO SUCH ACCOUNT"]
+        assert await ctl.run("create-account") == ["usage: create-account <name>"]
+        assert not hasher.waiting  # nothing was hashed for a refusal
+
+    asyncio.run(scenario())
+
+
+def test_a_password_command_whose_hash_never_comes_back_gives_up(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(policy, "HASH_TIMEOUT", 0.01)
+    world = make_world(hasher=DeferredHasher())  # never runs the hash
+    ctl, _ = control(world)
+    reply = asyncio.run(ctl.run("create-account newpilot"))
+    assert reply == ["error: the password hash did not finish in time; try again"]
+    assert not world.identity.account_exists("NEWPILOT")
+
+
+def test_a_name_taken_or_an_account_deleted_while_its_hash_ran_is_refused() -> None:
+    hasher = DeferredHasher()
+    world = make_world(hasher=hasher)
+    ctl, _ = control(world)
+    alice = enter_lobby(world, "ALICE,tangerine2")
+    hasher.run()  # registers ALICE
+    alice.session.closed()
+
+    async def scenario() -> None:
+        creating = asyncio.create_task(ctl.run("create-account BOB"))
+        resetting = asyncio.create_task(ctl.run("reset-password ALICE"))
+        while len(hasher.waiting) < 2:
+            await asyncio.sleep(0)
+        assert not isinstance(world.identity.register("BOB"), Refused)
+        assert ctl.execute("delete-account ALICE") == ["deleted ALICE"]
+        hasher.run()
+        assert await creating == ["refused: THAT NAME IS TAKEN"]
+        assert await resetting == ["refused: NO SUCH ACCOUNT"]
+
+    asyncio.run(scenario())
 
 
 def test_progress_and_accounts_are_wiped_only_while_the_player_is_offline() -> None:

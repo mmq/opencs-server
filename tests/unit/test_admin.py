@@ -6,7 +6,8 @@ import asyncio
 import logging
 import os
 import random
-from collections.abc import AsyncIterator
+import threading
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from dataclasses import replace
 from pathlib import Path
@@ -25,7 +26,7 @@ from opencs.admin import (
     resolve_token,
     token_file_warning,
 )
-from opencs.app import Seams, serve
+from opencs.app import Seams, ThreadHasher, serve
 from opencs.cities import CityManager
 from opencs.clock import ManualClock
 from opencs.config import AdminConfig, ConfigError, ConfigFile
@@ -120,6 +121,35 @@ def test_the_right_token_opens_a_command_session() -> None:
             assert await c.reply() == ["goodbye"] and await c.closed()
 
     run(scenario())
+
+
+def test_an_account_made_over_the_channel_is_hashed_on_a_thread() -> None:
+    hasher = ThreadHasher()
+    threads: list[threading.Thread] = []
+
+    class Watched:
+        def submit(self, work: Callable[[], bytes], done: Callable[[bytes], None]) -> None:
+            def watched() -> bytes:
+                threads.append(threading.current_thread())
+                return work()
+
+            hasher.submit(watched, done)
+
+    async def scenario() -> None:
+        world = make_world(hasher=Watched())
+        admin = AdminServer(control(world, asyncio.Event()), TOKEN, ManualClock())
+        port = await admin.start(0)
+        try:
+            c = await login(port)
+            reply = await c.command("create-account newpilot")
+            assert reply[0].startswith("created NEWPILOT; password (shown once): ")
+            assert world.identity.account_exists("NEWPILOT")
+        finally:
+            await admin.stop()
+            hasher.close()
+
+    run(scenario())
+    assert threads and threads[0] is not threading.main_thread()
 
 
 def test_a_wrong_token_is_denied_and_closed() -> None:

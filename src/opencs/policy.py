@@ -278,6 +278,11 @@ KNOWN_SOURCES_PER_ACCOUNT = 4
 #: waits for one of them; ``LOGIN_ATTEMPTS_GLOBAL`` bounds the queue. Ours (DESIGN §3.3).
 HASH_WORKERS = 2
 
+#: Seconds an operator's command (``create-account``, ``reset-password``) waits for its password
+#: hash on a ``HASH_WORKERS`` thread before giving up: the threads are swamped, or the hash failed
+#: (which is logged). Ours.
+HASH_TIMEOUT = 10.0
+
 #: Most source addresses a limiter tracks; past it the oldest are forgotten. Ours (DESIGN §5).
 MAX_TRACKED_SOURCES = 4096
 

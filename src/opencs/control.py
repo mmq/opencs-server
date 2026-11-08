@@ -4,7 +4,8 @@ channel, the signal handlers and shutdown.
 Everything here runs on the event loop and is synchronous, like the world: it reads and changes
 the same objects the sessions do, so no lock is needed. ``Control.execute`` takes one command line
 and returns the lines to show; the admin channel (the I/O) only authenticates, bounds and carries
-them.
+them. The channels call ``Control.run``, which is ``execute`` except that a command that hashes a
+password waits for the hash on another thread instead of running it on the loop.
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ from opencs.cities import CityManager
 from opencs.config import ConfigFile
 from opencs.connlog import STREAM_CHAMBER, STREAM_GAME
 from opencs.lobby import replies
-from opencs.lobby.identity import Refused, identity_key
+from opencs.lobby.identity import NewPassword, Refused, identity_key
 from opencs.messages import server
 from opencs.routing import Router
 from opencs.session.phases import Services
@@ -135,6 +136,32 @@ class Control:
 
     # --- one line ----------------------------------------------------------------------------
 
+    async def run(self, line: str) -> list[str]:
+        """``execute``, but ``create-account`` and ``reset-password`` hash on the services' hasher,
+        off the event loop: what the channels call. Never raises on operator input."""
+        word, _, rest = line.strip().partition(" ")
+        begun = self._begin_password(word.lower(), rest.strip())
+        if begun is None:
+            return self.execute(line)
+        if isinstance(begun, list):
+            return begun
+        try:
+            digest = await self._hash(begun)
+        except TimeoutError:
+            log.warning("a password hash for %s did not finish in time", begun.name)
+            return ["error: the password hash did not finish in time; try again"]
+        return self._finish_password(begun, digest)
+
+    async def _hash(self, new: NewPassword) -> bytes:
+        future: asyncio.Future[bytes] = asyncio.get_running_loop().create_future()
+
+        def done(digest: bytes) -> None:
+            if not future.done():
+                future.set_result(digest)
+
+        self._services.hasher.submit(new.hash, done)
+        return await asyncio.wait_for(future, policy.HASH_TIMEOUT)
+
     def execute(self, line: str) -> list[str]:
         """Run one command line; the lines to show. Never raises on operator input."""
         word, _, rest = line.strip().partition(" ")
@@ -232,24 +259,43 @@ class Control:
         ]
 
     def create_account(self, name: str) -> list[str]:
+        return self._password_here("create-account", name)
+
+    def reset_password(self, name: str) -> list[str]:
+        return self._password_here("reset-password", name)
+
+    def _password_here(self, word: str, name: str) -> list[str]:
+        """A password command with its hash run here and now (``execute``; ``run`` does not)."""
+        begun = self._begin_password(word, name)
+        assert begun is not None
+        return begun if isinstance(begun, list) else self._finish_password(begun, begun.hash())
+
+    def _begin_password(self, word: str, name: str) -> NewPassword | list[str] | None:
+        """The hash a password command needs, or the lines that answer it now; None if ``word``
+        is not such a command."""
+        if word not in ("create-account", "reset-password"):
+            return None
         if not name or " " in name:
-            return ["usage: create-account <name>"]
-        result = self._services.identity.register(name)
+            return [f"usage: {word} <name>"]
+        identity = self._services.identity
+        begun = (
+            identity.begin_register(name)
+            if word == "create-account"
+            else identity.begin_reset_password(name)
+        )
+        return [f"refused: {begun.reason}"] if isinstance(begun, Refused) else begun
+
+    def _finish_password(self, new: NewPassword, digest: bytes) -> list[str]:
+        result = self._services.identity.complete_password(new, digest)
         if isinstance(result, Refused):
             return [f"refused: {result.reason}"]
         account, password = result
-        log.info("account %s created by the operator", account.name)
-        return [f"created {account.name}; password (shown once): {password}"]
-
-    def reset_password(self, name: str) -> list[str]:
-        if not name or " " in name:
-            return ["usage: reset-password <name>"]
-        result = self._services.identity.reset_password(name)
-        if isinstance(result, Refused):
-            return [f"refused: {result.reason}"]
-        self._services.login_limits.forget_account(name.upper())
-        log.info("password of %s reset by the operator", name.upper())
-        return [f"new password for {name.upper()} (shown once): {result}"]
+        if new.new_account:
+            log.info("account %s created by the operator", account.name)
+            return [f"created {account.name}; password (shown once): {password}"]
+        self._services.login_limits.forget_account(account.name)
+        log.info("password of %s reset by the operator", account.name)
+        return [f"new password for {account.name} (shown once): {password}"]
 
     def reset_progress(self, name: str) -> list[str]:
         if not name or " " in name:

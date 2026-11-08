@@ -143,6 +143,23 @@ def hash_password(password: str, salt: bytes, kdf: Kdf) -> bytes:
     raise ValueError(f"unknown password hash algorithm {kdf.algorithm!r}")
 
 
+@dataclass(frozen=True, slots=True)
+class NewPassword:
+    """An account being made, or given a new password, outside a login (the operator's commands,
+    the web registration), waiting for its hash as ``PasswordCheck`` does: ``hash`` may run on
+    another thread, and its result goes to ``Identity.complete_password`` on the event loop.
+    ``password`` is the one to show once; it is never logged."""
+
+    name: str
+    password: str = field(repr=False)
+    salt: bytes = field(repr=False)
+    kdf: Kdf
+    new_account: bool
+
+    def hash(self) -> bytes:
+        return hash_password(self.password, self.salt, self.kdf)
+
+
 def _untypeable(password: str) -> str | None:
     """Why a password set outside a login could not be typed into the client, whose entry turns
     letters into capitals (``policy.GENERATED_PASSWORD_ALPHABET``)."""
@@ -353,9 +370,25 @@ class Identity:
         return None
 
     def register(self, name: str, password: str | None = None) -> tuple[Account, str] | Refused:
-        """Make an account outside a login (the operator's ``create-account``; a future
-        registration command or page), hashing here and now. Without ``password`` one is made up.
-        Returns the account and its password, to be shown once and never logged."""
+        """``begin_register`` and ``complete_password`` with the hash made here and now, for
+        callers that may block. Returns the account and its password."""
+        begun = self.begin_register(name, password)
+        if isinstance(begun, Refused):
+            return begun
+        return self.complete_password(begun, begun.hash())
+
+    def reset_password(self, name: str) -> str | Refused:
+        """``begin_reset_password`` and ``complete_password`` here and now, for callers that may
+        block. Returns the new password."""
+        begun = self.begin_reset_password(name)
+        if isinstance(begun, Refused):
+            return begun
+        done = self.complete_password(begun, begun.hash())
+        return done if isinstance(done, Refused) else done[1]
+
+    def begin_register(self, name: str, password: str | None = None) -> NewPassword | Refused:
+        """Start making an account outside a login. Without ``password`` one is made up. The
+        answer is the hash to run and hand to ``complete_password``, or why there is no account."""
         name = name.strip().upper()
         if password is not None and (reason := _untypeable(password)) is not None:
             return Refused(reason)
@@ -365,24 +398,31 @@ class Identity:
             return refusal
         if password is None:
             password = make_password()
-        account = self._new_hash(name, password)
-        if not self._create(account):
-            return Refused("THAT NAME IS TAKEN")
-        return account, password
-
-    def reset_password(self, name: str) -> str | Refused:
-        """Give account ``name`` a new, made-up password and return it (shown once, never
-        logged). A player logged in stays logged in."""
-        name = name.strip().upper()
-        password = make_password()
-        if not self._store.set_password(self._new_hash(name, password)):
-            return Refused("NO SUCH ACCOUNT")
-        return password
-
-    def _new_hash(self, name: str, password: str) -> Account:
-        """Account ``name`` with ``password`` hashed here and now, the current way."""
         salt = os.urandom(policy.PASSWORD_SALT_BYTES)
-        return Account(name, salt, hash_password(password, salt, self._kdf), self._kdf)
+        return NewPassword(name, password, salt, self._kdf, new_account=True)
+
+    def begin_reset_password(self, name: str) -> NewPassword | Refused:
+        """Start giving account ``name`` a new, made-up password. A player logged in stays
+        logged in."""
+        name = name.strip().upper()
+        if self._store.get(name) is None:
+            return Refused("NO SUCH ACCOUNT")
+        salt = os.urandom(policy.PASSWORD_SALT_BYTES)
+        return NewPassword(name, make_password(), salt, self._kdf, new_account=False)
+
+    def complete_password(self, new: NewPassword, digest: bytes) -> tuple[Account, str] | Refused:
+        """Store ``new`` with its hash, ``new.hash()``: the account and its password, to be shown
+        once. The world may have moved on while the hash ran: the name may have been taken, the
+        server filled, or the account deleted."""
+        account = Account(new.name, new.salt, digest, new.kdf)
+        if new.new_account:
+            if self._count >= self._max_accounts:
+                return Refused("THIS SERVER HAS NO ROOM FOR NEW ACCOUNTS")
+            if not self._create(account):
+                return Refused("THAT NAME IS TAKEN")
+        elif not self._store.set_password(account):
+            return Refused("NO SUCH ACCOUNT")
+        return account, new.password
 
     def account_online(self, name: str) -> bool:
         """True if account ``name`` (upper case) is logged in."""

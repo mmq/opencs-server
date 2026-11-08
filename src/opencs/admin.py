@@ -171,7 +171,7 @@ class AdminServer:
             word = word if word in COMMAND_NAMES else "(unknown command)"  # may be a token
             log.info("admin command from %s: %s", host, word)
             try:
-                reply = self._control.execute(line)
+                reply = await self._control.run(line)
             except Exception:
                 log.exception("admin command %s failed", word)
                 reply = ["error: the command failed (see the log)"]
