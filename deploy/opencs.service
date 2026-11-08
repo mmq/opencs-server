@@ -18,6 +18,9 @@ TimeoutStopSec=30
 Restart=on-failure
 ProtectSystem=strict
 ReadWritePaths=/var/lib/opencs /var/log/opencs /var/lib/opencs-captures
+# /run/opencs, for the service socket; the server's group may enter it.
+RuntimeDirectory=opencs
+RuntimeDirectoryMode=0750
 NoNewPrivileges=true
 # Sandboxing: the server needs its port, its data and log directories and nothing else.
 # `systemd-analyze security opencs` scores what is left.

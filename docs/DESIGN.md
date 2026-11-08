@@ -19,8 +19,9 @@ the CyberStrike Server Specification v1.0 (the `cyberstrike-spec` repository). T
 5. **A history that tells the story.** Built milestone by milestone, each commit a small change that
    passes the tests, ruff and mypy.
 
-**Non-goals for 1.0:** a plugin system; a web front end; more than one server process; any change to the
-client; distributing the game files (they are copyrighted and never enter the repo).
+**Non-goals for 1.0:** a plugin system; more than one game server process; any change to the client;
+distributing the game files (they are copyrighted and never enter the repo). A web front end is not part
+of the server: it runs as its own process and reaches the server over the service channel (ADR 12).
 
 ## 2. Constraints and choices
 
@@ -233,7 +234,7 @@ in `world/view.py` as one `ClientView` per player, owned by the city. Sessions d
 - **Never send what crashes the client** (spec II §8): message constructors validate their fields
   (`'c'` KIND, `'R'` ranges, `'T'` classes, chat bytes) and raise in our code rather than on a player's
   screen.
-- **Passwords:** salted Argon2id from `argon2-cffi` (ADR 13; an account made before it keeps its PBKDF2 hash until its next login rehashes it), never stored or logged in clear, hashed on a small thread pool (`app.ThreadHasher`) so a login never stalls the loop; the session hands the work over through `Services.hasher` and stays sans-IO.
+- **Passwords:** salted Argon2id from `argon2-cffi` (ADR 13; an account made before it keeps its PBKDF2 hash until its next login rehashes it), never stored or logged in clear, hashed on a small thread pool (`app.ThreadHasher`) so a login never stalls the loop; the session hands the work over through `Services.hasher` and stays sans-IO. A password the operator or the web makes is hashed there too (`Control.run`, the service channel).
 - **Bugs vs bad input:** an exception inside a `City` is a bug — logged with the triggering request, the
   request dropped, the city kept running. What the call changed before it raised stays changed, so the city
   is counted as failed (`session.cityhealth`, shown by `status`) and rebuilt from its configuration the next
@@ -249,6 +250,8 @@ in `world/view.py` as one `ClientView` per player, owned by the city. Sessions d
 - **Optional wire capture** per connection, in the replay format the tests read, so a bug a player hits
   becomes a test fixture.
 - An admin channel: status, announce, kick, graceful shutdown that saves every player's progress.
+- A service channel (ADR 12) for the web front end: a snapshot of who plays where, registration, and the
+  operator's commands, over a Unix socket only the server's group can reach.
 - Graceful shutdown on SIGINT/SIGTERM: stop accepting, save progress, close connections.
 
 ## 7. Testing
@@ -290,6 +293,7 @@ One file each; [the index](decisions/README.md) has the same list.
 9. [Rate limits belong to the connection, not the phase](decisions/0009-limits-per-connection.md).
 10. [Every way to make an account goes through `Identity`](decisions/0010-registration-behind-identity.md).
 11. [Writes keep to what the client can read](decisions/0011-pace-writes-to-the-client.md).
+12. [A web front end runs in its own process and reaches the server over a service channel](decisions/0012-web-front-end-over-a-service-channel.md).
 13. [Argon2id for passwords](decisions/0013-argon2id-for-passwords.md).
 
 ## 10. Naming and trademarks

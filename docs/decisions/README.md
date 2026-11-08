@@ -13,4 +13,5 @@
 | [0009](0009-limits-per-connection.md) | Rate limits belong to the connection, not the phase |
 | [0010](0010-registration-behind-identity.md) | Every way to make an account goes through `Identity` |
 | [0011](0011-pace-writes-to-the-client.md) | Writes keep to what the client can read |
+| [0012](0012-web-front-end-over-a-service-channel.md) | A web front end runs in its own process and reaches the server over a service channel |
 | [0013](0013-argon2id-for-passwords.md) | Argon2id for passwords |

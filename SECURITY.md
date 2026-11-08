@@ -21,13 +21,14 @@ Fixes go into the latest release only. Run the newest version; upgrading is in
 ## What counts
 
 In scope: the server in this repository, its default configuration, and the deployment the operator
-guide describes (systemd unit, file permissions, admin channel). Examples:
+guide describes (systemd unit, file permissions, admin channel, service channel). Examples:
 
 - one client crashing the server, stalling the event loop, or disconnecting other players;
 - getting around a connection, login, chat or account limit, including from many addresses of one IPv6
   /64, which the server counts as one source;
 - reading or changing another player's account or progress;
-- reaching the admin channel without its token, or getting a secret into the logs.
+- reaching the admin channel without its token, or the service channel from outside the server's group;
+- getting a secret into the logs.
 
 Out of scope, because the original client or the protocol makes them unavoidable (each is explained in the
 threat model, [`docs/robustness.md`](docs/robustness.md#threat-model)):

@@ -4,6 +4,19 @@ What changed for players and operators, newest first. How the code is built is i
 [`docs/DESIGN.md`](docs/DESIGN.md); the reasoning behind its structure is in
 [`docs/decisions/`](docs/decisions/README.md).
 
+## Unreleased
+
+A database opened by this version moves to schema version 3, which `1.0.0rc2` refuses: back it up before
+upgrading.
+
+### Operators
+- An optional service channel for a web front end (`[service] socket`): JSON lines over a Unix socket
+  that only the server's group can reach, with a snapshot of who plays where, registration and the
+  operator's commands (ADR 12).
+- `create-account` and `reset-password` hash their password off the game's loop.
+- The daily removal of unplayed accounts goes in small batches, and guest callsign checks use an index,
+  so neither slows the games as the account table grows.
+
 ## 1.0.0rc2 (release candidate)
 
 Writes paced to the client's modem, fixes for four ways one client could harm others, and harder

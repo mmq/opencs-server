@@ -56,6 +56,7 @@ below). Do that once it has finished.
 | `/var/lib/opencs` | the data directory: `opencs.db` (accounts and progress) |
 | `/var/log/opencs` | the log file, if `[logging] file` is set |
 | `/var/lib/opencs-captures` | session captures, if `[capture]` is enabled |
+| `/run/opencs` | the service socket, if `[service]` is set (systemd makes the directory) |
 
 ```bash
 sudo useradd --system --home /var/lib/opencs --shell /usr/sbin/nologin opencs
@@ -82,6 +83,10 @@ dir = "/var/lib/opencs-captures"   # only used if capture is enabled
 # Optional: the operator channel, on 127.0.0.1 only.
 [admin]
 port = 2400
+
+# Optional: the channel the web front end uses ("The service channel" below).
+[service]
+socket = "/run/opencs/service.sock"
 ```
 
 If you use the admin channel, put a token (at least 16 characters) in the environment file:
@@ -156,6 +161,8 @@ Its settings:
   in which players are saved (the server's shutdown deadline is 10 s).
 - `ProtectSystem=strict` with `ReadWritePaths` for the data, log and capture directories, and the other
   sandboxing and resource settings below them. `systemd-analyze security opencs` scores what is left.
+- `RuntimeDirectory=opencs` with `RuntimeDirectoryMode=0750`: systemd makes `/run/opencs` for the
+  service socket at start and removes it at stop; the server's group may enter it.
 
 The paths in `server.toml` are relative to the file, and `/etc` is read-only under `ProtectSystem=strict`.
 `ProtectHome=true` hides `/home` and `/root`, so the `.venv` must use a Python outside them (the install
@@ -253,9 +260,10 @@ start; **only the city files are re-read by `reload`** (below).
 | `[admin] port` | none (off) | 0-65535, not the game port | the admin channel's port |
 | `[admin] token` | none | at least 16 characters | the admin token, in the file. Prefer the environment variable: with a token here, the server logs a warning at start if `server.toml` is readable by group or others (`chmod 600` it) |
 | `[admin] token_env` | `"OPENCS_ADMIN_TOKEN"` | an environment variable name | where the token is read when `token` is absent |
+| `[service] socket` | none (off) | a path, its directory existing | the service channel's Unix socket, made mode 0660 |
 
 Layers for `[logging.levels]`: `wire`, `messages`, `net`, `session`, `lobby`, `world`, `routing`, `store`,
-`app`, `admin`, `capture`. Every logger in the code is `opencs.<layer>[.<detail>]`, so a level set for a
+`app`, `admin`, `service`, `capture`. Every logger in the code is `opencs.<layer>[.<detail>]`, so a level set for a
 layer reaches its children.
 
 ### A city file (`cities/*.toml`)
@@ -398,6 +406,54 @@ was already on its way when the warp was sent cannot be told from the warp's own
 then counts the stale one, and that client can end up one leg out of step again. If a team's orders
 are still stranded some seconds later, run the command once more (the failsafe is ours; II §14 allows one).
 
+## The service channel
+
+The web front end (registration, status pages, administration) runs as its own process and user, and
+talks to the server over this channel (ADR 12); it never opens `opencs.db`. Off unless
+`[service] socket` is set. The socket is a file, not a port: nothing on the network can reach it, and the
+server makes it mode 0660, so only its own user and group may connect. With the unit in `deploy/` it lives in
+`/run/opencs`, which systemd makes at start (mode 0750) and removes at stop. A socket left by a server
+that died is replaced; any other file at that path stops the server at start.
+
+Give the web process's user the server's group, and nothing more: the data directory is 0700 and the
+database 0600, so the group reaches the socket and not the hashes.
+
+```bash
+sudo useradd --system --shell /usr/sbin/nologin opencs-web
+sudo usermod -aG opencs opencs-web
+```
+
+Each line is one JSON object and is answered by one line. A connection first sends
+`{"hello": "opencs-service", "version": 1}` within 10 seconds and gets back the server's version; a
+version the server does not speak is answered with the ones it does, and the connection closed. After
+that a request is `{"id": 1, "op": "snapshot"}`, with the op's arguments as other keys, and its reply is
+`{"id": 1, "ok": true, "result": {...}}` or `{"id": 1, "ok": false, "error": "refused", "message": "..."}`.
+To try it by hand (as root, or a user in the group):
+
+```bash
+printf '%s\n' '{"hello":"opencs-service","version":1}' '{"id":1,"op":"snapshot"}' \
+  | sudo socat - UNIX-CONNECT:/run/opencs/service.sock
+```
+
+| op | arguments | result |
+|---|---|---|
+| `snapshot` | | uptime, account count, cap and registration mode, connections in game and in the Chamber, each city's name, capacity, whether it is open and its pilots (callsign, team, guest or not), held games. No addresses, account details or chat |
+| `account` | `name` | whether that account exists and is online |
+| `register` | `name` | a new account with a made-up password, `{"name", "password"}`; the password is in the reply only, never logged. The name rules are those of every new account; a refusal (`"refused"`) says why |
+| `reset-password` | `name` | a new made-up password for an account, as `register` |
+| `status`, `reload` | | the admin command's reply lines, `{"lines": [...]}` |
+| `announce` | `text` | as the admin command |
+| `kick` | `callsign`, `reason` (optional) | as the admin command |
+| `guppy-home` | `team` | as `guppy <team> home` |
+| `shutdown` | `seconds` (optional), or `cancel: true` | as the admin command |
+| `reset-progress`, `delete-account` | `name` | as the admin commands |
+
+Bounds: lines of at most 4096 bytes (a longer one closes the connection), 4 connections at once, 50
+requests in a burst and 20 a second per connection (more are refused with `"rate"`), and over every
+connection 5 new passwords in a burst and then one every 5 seconds, far below what game logins may use.
+A request that holds up the server for over 20 ms is logged (`service request ... held up the server`),
+at most once a minute.
+
 ## Stopping, signals and kicks
 
 | signal / command | effect |
@@ -501,6 +557,9 @@ TimeoutStopSec=30
 Restart=on-failure
 ProtectSystem=strict
 ReadWritePaths=/var/lib/opencs-%i /var/log/opencs
+# /run/opencs-%i, for the service socket.
+RuntimeDirectory=opencs-%i
+RuntimeDirectoryMode=0750
 NoNewPrivileges=true
 # Sandboxing: the server needs its port, its data and log directories and nothing else.
 # `systemd-analyze security opencs@one` scores what is left.
@@ -548,7 +607,8 @@ held games, and a pilot can be online on both at once.
 
 Anyone can connect any program to the game port, so before opening it to the internet:
 
-1. **Firewall.** Open only the game port (`sudo ufw allow 2399/tcp`), never the admin port. As an outer
+1. **Firewall.** Open only the game port (`sudo ufw allow 2399/tcp`), never the admin port. The
+   service channel is a Unix socket and has no port; the web front end's HTTPS port is its own. As an outer
    layer against connection floods, let the kernel refuse an address that opens connections too fast,
    before the server sees it: `sudo ufw limit 2399/tcp` (6 new connections in 30 s per address), or
    with nftables, `tcp dport 2399 ct state new meter opencs { ip saddr limit rate over 20/minute } drop`
