@@ -8,7 +8,7 @@ from collections.abc import Callable
 
 from fixtures.lobbies import city
 from fixtures.pods import report
-from fixtures.sessions import Harness, World, login, make_world, play
+from fixtures.sessions import Harness, World, enter_lobby, login, make_world, play
 from opencs import policy
 from opencs.messages import ClientMessage, WirePos, client, client_payload, server
 from opencs.session.chamber import ChamberPhase
@@ -185,7 +185,7 @@ def test_resume_launches_the_held_city_and_the_game_is_restored() -> None:
 
 def test_resume_without_a_held_game_is_refused_and_stays_in_the_chamber() -> None:
     world = make_world()
-    h, _ = back(world)
+    h = enter_lobby(world, ALICE)
     assert b"NO GAME IS HELD FOR YOU" in ask(h, "/RESUME")
     assert phase_of(h) is ChamberPhase
 

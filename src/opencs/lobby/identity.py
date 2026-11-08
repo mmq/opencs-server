@@ -21,9 +21,14 @@ from typing import Protocol
 from argon2.low_level import Type, hash_secret_raw
 
 from opencs import policy
+from opencs.lobby import commands
 from opencs.store.base import ARGON2ID, PBKDF2_SHA256, Account, AccountStore, Kdf, StaleCursor
 
 log = logging.getLogger("opencs.lobby")
+
+#: What ``commands.parse`` makes of a line that is not a Chamber command: a callsign may be one of
+#: these (``/ACE`` is an unknown command, so chat), never a command the Chamber would act on.
+_NOT_COMMANDS = (commands.Say, commands.BareLetter, commands.Unknown)
 
 
 def identity_key(callsign: str, account: str | None) -> str:
@@ -77,6 +82,12 @@ class Pilot:
     @property
     def is_guest(self) -> bool:
         return self.account is None
+
+    @property
+    def needs_callsign(self) -> bool:
+        """An account whose player has not chosen a callsign yet: ``callsign`` is ``""`` until
+        the Chamber's prompt is answered (``Identity.choose_callsign``)."""
+        return not self.callsign
 
     @property
     def key(self) -> str:
@@ -157,6 +168,8 @@ class NewPassword:
     salt: bytes = field(repr=False)
     kdf: Kdf
     new_account: bool
+    #: A new account's callsign, if the web chose one; ``""`` leaves it to the Chamber's prompt.
+    callsign: str = ""
 
     def hash(self) -> bytes:
         return hash_password(self.password, self.salt, self.kdf)
@@ -271,7 +284,9 @@ class Identity:
     def _guest(self, name: str, gate: LoginGate | None) -> Pilot | Refused:
         # Compare callsigns, not names: ALPHAXYZW would otherwise be played as ALPHAXYZ's callsign.
         base = name[: policy.MAX_CALLSIGN_LENGTH]
-        if name != policy.GUEST_ACCOUNT_NAME and self._store.callsign_owner(base) is not None:
+        if name != policy.GUEST_ACCOUNT_NAME and (
+            self._store.get(name) is not None or self._store.callsign_owner(base) is not None
+        ):
             return Refused("THAT NAME IS A REGISTERED ACCOUNT: LOG IN WITH ITS PASSWORD")
         if gate is not None and not gate.may_admit_guest():
             return Refused("TOO MANY GUESTS ONLINE: TRY AGAIN LATER")
@@ -284,7 +299,7 @@ class Identity:
         ran: the account may have logged in elsewhere, or been registered by another login."""
         if check.stored is None:
             account = Account(check.name, check.salt, digest, check.kdf)
-            if self._store.callsign_owner(check.name) is not None or not self._create(account):
+            if not self._create(account, ""):  # its callsign is asked for in the Chamber
                 if gate is not None:
                     gate.account_not_tried(check.name)  # a lost race to register, not a guess
                 return Refused("THAT NAME WAS JUST TAKEN: TRY AGAIN")
@@ -296,7 +311,9 @@ class Identity:
             return Refused("THAT ACCOUNT IS ALREADY LOGGED IN")
         if check.stored is not None:
             self._store.touch_login(check.name)
-        callsign = self.callsign_of(check.name) or check.name[: policy.MAX_CALLSIGN_LENGTH]
+        callsign = self.callsign_of(check.name)  # "" until chosen at the Chamber's prompt
+        if callsign is None:  # deleted while the hash ran: it plays this once under its name
+            callsign = check.name[: policy.MAX_CALLSIGN_LENGTH]
         return self._admit(callsign, check.name)
 
     def rehash(self, check: PasswordCheck) -> PasswordCheck | None:
@@ -329,8 +346,6 @@ class Identity:
             or (None if password is None else self._new_password_problem(name, password))
         ) is not None:
             return Refused(reason)
-        if self._store.callsign_owner(name) is not None:  # another account's chosen callsign
-            return Refused("THAT NAME IS TAKEN")
         if self._count >= self._max_accounts:
             return Refused("THIS SERVER HAS NO ROOM FOR NEW ACCOUNTS")
         return None
@@ -379,10 +394,12 @@ class Identity:
             return "THAT PASSWORD IS TOO COMMON: CHOOSE ANOTHER"
         return None
 
-    def register(self, name: str, password: str | None = None) -> tuple[Account, str] | Refused:
+    def register(
+        self, name: str, password: str | None = None, callsign: str | None = None
+    ) -> tuple[Account, str] | Refused:
         """``begin_register`` and ``complete_password`` with the hash made here and now, for
         callers that may block. Returns the account and its password."""
-        begun = self.begin_register(name, password)
+        begun = self.begin_register(name, password, callsign)
         if isinstance(begun, Refused):
             return begun
         return self.complete_password(begun, begun.hash())
@@ -396,10 +413,15 @@ class Identity:
         done = self.complete_password(begun, begun.hash())
         return done if isinstance(done, Refused) else done[1]
 
-    def begin_register(self, name: str, password: str | None = None) -> NewPassword | Refused:
-        """Start making an account outside a login. Without ``password`` one is made up. The
-        answer is the hash to run and hand to ``complete_password``, or why there is no account."""
+    def begin_register(
+        self, name: str, password: str | None = None, callsign: str | None = None
+    ) -> NewPassword | Refused:
+        """Start making an account outside a login. Without ``password`` one is made up; without
+        ``callsign`` the player is asked for one at the first login. The answer is the hash to
+        run and hand to ``complete_password``, or why there is no account."""
         name = name.strip().upper()
+        if callsign is not None and (reason := self._free_callsign_problem(callsign)):
+            return Refused(reason)
         if password is not None and (reason := _untypeable(password)) is not None:
             return Refused(reason)
         if self._store.get(name) is not None:
@@ -409,7 +431,9 @@ class Identity:
         if password is None:
             password = make_password()
         salt = os.urandom(policy.PASSWORD_SALT_BYTES)
-        return NewPassword(name, password, salt, self._kdf, new_account=True)
+        return NewPassword(
+            name, password, salt, self._kdf, new_account=True, callsign=callsign or ""
+        )
 
     def begin_reset_password(self, name: str, password: str | None = None) -> NewPassword | Refused:
         """Start giving account ``name`` a new password: ``password``, which must pass the rules
@@ -434,7 +458,9 @@ class Identity:
         if new.new_account:
             if self._count >= self._max_accounts:
                 return Refused("THIS SERVER HAS NO ROOM FOR NEW ACCOUNTS")
-            if not self._create(account):
+            if new.callsign and self._free_callsign_problem(new.callsign) is not None:
+                return Refused("THAT CALLSIGN WAS JUST TAKEN")
+            if not self._create(account, new.callsign):
                 return Refused("THAT NAME IS TAKEN")
         elif not self._store.set_password(account):
             return Refused("NO SUCH ACCOUNT")
@@ -458,6 +484,37 @@ class Identity:
             return Refused(reason)
         self._store.set_callsign(name, callsign, self._wall())
         return callsign
+
+    def default_callsign(self, pilot: Pilot) -> str | None:
+        """What an account that has not chosen a callsign may take by pressing Return: its name,
+        if that is free and passes the rules, else None."""
+        assert pilot.account is not None
+        name = pilot.account[: policy.MAX_CALLSIGN_LENGTH]
+        return None if self._free_callsign_problem(name) is not None else name
+
+    def choose_callsign(self, pilot: Pilot, callsign: str | None) -> Pilot | Refused:
+        """The Chamber's first-login prompt answered: ``callsign``, or with None the name
+        (``default_callsign``). The answer is the pilot under it, or why not. A first choice does
+        not start the wait between changes."""
+        assert pilot.account is not None and pilot.needs_callsign
+        if callsign is None:
+            callsign = self.default_callsign(pilot)
+            if callsign is None:
+                return Refused("YOUR NAME IS TAKEN AS A CALLSIGN: TYPE ANOTHER")
+        elif (reason := self._free_callsign_problem(callsign)) is not None:
+            return Refused(reason)
+        if not self._store.set_callsign(pilot.account, callsign, None):
+            return Refused("NO SUCH ACCOUNT")
+        self._callsigns.add(callsign.upper())
+        return dataclasses.replace(pilot, callsign=callsign)
+
+    def _free_callsign_problem(self, callsign: str) -> str | None:
+        """Why ``callsign`` cannot be taken by an account that has none: the rules, or another's."""
+        if (problem := self._new_callsign_problem(callsign)) is not None:
+            return problem
+        if self._store.callsign_owner(callsign) is not None or callsign.upper() in self._callsigns:
+            return "THAT CALLSIGN IS TAKEN"
+        return None
 
     def rename(self, pilot: Pilot, callsign: str) -> Pilot | Refused:
         """A logged-in account's ``/CALLSIGN``: the pilot under its new callsign, or why not.
@@ -502,6 +559,8 @@ class Identity:
             return "A CALLSIGN MAY HOLD LETTERS, DIGITS AND PUNCTUATION, NO SPACES"
         if not any(ch.isalnum() for ch in callsign):
             return "A CALLSIGN NEEDS A LETTER OR A DIGIT"
+        if not isinstance(commands.parse(callsign), _NOT_COMMANDS):
+            return "THAT CALLSIGN READS AS A CHAMBER COMMAND"  # /PLAY, or a button's ACE/CITY
         folded = callsign.upper()
         if folded in policy.RESERVED_ACCOUNT_NAMES or self._a_guest_could_be(folded):
             return "THAT CALLSIGN IS RESERVED"
@@ -555,8 +614,8 @@ class Identity:
         self._count -= len(gone)
         return PruneBatch(gone, stale[-1][0] if len(stale) == limit else None)
 
-    def _create(self, account: Account) -> bool:
-        if not self._store.create(account):
+    def _create(self, account: Account, callsign: str) -> bool:
+        if not self._store.create(account, callsign):
             return False
         self._count += 1
         return True
@@ -601,6 +660,9 @@ class Identity:
         return None
 
     def _admit(self, base: str, account: str | None) -> Pilot | Refused:
+        if account is not None and not base:
+            self._accounts.add(account)
+            return Pilot("", account)  # takes a callsign at the Chamber's prompt
         callsign = self._allocate_callsign(base, guest=account is None)
         if callsign is None:
             return Refused("TOO MANY PILOTS WITH THAT NAME ARE ONLINE")

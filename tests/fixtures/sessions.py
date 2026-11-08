@@ -17,6 +17,7 @@ from opencs.lobby.lobby import Lobby
 from opencs.messages import ServerMessage
 from opencs.net.listener import source_of
 from opencs.routing import Router
+from opencs.session.chamber import ChamberPhase
 from opencs.session.held import HeldGames
 from opencs.session.loginlimits import LoginLimits
 from opencs.session.persistence import Persistence
@@ -196,10 +197,16 @@ def login(
     return h
 
 
-def enter_lobby(world: World, account: str = "JOINGENIE", address: str | None = None) -> Harness:
-    """A session that is in the Chamber, version check answered, output cleared."""
+def enter_lobby(
+    world: World, account: str = "JOINGENIE", address: str | None = None, callsign: str = ""
+) -> Harness:
+    """A session that is in the Chamber, version check answered, output cleared. A new account
+    answers the callsign prompt with ``callsign``, by default Return: it keeps its name."""
     h = login(world, account, address=address)
     h.feed("CSTTBT 105 150\r")
+    phase = h.session.phase
+    if isinstance(phase, ChamberPhase) and phase.asking_callsign:
+        h.feed(callsign + "\r")
     h.take()
     return h
 

@@ -64,8 +64,8 @@ class Account:
 @dataclass(frozen=True, slots=True)
 class Callsign:
     """The callsign an account plays under, in the case it was chosen, and when it was last
-    chosen (wall-clock seconds), None while it is still the one the account was made with: its
-    name cut to ``policy.MAX_CALLSIGN_LENGTH``."""
+    changed (wall-clock seconds; None for the account's first). ``""`` while the player has not
+    chosen one yet: the Chamber asks at the next login."""
 
     callsign: str
     changed: float | None
@@ -78,9 +78,10 @@ class AccountStore(Protocol):
         """The account called ``name`` (already upper-cased), or None."""
         ...
 
-    def create(self, account: Account) -> bool:
-        """Store a new account, whose callsign is its name cut to ``policy.MAX_CALLSIGN_LENGTH``;
-        False, storing nothing, if the name is taken."""
+    def create(self, account: Account, callsign: str | None = None) -> bool:
+        """Store a new account with ``callsign``: ``""`` for one still to be chosen, None for its
+        name cut to ``policy.MAX_CALLSIGN_LENGTH`` (what accounts made before callsigns were
+        chosen have). False, storing nothing, if the name is taken."""
         ...
 
     def callsign(self, name: str) -> Callsign | None:
@@ -92,9 +93,9 @@ class AccountStore(Protocol):
         is the account's, so no guest or other account may take it (II §3)."""
         ...
 
-    def set_callsign(self, name: str, callsign: str, changed: float) -> bool:
-        """Give account ``name`` this callsign, chosen at ``changed``; False if there is no such
-        account. Whether another account holds it is the caller's to check first."""
+    def set_callsign(self, name: str, callsign: str, changed: float | None) -> bool:
+        """Give account ``name`` this callsign, changed at ``changed`` (None: its first); False if
+        there is no such account. Whether another account holds it is the caller's to check."""
         ...
 
     def count(self) -> int:

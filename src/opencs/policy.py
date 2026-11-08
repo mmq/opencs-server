@@ -717,8 +717,9 @@ CALLSIGN_LAST_SUFFIX = 999
 #: of text (cyberstrike research, 2026-11-07, pending its live test), and the old screenshots show
 #: ``:``, ``^``, ``*``, ``\\``, ``/`` and parentheses. A space is left out: a callsign holding one
 #: could pass for a chat line (``BOB: GG``) and would split ``/WHO <callsign>``. At least one
-#: letter or digit, so ``...`` is no one's name. Callsigns are unique, and compared, ignoring
-#: case. Ours.
+#: letter or digit, so ``...`` is no one's name, and never a line the Chamber reads as a command
+#: (``/PLAY``, or ``ACE/CITY`` from a button pressed after typing). Callsigns are unique, and
+#: compared, ignoring case. Ours.
 CALLSIGN_CHARACTERS = frozenset(chr(c) for c in range(0x21, 0x7F))
 MIN_CALLSIGN_LENGTH = 3
 

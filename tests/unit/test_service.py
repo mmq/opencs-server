@@ -284,7 +284,7 @@ def test_the_web_may_choose_the_password_within_the_servers_rules(
             c = await hello(path)
             with caplog.at_level(logging.DEBUG):
                 made = await c.result("register", name="chooser", password="PICK,ME!1")
-                assert made == {"name": "CHOOSER", "password": "PICK,ME!1"}
+                assert made == {"name": "CHOOSER", "password": "PICK,ME!1", "callsign": None}
                 again = await c.result("reset-password", name="CHOOSER", password="SECOND2")
                 assert again["password"] == "SECOND2"
             assert "PICK,ME!1" not in caplog.text and "SECOND2" not in caplog.text
@@ -307,6 +307,11 @@ def test_the_web_sets_a_callsign_under_the_players_rules_unless_forced(sock_dir:
         async with running(sock_dir) as (path, _, _):
             c = await hello(path)
             await c.result("register", name="alice")
+            named = await c.result("register", name="bob", callsign="B0b")
+            assert named["callsign"] == "B0b"
+            taken = await c.ask("register", name="carol", callsign="b0B")
+            assert (taken["error"], taken["message"]) == ("refused", "THAT CALLSIGN IS TAKEN")
+            assert (await c.result("account", name="carol"))["exists"] is False
             made = await c.result("set-callsign", name="alice", callsign="Al:ce")
             assert made == {"name": "ALICE", "callsign": "Al:ce"}
             assert (await c.result("account", name="ALICE"))["callsign"] == "Al:ce"

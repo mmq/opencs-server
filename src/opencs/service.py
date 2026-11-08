@@ -85,7 +85,10 @@ class ServiceServer:
         self._ops: dict[str, tuple[tuple[str, ...], _Handler]] = {
             "snapshot": ((), self._snapshot),
             "account": (("name",), self._account),
-            "register": (("name", "password"), lambda r: self._password("register", r)),
+            "register": (
+                ("name", "password", "callsign"),
+                lambda r: self._password("register", r),
+            ),
             "reset-password": (("name", "password"), lambda r: self._password("reset-password", r)),
             "status": ((), lambda _: self._admin("status")),
             "announce": (("text",), lambda r: self._admin(f"announce {_text(r, 'text')}")),
@@ -305,9 +308,10 @@ class ServiceServer:
         chosen = request.get("password")
         if chosen is not None and not isinstance(chosen, str):
             raise RequestError("bad-request", "password must be text")
+        callsign = _callsign(request) if "callsign" in request else None  # register only
         identity = self._services.identity
         begun: NewPassword | Refused = (
-            identity.begin_register(name, chosen)
+            identity.begin_register(name, chosen, callsign)
             if op == "register"
             else identity.begin_reset_password(name, chosen)
         )
@@ -326,8 +330,9 @@ class ServiceServer:
         account, password = done
         if op == "register":
             log.info("account %s created over the service channel", account.name)
-        else:
-            log.info("password of %s reset over the service channel", account.name)
+            # None: the player is asked for a callsign at the first login.
+            return {"name": account.name, "password": password, "callsign": callsign}
+        log.info("password of %s reset over the service channel", account.name)
         return {"name": account.name, "password": password}
 
     async def _admin(self, line: str) -> dict[str, Any]:

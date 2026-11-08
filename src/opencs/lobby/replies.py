@@ -91,6 +91,15 @@ HELP_LINES = (
 )
 
 
+def callsign_prompt(default: str | None) -> list[Line]:
+    """A new account's question before the Chamber: the callsign other pilots will know it by."""
+    lines = [heading("NEW PILOT: TYPE THE CALLSIGN OTHER PILOTS WILL KNOW YOU BY")]
+    if default is not None:
+        lines.append(body(f"OR PRESS RETURN TO KEEP {default}"))
+    lines.append(body("3 TO 12 LETTERS, DIGITS OR PUNCTUATION, NO SPACES"))
+    return lines
+
+
 def welcome(callsign: str) -> list[Line]:
     return [body(f"WELCOME TO THE CHAMBER, {callsign}. TYPE /HELP FOR COMMANDS.")]
 

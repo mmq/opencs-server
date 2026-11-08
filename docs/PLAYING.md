@@ -88,7 +88,7 @@ SETTINGS as above.
 | account name | what you get |
 |---|---|
 | `JOINGENIE` (the stock install) | **A guest.** No password is sent. You are given a callsign: the name itself (`JOINGENIE`), with a number after it if that callsign is already online (`JOINGENIE2`, `JOINGENIE3`...). Two unmodified clients can therefore play together. Nothing a guest earns is kept: every game starts as a new player's would, and guests cannot `/RESUME`. A server may name other guest names, or turn guests off. |
-| any other name, with a password | **A real account.** The first login with a name registers its password (there is no sign-up step); later logins must give the same one. Your callsign starts as your account name; `/CALLSIGN <callsign>` changes it. Progress is saved to the account, and `/RESUME` works. Only one login per account at a time. |
+| any other name, with a password | **A real account.** The first login with a name registers its password (there is no sign-up step); later logins must give the same one. The first time you enter the Chamber you are asked for a callsign; `/CALLSIGN <callsign>` changes it later. Progress is saved to the account, and `/RESUME` works. Only one login per account at a time. |
 
 A new name must be 3 to 12 characters of letters, digits, `_` and `-` (no spaces), and not one the
 server keeps for itself (such as `ADMIN`, `SERVER`, or a guest's callsign like `JOINGENIE2`); a new
@@ -131,13 +131,18 @@ or to play. A command the server does not know is answered with an "unknown comm
 
 ### Your callsign
 
-An account plays under its callsign, which starts as the account name. `/CALLSIGN <callsign>` in the
-Chamber chooses another: 3 to 12 characters, letters in either case, digits and punctuation (`Ace:1`,
-`^Raven^`, `(B0b)`), with at least one letter or digit and no spaces. It is shown as you typed it, but
-two pilots' callsigns can never differ only in case, so `/WHO ace` finds `Ace`. Names the server keeps
-for itself and guests' callsigns cannot be chosen. You can change it once a week, and not while a game
-is held for you to `/RESUME`. Your saved record stays with your account whatever your callsign.
-Guests keep the callsign they are given.
+An account plays under a callsign of its own, which other pilots see; your account name stays what
+you log in with. The first time a new account enters the Chamber, the server asks for one before
+anything else: type it, or press Return to keep your account name (offered only when no one else
+already has it as a callsign). Until you answer, you are not in the Chamber: only `/QUIT` works.
+
+A callsign is 3 to 12 characters, letters in either case, digits and punctuation (`Ace:1`, `^Raven^`,
+`(B0b)`, `A/CE`), with at least one letter or digit and no spaces. It is shown as you typed it, but two
+pilots' callsigns can never differ only in case, so `/WHO ace` finds `Ace`. Names the server keeps for
+itself, guests' callsigns and anything that reads as a Chamber command (`/PLAY`, `ACE/CITY`) cannot be
+chosen. `/CALLSIGN <callsign>` changes it later, once a week (the first change after the prompt may
+come at once), and not while a game is held for you to `/RESUME`. Your saved record stays with your
+account whatever your callsign. Guests keep the callsign they are given.
 
 (`/GO` is not a command you type: the game sends it itself while launching, to say it found the city's
 map file.)

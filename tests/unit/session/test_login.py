@@ -43,7 +43,7 @@ def test_the_bare_cr_is_skipped_and_the_first_non_empty_line_is_the_account() ->
     h.feed("ALPHA,sesame\r")
     assert h.take() == b"PASSWORD: "
     assert h.session.pilot is not None
-    assert h.session.pilot.callsign == "ALPHA"
+    assert h.session.pilot.needs_callsign  # a new account: the Chamber asks for one
     assert h.session.pilot.account == "ALPHA"
 
 
@@ -52,7 +52,7 @@ def test_name_and_password_all_in_one_feed() -> None:
     h.feed("HHH\rBRAVO,sesame\r<Not Telling!>\r")
     assert h.take() == b"CONNECT\r\nU#=PASSWORD: \r\n*"
     assert h.session.pilot is not None
-    assert h.session.pilot.callsign == "BRAVO"
+    assert h.session.pilot.account == "BRAVO"
 
 
 @pytest.mark.parametrize("name", ["JOINGENIE", "joingenie", "JoinGenie"])
@@ -280,7 +280,7 @@ def test_lines_sent_during_the_password_check_are_read_once_it_is_done() -> None
     out = h.take()
     assert b"PASSWORD: " in out
     assert isinstance(h.session.phase, ChamberPhase)
-    assert h.session.pilot is not None and h.session.pilot.callsign == "PILOT"
+    assert h.session.pilot is not None and h.session.pilot.account == "PILOT"
 
 
 def test_a_check_that_finishes_after_the_player_hung_up_does_nothing() -> None:

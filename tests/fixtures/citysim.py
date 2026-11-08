@@ -143,6 +143,8 @@ class CitySim:
         h = connect(self.world, address=f"10.{n // 250 % 250}.{n % 250}.1")
         h.feed(f"AT\r\nHHH\r\r{line}\r<Not Telling!>\rM 1380;3\r")
         h.feed("CSTTBT 105 150\r")
+        if isinstance(h.session.phase, ChamberPhase) and h.session.phase.asking_callsign:
+            h.feed("\r")  # a new account keeps its name
         key = f"acct:{name}" if account else name
         held = self.world.services.held.get(key) if account else None
         if held is not None and self.rng.random() < 0.7:

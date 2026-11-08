@@ -25,6 +25,12 @@ def pilot(result: Pilot | Refused) -> Pilot:
     return result
 
 
+def signed_in(identity: Identity, line: str) -> Pilot:
+    """An account login whose player, if asked for a callsign, presses Return (keeps the name)."""
+    found = pilot(identity.login(line))
+    return pilot(identity.choose_callsign(found, None)) if found.needs_callsign else found
+
+
 def test_joingenie_callsigns_are_the_name_then_numbered() -> None:
     identity, _ = make()
     names = [pilot(identity.login("JOINGENIE")).callsign for _ in range(3)]
@@ -98,6 +104,8 @@ def test_with_no_guest_names_joingenie_is_refused_and_registers_nothing() -> Non
 def test_first_login_registers_the_password_and_later_ones_must_match() -> None:
     identity, store = make()
     first = pilot(identity.login("alice,tangerine2"))
+    assert first == Pilot("", "ALICE") and first.needs_callsign  # asked for one in the Chamber
+    first = pilot(identity.choose_callsign(first, None))
     assert first == Pilot("ALICE", "ALICE")
     assert not first.is_guest
     assert store.get("ALICE") is not None
@@ -136,7 +144,7 @@ def test_name_bounds() -> None:
     assert isinstance(identity.login("  ,sesame"), Refused)
     assert isinstance(identity.login("N" * 33 + ",sesame"), Refused)
     assert isinstance(identity.login("N" * 13 + ",sesame"), Refused)
-    assert pilot(identity.login("N" * 12 + ",sesame")).callsign == "N" * 12
+    assert signed_in(identity, "N" * 12 + ",sesame").callsign == "N" * 12
 
 
 def test_a_guest_cannot_take_a_registered_accounts_name() -> None:
@@ -154,7 +162,7 @@ def test_a_guest_cannot_take_a_registered_accounts_callsign_by_truncation() -> N
     # The account was registered before the guest name was configured (it would be refused now).
     store = MemoryAccountStore()
     no_guests = Identity(store, guest_names=(), kdf=FAST)
-    no_guests.release(pilot(no_guests.login("ALPHABRAVOXY,sesame")))
+    no_guests.release(signed_in(no_guests, "ALPHABRAVOXY,sesame"))
     identity = Identity(store, guest_names=("ALPHABRAVOXYW",), kdf=FAST)
     refused = identity.login("ALPHABRAVOXYW")
     assert isinstance(refused, Refused) and "REGISTERED" in refused.reason
@@ -172,7 +180,7 @@ def test_a_guest_passes_over_a_registered_accounts_callsign() -> None:
     # JOINGENIE2 was registered while guests were off; turned back on, they must not take it.
     store = MemoryAccountStore()
     no_guests = Identity(store, guest_names=(), kdf=FAST)
-    no_guests.release(pilot(no_guests.login("JOINGENIE2,sesame")))
+    no_guests.release(signed_in(no_guests, "JOINGENIE2,sesame"))
     identity = Identity(store, guest_names=("JOINGENIE",), kdf=FAST)
     guests = [pilot(identity.login("JOINGENIE")).callsign for _ in range(2)]
     assert guests == ["JOINGENIE", "JOINGENIE3"]
@@ -255,7 +263,7 @@ def test_release_of_an_unknown_pilot_is_harmless(line: str) -> None:
 
 def test_a_real_account_is_keyed_by_the_account_not_the_callsign() -> None:
     identity, _ = make()
-    alice = pilot(identity.login("ALICE,sesame"))
+    alice = signed_in(identity, "ALICE,sesame")
     guest = pilot(identity.login("JOINGENIE"))
     assert (alice.callsign, alice.key) == ("ALICE", "acct:ALICE")
     assert (guest.callsign, guest.key) == ("JOINGENIE", "JOINGENIE")
@@ -568,7 +576,7 @@ def refusal(result: object) -> str:
 
 def test_an_account_plays_under_the_callsign_it_chose_in_the_case_chosen() -> None:
     identity, _ = clocked()
-    identity.release(pilot(identity.login("ALICE,sesame")))
+    identity.release(signed_in(identity, "ALICE,sesame"))
     assert identity.callsign_of("ALICE") == "ALICE"
     assert identity.change_callsign("alice", "Al:ce(1)") == "Al:ce(1)"
     alice = pilot(identity.login("ALICE,sesame"))
@@ -581,10 +589,13 @@ def test_an_account_plays_under_the_callsign_it_chose_in_the_case_chosen() -> No
 def test_a_callsign_is_unique_ignoring_case_and_frees_the_old_one() -> None:
     identity, _ = clocked()
     for name in ("ALICE", "BOB"):
-        identity.release(pilot(identity.login(f"{name},sesame")))
+        identity.release(signed_in(identity, f"{name},sesame"))
     assert identity.change_callsign("ALICE", "Ace") == "Ace"
     assert "TAKEN" in refusal(identity.change_callsign("BOB", "ACE"))
-    assert "TAKEN" in refusal(identity.login("ACE,sesame"))  # nor a new account's name
+    newcomer = pilot(identity.login("ACE,sesame"))  # a login name is free whatever the callsigns
+    assert identity.default_callsign(newcomer) is None  # but Return cannot keep it
+    assert "TAKEN" in refusal(identity.choose_callsign(newcomer, None))
+    assert pilot(identity.choose_callsign(newcomer, "Ace2")).callsign == "Ace2"
     assert identity.change_callsign("BOB", "Alice") == "Alice"  # ALICE's old one came free
 
 
@@ -605,19 +616,19 @@ def test_a_callsign_is_unique_ignoring_case_and_frees_the_old_one() -> None:
 )
 def test_a_chosen_callsign_must_be_one_the_rules_allow(callsign: str, fragment: str) -> None:
     identity, _ = clocked()
-    identity.release(pilot(identity.login("ALICE,sesame")))
+    identity.release(signed_in(identity, "ALICE,sesame"))
     assert fragment in refusal(identity.change_callsign("ALICE", callsign))
 
 
 def test_any_printable_punctuation_is_allowed_with_a_letter_or_digit() -> None:
     identity, _ = clocked()
-    identity.release(pilot(identity.login("ALICE,sesame")))
+    identity.release(signed_in(identity, "ALICE,sesame"))
     assert identity.change_callsign("ALICE", "^*\\/()<>:!7", force=True) == "^*\\/()<>:!7"
 
 
 def test_a_callsign_may_change_once_a_week_unless_the_operator_changes_it() -> None:
     identity, now = clocked()
-    identity.release(pilot(identity.login("ALICE,sesame")))
+    identity.release(signed_in(identity, "ALICE,sesame"))
     assert identity.change_callsign("ALICE", "First") == "First"  # the first choice is free
     assert "IN 7 DAYS" in refusal(identity.change_callsign("ALICE", "Second"))
     now[0] += policy.CALLSIGN_CHANGE_INTERVAL - 3600
@@ -629,7 +640,7 @@ def test_a_callsign_may_change_once_a_week_unless_the_operator_changes_it() -> N
 
 def test_an_online_account_renames_itself_and_not_through_the_offline_change() -> None:
     identity, _ = clocked()
-    alice = pilot(identity.login("ALICE,sesame"))
+    alice = signed_in(identity, "ALICE,sesame")
     assert "ONLINE" in refusal(identity.change_callsign("ALICE", "Ace"))
     renamed = pilot(identity.rename(alice, "Ace"))
     assert (renamed.callsign, renamed.account) == ("Ace", "ALICE")
@@ -639,3 +650,40 @@ def test_an_online_account_renames_itself_and_not_through_the_offline_change() -
     identity.release(renamed)
     assert not identity.callsign_online("ACE")
     assert pilot(identity.login("ALICE,sesame")).callsign == "Ace"
+
+
+def test_a_new_account_has_no_callsign_until_it_chooses_and_is_online_meanwhile() -> None:
+    identity, _ = clocked()
+    waiting = pilot(identity.login("ALICE,sesame"))
+    assert waiting.needs_callsign and identity.callsign_of("ALICE") == ""
+    assert "ALREADY LOGGED IN" in refusal(identity.login("ALICE,sesame"))
+    assert identity.default_callsign(waiting) == "ALICE"
+    chosen = pilot(identity.choose_callsign(waiting, "Al1ce"))
+    assert chosen == Pilot("Al1ce", "ALICE") and identity.callsign_online("AL1CE")
+    identity.release(chosen)
+    assert identity.change_callsign("ALICE", "Again") == "Again"  # the first choice is no change
+
+
+@pytest.mark.parametrize("callsign", ["/PLAY", "/play", "/CITY", "ACE/CITY", "/WHO", "/CALLSIGN"])
+def test_a_callsign_cannot_be_a_chamber_command(callsign: str) -> None:
+    identity, _ = clocked()
+    waiting = pilot(identity.login("ALICE,sesame"))
+    assert "CHAMBER COMMAND" in refusal(identity.choose_callsign(waiting, callsign))
+
+
+@pytest.mark.parametrize("callsign", ["/ace", "/\\/7", "A/B", "/CITYS"])
+def test_a_slash_that_is_no_command_is_fine(callsign: str) -> None:
+    identity, _ = clocked()
+    waiting = pilot(identity.login("ALICE,sesame"))
+    assert pilot(identity.choose_callsign(waiting, callsign)).callsign == callsign
+
+
+def test_the_web_may_register_an_account_with_its_callsign() -> None:
+    identity, _ = clocked()
+    made = identity.register("ALICE", "SECRET1", "Al:ce")
+    assert not isinstance(made, Refused) and identity.callsign_of("ALICE") == "Al:ce"
+    assert pilot(identity.login("ALICE,SECRET1")).callsign == "Al:ce"
+    assert "TAKEN" in refusal(identity.register("BOB", "SECRET1", "AL:CE"))
+    assert "CHAMBER COMMAND" in refusal(identity.register("BOB", "SECRET1", "/PLAY"))
+    assert not isinstance(identity.register("CAROL", "SECRET1"), Refused)
+    assert identity.callsign_of("CAROL") == ""  # asked at the first login

@@ -50,8 +50,7 @@ async def login(port: int, account: str) -> Client:
     c = await connect(port)
     await c.send(f"HHH\r{account}\r<Not Telling!>\rM 1380;3\r")
     await c.expect(b"\x05PRESS RETURN\r")
-    await c.send("\r")
-    await c.expect(b"\x05A\r")
+    await c.enter_chamber()
     await c.expect(b"TYPE /HELP FOR COMMANDS.\r\x05D0\r")  # the welcome, so replies line up
     return c
 

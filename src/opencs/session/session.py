@@ -125,13 +125,13 @@ class Session:
 
     def set_pilot(self, pilot: Pilot) -> None:
         self.pilot = pilot
-        self.log.callsign = pilot.callsign
+        self.log.callsign = pilot.callsign or pilot.account or "-"
         self.log.context.authenticated = True
         if pilot.is_guest:
             self.services.login_limits.guest_in(self.source)
         self.log.info(
             "logged in as %s (%s) from %s",
-            pilot.callsign,
+            self.log.callsign,
             "guest" if pilot.is_guest else "account",
             self.address,
         )

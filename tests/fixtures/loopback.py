@@ -127,6 +127,27 @@ class Client:
             seen = [f.payload[:1] for f in self._parsed]
             raise AssertionError(f"no {letter!r} frame; unclaimed frames: {seen!r}") from None
 
+    async def enter_chamber(self, reply: str = "\r", callsign: str = "") -> None:
+        """Answer the version check with ``reply`` and, for a new account, the callsign prompt
+        with ``callsign`` (Return keeps the name); return once the Chamber's buttons are up."""
+        await self.send(reply)
+
+        async def find() -> bytes:
+            while True:
+                for needle in (b"\x05A\r", b"NEW PILOT: "):
+                    if needle in self.buffer:
+                        return needle
+                await self._receive()
+
+        try:
+            found = await asyncio.wait_for(find(), TIMEOUT)
+        except TimeoutError:
+            raise AssertionError(f"not in the Chamber; buffered: {self.buffer!r}") from None
+        if found == b"NEW PILOT: ":
+            await self.expect(b"NO SPACES\r")
+            await self.send(callsign + "\r")
+        await self.expect(b"\x05A\r")
+
     async def expect(self, needle: bytes) -> bytes:
         """Read until ``needle`` has arrived; return everything up to and including it. One
         deadline for the whole wait."""
@@ -198,8 +219,7 @@ async def enter(
     c = await dial(port)
     await c.send(f"HHH\r{account}\r<Not Telling!>\rM 1380;3\r")
     await c.expect(b"\x05PRESS RETURN\r")
-    await c.send("\r")
-    await c.expect(b"\x05A\r")
+    await c.enter_chamber()
     await c.send(f"/PLAY A {team}\r")
     await c.expect(b"\x05E 1 1\r")
     await c.send("/GO 0\r")

@@ -797,3 +797,67 @@ def test_callsign_is_refused_to_a_guest_and_while_a_game_is_held() -> None:
     )
     assert b"GAME HELD" in ask(alice, "/CALLSIGN Ace")
     assert alice.session.pilot == Pilot("ALICE", "ALICE")
+
+
+# --- the callsign prompt -----------------------------------------------------------------------
+
+
+def prompted(world: World, account: str = "ALICE,sesame") -> tuple[Harness, bytes]:
+    """A new account's first time through the version check: the prompt, and what it said."""
+    h = login(world, account)
+    h.take()
+    h.feed("CSTTBT 105 150\r")
+    return h, h.take()
+
+
+def test_a_new_account_is_asked_for_a_callsign_before_the_chamber() -> None:
+    world = make_world()
+    other = enter_lobby(world, "BOB,sesame")
+    h, said = prompted(world)
+    assert b"NEW PILOT: TYPE THE CALLSIGN OTHER PILOTS WILL KNOW YOU BY" in said
+    assert b"OR PRESS RETURN TO KEEP ALICE" in said
+    assert b"\x05A\r" not in said  # no buttons, no welcome yet
+    assert world.lobby.find("ALICE") is None and b"ALICE" not in ask(other, "/WHO")
+    assert b"CHOOSE A CALLSIGN FIRST" in ask(h, "/PLAY")
+    assert b"CHOOSE A CALLSIGN FIRST" in ask(h, "ACE/CITY")  # a button typed onto the line
+    assert b"NO SPACES" in ask(h, "two words")
+    assert b"CHAMBER COMMAND" not in ask(h, "/ace")
+    assert h.session.pilot == Pilot("/ace", "ALICE")
+    assert world.lobby.find("/ACE") is not None
+
+
+def test_return_keeps_the_name_and_opens_the_chamber() -> None:
+    world = make_world()
+    h, _ = prompted(world)
+    out = ask(h, "")
+    assert b"\x05A\r" in out and b"WELCOME TO THE CHAMBER, ALICE." in out
+    assert h.session.pilot == Pilot("ALICE", "ALICE")
+
+
+def test_a_name_that_is_someones_callsign_must_be_replaced_at_the_prompt() -> None:
+    world = make_world()
+    assert world.identity.register("BOB", "SECRET1", "Alice") is not None
+    h, said = prompted(world)
+    assert b"PRESS RETURN" not in said
+    assert b"YOUR NAME IS TAKEN AS A CALLSIGN" in ask(h, "")
+    assert b"WELCOME TO THE CHAMBER, Al1ce." in ask(h, "Al1ce")
+
+
+def test_a_player_who_leaves_at_the_prompt_is_asked_again_next_time() -> None:
+    world = make_world()
+    h, _ = prompted(world)
+    h.session.closed()
+    again, said = prompted(world)
+    assert b"NEW PILOT" in said
+    ask(again, "")
+    assert again.session.pilot == Pilot("ALICE", "ALICE")
+
+
+def test_quit_at_the_prompt_leaves_and_the_prompt_comes_back() -> None:
+    world = make_world()
+    h, _ = prompted(world)
+    ask(h, "/QUIT")
+    assert phase_of(h) is LoginPhase
+    h.feed("M 1380;3\r")
+    h.take()
+    assert b"NEW PILOT" in ask(h, "CSTTBT 105 150")

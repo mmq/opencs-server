@@ -43,6 +43,7 @@ class State(Enum):
     """Where the Chamber is."""
 
     VERSION = auto()  # sent PRESS RETURN, waiting for the reply
+    CALLSIGN = auto()  # a new account's player is asked for a callsign, not yet in the lobby
     LOBBY = auto()
     LAUNCH = auto()  # sent E <map> <map>, waiting for /GO
 
@@ -73,6 +74,11 @@ class ChamberPhase(TextPhase):
         self._last_input_at = host.now()
 
     @property
+    def asking_callsign(self) -> bool:
+        """True while a new account's player is being asked for a callsign."""
+        return self._state is State.CALLSIGN
+
+    @property
     def member(self) -> Member:
         assert self._member is not None
         return self._member
@@ -89,7 +95,8 @@ class ChamberPhase(TextPhase):
                 self._say(replies.denied(self.host.notice))
                 self.host.notice = None
             return
-        self._member = self.host.join_lobby()
+        if not self._needs_callsign():
+            self._member = self.host.join_lobby()
         self._deadline = self.host.now() + policy.VERSION_WAIT
         self.host.io.send_raw(arm_line("PRESS RETURN"))
 
@@ -140,6 +147,10 @@ class ChamberPhase(TextPhase):
             or not self._within_rate()
         ):
             return
+        if self._state is State.CALLSIGN:
+            if not self._swallow_late_reply(line) and self._within_rate():
+                self._callsign_line(line)
+            return
         command = commands.parse(line)
         if self._state is State.LAUNCH:
             self._launch_line(command)
@@ -175,7 +186,49 @@ class ChamberPhase(TextPhase):
             self._say(replies.denied("TOO MANY LINES: SLOW DOWN"))
         return False
 
+    def _needs_callsign(self) -> bool:
+        pilot = self.host.pilot
+        return pilot is not None and pilot.needs_callsign
+
+    def _ask_callsign(self) -> None:
+        """A new account's first time in: the callsign other pilots will know it by, which GEnie
+        asked for before the Chamber (the game's Technical Supplement). Return keeps its name, when
+        that is free."""
+        self._state = State.CALLSIGN
+        assert self.host.pilot is not None
+        default = self.host.services.identity.default_callsign(self.host.pilot)
+        self._say(replies.callsign_prompt(default))
+
+    def _callsign_line(self, line: str) -> None:
+        """An answer to the callsign prompt. Commands wait until it is answered, but /QUIT."""
+        text = line.strip()
+        command = commands.parse(text)
+        if isinstance(command, commands.Quit):
+            self._quit()
+            return
+        if text and not isinstance(command, commands.Say | commands.BareLetter | commands.Unknown):
+            self._say(replies.denied("CHOOSE A CALLSIGN FIRST"))
+            return
+        pilot = self.host.pilot
+        assert pilot is not None
+        try:
+            result = self.host.services.identity.choose_callsign(pilot, text or None)
+        except Exception:
+            self.host.log.exception("could not store the callsign of %s", pilot.account)
+            self._say(replies.denied("THE CALLSIGN CANNOT BE STORED RIGHT NOW: TRY AGAIN"))
+            return
+        if isinstance(result, Refused):
+            self._say(replies.denied(result.reason))
+            return
+        self.host.rename(result)
+        self.host.log.info("chose the callsign %s", result.callsign)
+        self._member = self.host.join_lobby()
+        self._open_lobby()
+
     def _open_lobby(self) -> None:
+        if self._needs_callsign():
+            self._ask_callsign()
+            return
         self._state = State.LOBBY
         self.host.io.send_raw(arm_line("A") + replies.render(replies.welcome(self.member.callsign)))
         self._tell_held_game()

@@ -391,7 +391,7 @@ port) or restart the server, which resets the limits.
 | `reset-password <name>` | give an account a new random password, shown once and never logged. It does not end a session that is already open: a player logged in stays logged in, so `kick` them if the old password may be known |
 | `reset-progress <name>` | erase an account's saved progress (bays, points, score). Refused while it is online or has a game held for `/RESUME` |
 | `delete-account <name>` | remove an account and its progress, freeing the name. Refused while it is online or held |
-| `set-callsign <name> <callsign>` | give an account the callsign it plays under, in the case typed. The rules are a player's (`/CALLSIGN`) without the week's wait. Refused while it is online or held |
+| `set-callsign <name> <callsign>` | give an account the callsign it plays under, in the case typed. The rules are a player's (`/CALLSIGN`) without the week's wait. Refused while it is online or held. An account made with `create-account` has none until its player answers the prompt at the first login |
 | `help`, `quit` | |
 
 ### The stranded guppy
@@ -440,7 +440,7 @@ printf '%s\n' '{"hello":"opencs-service","version":1}' '{"id":1,"op":"snapshot"}
 |---|---|---|
 | `snapshot` | | uptime, account count, cap and registration mode, connections in game and in the Chamber, each city's name, capacity, whether it is open and its pilots (callsign, team, guest or not), held games. No addresses, account details or chat |
 | `account` | `name` | whether that account exists and is online, and its callsign (`null` if there is no account) |
-| `register` | `name`, `password` | a new account, `{"name", "password"}`: with `password` the one given, without it a made-up one. The password is in the reply only, never logged. The rules are those of every new account (a chosen password too: 6 to 12 printable characters, no spaces, and no lower case, since the client's entry types capitals); a refusal (`"refused"`) says why. Whether players may choose is the web's setting; the game sends passwords in the clear, so a made-up one is the safer default |
+| `register` | `name`, `password`, `callsign` (both optional) | a new account, `{"name", "password", "callsign"}`: with `password` the one given, without it a made-up one; with `callsign` the account plays under it (the `/CALLSIGN` rules, and free), without it (`null`) the player is asked at the first login. The password is in the reply only, never logged. The rules are those of every new account (a chosen password too: 6 to 12 printable characters, no spaces, and no lower case, since the client's entry types capitals); a refusal (`"refused"`) says why. Whether players may choose is the web's setting; the game sends passwords in the clear, so a made-up one is the safer default |
 | `reset-password` | `name`, `password` | a new password for an account, chosen or made up, as `register` |
 | `status`, `reload` | | the admin command's reply lines, `{"lines": [...]}` |
 | `announce` | `text` | as the admin command |

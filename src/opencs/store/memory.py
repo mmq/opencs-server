@@ -23,23 +23,25 @@ class MemoryAccountStore:
     def get(self, name: str) -> Account | None:
         return self._accounts.get(name)
 
-    def create(self, account: Account) -> bool:
+    def create(self, account: Account, callsign: str | None = None) -> bool:
         if account.name in self._accounts:
             return False
         self._accounts[account.name] = account
         self._seen[account.name] = self._now()
-        callsign = account.name[: policy.MAX_CALLSIGN_LENGTH]
+        if callsign is None:
+            callsign = account.name[: policy.MAX_CALLSIGN_LENGTH]
         self._callsigns[account.name] = Callsign(callsign, None)
-        self._owners.setdefault(callsign.upper(), account.name)
+        if callsign:
+            self._owners.setdefault(callsign.upper(), account.name)
         return True
 
     def callsign(self, name: str) -> Callsign | None:
         return self._callsigns.get(name)
 
     def callsign_owner(self, callsign: str) -> str | None:
-        return self._owners.get(callsign.upper())
+        return self._owners.get(callsign.upper()) if callsign else None
 
-    def set_callsign(self, name: str, callsign: str, changed: float) -> bool:
+    def set_callsign(self, name: str, callsign: str, changed: float | None) -> bool:
         if name not in self._accounts:
             return False
         self._disown(name)

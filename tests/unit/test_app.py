@@ -119,8 +119,7 @@ def test_a_player_drops_dies_quits_and_plays_again_on_one_connection() -> None:
         c = await connect(port)
         await c.send("HHH\rJOINGENIE\r<Not Telling!>\rM 1380;3\r")
         await c.expect(b"\x05PRESS RETURN\r")
-        await c.send("\r")
-        await c.expect(b"\x05A\r")
+        await c.enter_chamber()
         with LogWatch("opencs.session", "QUIT line") as quit_lines:
             for game in range(2):
                 await c.send("/PLAY B\r")
@@ -305,8 +304,7 @@ def test_two_clients_chat_in_the_chamber_and_the_second_gets_a_new_callsign() ->
             c = await connect(port)
             await c.send("HHH\rJOINGENIE\r<Not Telling!>\rM 1380;3\r")
             await c.expect(b"\x05PRESS RETURN\r")
-            await c.send("\r")
-            await c.expect(b"\x05A\r")
+            await c.enter_chamber()
             clients.append(c)
         first, second = clients
         await second.expect(b"WELCOME TO THE CHAMBER, JOINGENIE2")

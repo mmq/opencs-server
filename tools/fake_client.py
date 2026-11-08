@@ -210,7 +210,13 @@ class FakeClient:
         await term.send(b"M 1380;3\r")
         await term.expect(b"PRESS RETURN\r")
         await term.send(b"CSTTBT 105 150\r")
-        await term.expect(b"\x05A\r")
+        found, _ = await term.expect(b"\x05A\r", b"NEW PILOT: ")
+        if found != b"\x05A\r":
+            # OpenCS asks a new account for its callsign first: Return keeps the name.
+            await term.quiet_for(0.4)
+            await term.send(b"\r")
+            await term.expect(b"\x05A\r")
+            self.log("callsign prompt answered: keeping %s", self.name)
         await term.quiet_for(0.4)  # whatever welcome the server shows; only 'A' is protocol
         self.log("in the Chamber")
         for line in self.lobby_lines:

@@ -70,7 +70,8 @@ MIGRATIONS: tuple[tuple[str, ...], ...] = (
     # 4: callsigns chosen apart from the account name.
     (
         # The callsign an account plays under, chosen apart from its name (in any case), and when
-        # it was last chosen; until then it is the name cut to 12 (policy.MAX_CALLSIGN_LENGTH).
+        # it last changed; '' until its player chooses one. Accounts already here keep playing
+        # under their names cut to 12 (policy.MAX_CALLSIGN_LENGTH).
         "ALTER TABLE accounts ADD COLUMN callsign TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE accounts ADD COLUMN callsign_changed REAL",
         "UPDATE accounts SET callsign = substr(name, 1, 12)",
@@ -205,7 +206,7 @@ class SqliteStore:
             return None
         return Account(row[0], bytes(row[1]), bytes(row[2]), _kdf_from(row[4], row[3]))
 
-    def create(self, account: Account) -> bool:
+    def create(self, account: Account, callsign: str | None = None) -> bool:
         kdf, iterations = _kdf_columns(account.kdf)
         cursor = self._write(
             "INSERT OR IGNORE INTO accounts "
@@ -218,7 +219,7 @@ class SqliteStore:
                 iterations,
                 kdf,
                 self._now(),
-                account.name[: policy.MAX_CALLSIGN_LENGTH],
+                account.name[: policy.MAX_CALLSIGN_LENGTH] if callsign is None else callsign,
             ),
         )
         return cursor.rowcount == 1
@@ -231,13 +232,15 @@ class SqliteStore:
 
     def callsign_owner(self, callsign: str) -> str | None:
         # upper() folds ASCII only, as str.upper does on the ASCII a callsign is made of; the
-        # expression is spelled as the index's so the lookup uses it.
+        # expression is spelled as the index's so the lookup uses it. '' is no one's callsign.
+        if not callsign:
+            return None
         row = self._db.execute(
             "SELECT name FROM accounts WHERE upper(callsign) = ? LIMIT 1", (callsign.upper(),)
         ).fetchone()
         return None if row is None else str(row[0])
 
-    def set_callsign(self, name: str, callsign: str, changed: float) -> bool:
+    def set_callsign(self, name: str, callsign: str, changed: float | None) -> bool:
         cursor = self._write(
             "UPDATE accounts SET callsign = ?, callsign_changed = ? WHERE name = ?",
             (callsign, changed, name),
