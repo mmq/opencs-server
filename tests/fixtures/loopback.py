@@ -186,8 +186,16 @@ def frame(msg: ClientMessage) -> bytes:
     return build_frame(client_payload(msg), terminator=b"\x0a")
 
 
-async def enter(port: int, team: str, account: str = "JOINGENIE") -> tuple[Client, server.Session]:
-    c = await connect(port)
+async def enter(
+    port: int,
+    team: str,
+    account: str = "JOINGENIE",
+    *,
+    dial: Callable[[int], Awaitable[Client]] = connect,
+) -> tuple[Client, server.Session]:
+    """Log on and enter the game; ``dial`` makes the connection, for a test that needs a special
+    socket."""
+    c = await dial(port)
     await c.send(f"HHH\r{account}\r<Not Telling!>\rM 1380;3\r")
     await c.expect(b"\x05PRESS RETURN\r")
     await c.send("\r")

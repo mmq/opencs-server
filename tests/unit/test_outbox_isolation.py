@@ -69,7 +69,9 @@ def test_a_client_that_never_reads_is_cut_and_the_others_still_get_everything() 
             config, clock=clock, services=services, tick_sleep=gate.sleep
         )
         # Accounts, not guests: all three come from 127.0.0.1 (policy.MAX_GUESTS_PER_ADDRESS).
-        stalled, _ = await enter(port, "RED", "STALLED,secret")
+        stalled, _ = await enter(
+            port, "RED", "STALLED,secret", dial=connect_with_tiny_receive_buffer
+        )
         sender, _ = await enter(port, "RED", "SENDER,secret")
         watcher, _ = await enter(port, "RED", "WATCHER,secret")
         for c in (stalled, sender, watcher):
@@ -112,7 +114,9 @@ def test_shots_at_a_client_that_never_reads_are_shed_and_do_not_cut_it() -> None
         stop, task, port = await start(
             config, clock=clock, services=services, tick_sleep=gate.sleep
         )
-        stalled, _ = await enter(port, "RED", "STALLED,secret")
+        stalled, _ = await enter(
+            port, "RED", "STALLED,secret", dial=connect_with_tiny_receive_buffer
+        )
         sender, hello = await enter(port, "RED", "SENDER,secret")
         for c in (stalled, sender):
             await c.send(frame(report(4, x_off=75, z_off=75)))
