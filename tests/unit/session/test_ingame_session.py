@@ -166,6 +166,37 @@ def test_a_death_and_respawn_through_the_session() -> None:
     assert sent(h) == [server.ReleaseDrop(0)]
 
 
+def test_alternating_deaths_and_drop_requests_reach_the_others_only_within_the_budget() -> None:
+    # Each 'A' makes the pod able to die again, so without a budget every 'J' of the burst would
+    # land in every outbox, unshed.
+    world = make_world()
+    h1, h2 = play(world), play(world)
+    h1.feed(frame(report(4)) + frame(report(0)))
+    sent(h2)
+    pairs = 40  # 80 frames: well inside the frame bucket
+    h1.feed((frame(client.Died()) + frame(client.DropMe())) * pairs)
+    destroys = [m for m in sent(h2) if isinstance(m, server.Destroy)]
+    assert destroys == [server.Destroy(0)] * policy.RELAY_LIMIT_DEATH[0]
+    assert not h1.io.closed
+
+
+def test_honest_deaths_one_after_another_are_all_answered() -> None:
+    world = make_world()
+    h1, h2 = play(world), play(world)
+    h1.feed(frame(report(4)) + frame(report(1)) + frame(report(0)))
+    for _ in range(2 * int(policy.RELAY_LIMIT_DEATH[0])):
+        sent(h1)
+        sent(h2)
+        h1.feed(frame(client.Died()))
+        assert server.Destroy(0) in sent(h1)
+        assert server.Destroy(0) in sent(h2)
+        h1.advance(3.0)  # the fly-over
+        h1.feed(frame(report(4)) + frame(client.DropMe()))
+        assert server.ReleaseDrop(0) in sent(h1)
+        h1.advance(2.0)
+        h1.feed(frame(report(1)) + frame(report(0)))
+
+
 def test_an_exception_in_the_city_drops_the_request_and_keeps_the_connection() -> None:
     world = make_world()
     h = play(world)

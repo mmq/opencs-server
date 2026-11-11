@@ -42,4 +42,6 @@ class Budgets:
             client.AirSupport: TokenBucket(*policy.RELAY_LIMIT_EFFECT, now),
             client.PickupRequest: TokenBucket(*policy.RELAY_LIMIT_MODULE_OPS, now),
             client.EjectRequest: TokenBucket(*policy.RELAY_LIMIT_MODULE_OPS, now),
+            client.Died: TokenBucket(*policy.RELAY_LIMIT_DEATH, now),
+            client.DropMe: TokenBucket(*policy.RELAY_LIMIT_DROP_REQUEST, now),
         }

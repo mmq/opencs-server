@@ -617,6 +617,17 @@ RELAY_LIMIT_CHAT = (8, 2.0)
 CHAT_PER_ADDRESS = (12, 3.0)
 RELAY_LIMIT_GRENADE = (8, 4.0)
 
+#: Per-session limits on the client's bare ``'J'`` (its pod died, I §8.12) and bare ``'A'`` (drop me
+#: after the fly-over, I §8.3): token buckets ``(burst, per second)``, as ``RELAY_LIMIT_*`` above.
+#: Each accepted ``'J'`` sends ``'J' <id>`` to every client in the city and is never shed, and an
+#: ``'A'`` lets the pod die again, so a client alternating the two would otherwise broadcast at the
+#: frame rate. An honest client sends one of each per death, and a death, its fly-over and the drop
+#: take seconds, so these are far above honest play; the burst covers a backlog after a stall. The
+#: phase rules in ``world.pods`` are left as they are: a client that dies while dropping never
+#: finishes dying without its ``'J'``. Ours.
+RELAY_LIMIT_DEATH = (3, 0.5)
+RELAY_LIMIT_DROP_REQUEST = (4, 1.0)
+
 # --- Combat and scoring (I §9.1, I §9.2, I §9.2, II §9; DESIGN §3.1 ``combat``/``scoring``) ------
 
 #: Seconds from a client's ``'c'`` to the ``'I'`` its simulation reports for that shot. II §9.3:

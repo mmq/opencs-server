@@ -50,9 +50,10 @@ play testing.
   failsafe for a stranded guppy.
 - Graceful shutdown on SIGINT and SIGTERM that saves every player; `SIGHUP` or `reload` re-reads the city
   files without changing a running game.
-- Limits on connections, logons, account creation, idle time in the Chamber, in-game frame rate and bad
-  input, so one misbehaving client cannot harm another player's game (`docs/robustness.md`, with a
-  threat model). They last for the whole connection, not one phase of it:
+- Limits on connections, logons, account creation, idle time in the Chamber, in-game frame rate, each
+  kind of game message other players receive (deaths and drop requests among them) and bad input, so
+  one misbehaving client cannot harm another player's game (`docs/robustness.md`, with a threat
+  model). They last for the whole connection, not one phase of it:
   - connections per address (4), per /24 (12) and in all (128), a cap on connections not yet logged in,
     and a limit on how often one address reconnects;
   - refusals logged at most once a minute per address, in a line fail2ban can match;

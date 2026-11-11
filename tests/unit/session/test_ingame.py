@@ -16,6 +16,7 @@ from opencs.messages import (
     client_payload,
     decode_client,
 )
+from opencs.session.budgets import Budgets
 from opencs.session.ingame import InGamePhase
 from opencs.wire.frame import FrameReader, build_frame
 
@@ -252,6 +253,46 @@ def test_effect_requests_and_air_support_beyond_their_burst_are_dropped_and_tall
     assert len(seen) == 2 * burst
     assert h.session.phase._bad.total == 0  # type: ignore[attr-defined]
     assert h.session.phase.relay_drops == 4  # type: ignore[attr-defined]
+
+
+def test_deaths_and_drop_requests_beyond_their_burst_are_dropped_and_tallied() -> None:
+    # Each 'J' goes to every client and an 'A' lets the pod die again, so they are budgeted.
+    h, seen = relayed_in_game()
+    deaths, _ = policy.RELAY_LIMIT_DEATH
+    drops, _ = policy.RELAY_LIMIT_DROP_REQUEST
+    died = frame(client_payload(client.Died()))
+    drop_me = frame(client_payload(client.DropMe()))
+    h.feed(died * (deaths + 2))
+    h.feed(drop_me * (drops + 2))
+    assert len(seen) == deaths + drops
+    assert h.session.phase._bad.total == 0  # type: ignore[attr-defined]
+    assert h.session.phase.relay_drops == 4  # type: ignore[attr-defined]
+
+
+#: The client messages ``InGamePhase.handle`` passes to the city without a relay budget, and why
+#: none is needed. The frame bucket (``FRAME_LIMIT``) still bounds each.
+UNBUDGETED = {
+    client.Status: "answered to the sender alone, never relayed",
+    client.Bays: "mirrored into the sender's record, no events",
+    client.Drone: "not ruled: the city ignores it",
+    client.LegArrived: "bounded by the legs sent (owed); a dropped report puts the count behind",
+    client.ModuleRested: "recorded on the drop, no events",
+    client.ModuleUsedUp: "recorded in the ledger, no events",
+}
+
+#: The client messages ``InGamePhase.handle`` answers itself; they never reach the city.
+ANSWERED_HERE = {client.Ping, client.Quit, client.Acks, client.Flags, client.EchoReply}
+
+
+def test_every_client_message_the_city_is_handed_has_a_relay_budget_or_a_reason() -> None:
+    kinds = {
+        cls
+        for cls in vars(client).values()
+        if isinstance(cls, type) and issubclass(cls, ClientMessage) and cls is not ClientMessage
+    }
+    budgeted = set(Budgets(0.0).relay)
+    assert budgeted.isdisjoint(UNBUDGETED)
+    assert kinds - ANSWERED_HERE - set(UNBUDGETED) == budgeted
 
 
 def test_leg_reports_are_not_rate_limited_so_no_honest_count_can_be_cut_short() -> None:
