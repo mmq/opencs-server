@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from opencs import policy
 from opencs.config import CityConfig, RecordingConfig, RecordingRules
 from opencs.messages import client, client_payload, decode_client, decode_server, server
 from opencs.messages.limits import SYSTEM_SENDER
@@ -261,6 +262,20 @@ def test_rotation_starts_a_new_segment_with_a_keyframe(tmp_path: Path) -> None:
     assert two.complete and two.records[0].state() == {"floor": 2, "reason": "rotate"}
     assert two.records[-1].state() == {"reason": "shutdown"}
     assert read_segment_file(other).complete
+
+
+def test_a_segment_is_readable_by_the_group_whatever_the_umask(tmp_path: Path) -> None:
+    previous = os.umask(0o077)  # the unit's
+    try:
+        rec = recorder(tmp_path)
+        rec.start()
+        begin(rec, 0.0)
+        rec.end("A", 1.0, "empty")
+        rec.close()
+    finally:
+        os.umask(previous)
+    [path] = segments(tmp_path)
+    assert path.stat().st_mode & 0o777 == policy.RECORDING_FILE_MODE == 0o640
 
 
 def test_a_segment_left_open_by_a_crash_is_finished_at_start(tmp_path: Path) -> None:

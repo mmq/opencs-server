@@ -19,12 +19,15 @@ appended, so a segment cut short by a crash reads up to its last whole record (`
 Files are ``<letter>-<UTC time>.ocsrec.part`` while open and ``.ocsrec`` once finished. The
 archiver deletes a segment it has stored, or renames it ``.ocsrec.done``; only ``.done`` files are
 removed to keep the directory under its cap, so a recording not yet archived is never lost to it.
+A segment is made mode ``RECORDING_FILE_MODE`` (0640) whatever the umask, so the archiver can read
+it as a member of the server's group.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import shutil
 import threading
@@ -584,7 +587,7 @@ class Recorder:
         while any(path.with_name(path.name.removesuffix(PART) + end).exists() for end in ENDINGS):
             counter += 1
             path = self._directory / f"{letter}-{stamp}-{counter}{SUFFIX}{PART}"
-        handle = path.open("xb")
+        handle = _create(path)
         self._open[letter] = _Open(path, handle, now)
         header = {
             "server_version": __version__,
@@ -690,6 +693,18 @@ class Recorder:
             except OSError:
                 self._open.pop(letter, None)
                 log.warning("could not close the recording of city %s", letter, exc_info=True)
+
+
+def _create(path: Path) -> BinaryIO:
+    """A new segment file with mode ``RECORDING_FILE_MODE``, whatever the umask: ``fchmod`` is not
+    masked, as the mode given to ``open`` is."""
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, policy.RECORDING_FILE_MODE)
+    try:
+        os.fchmod(fd, policy.RECORDING_FILE_MODE)
+        return os.fdopen(fd, "wb")
+    except BaseException:
+        os.close(fd)
+        raise
 
 
 def _chat_style(message: ClientMessage | bytes) -> int | None:

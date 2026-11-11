@@ -67,6 +67,12 @@ DEFAULT_RECORDING_MIN_FREE_BYTES = 1_000_000_000
 #: with margin. Ours.
 RECORDING_SEGMENT_RESERVE = 1_000_000
 
+#: A segment file's mode, set whatever the umask (the unit's ``UMask=0077``): the server writes it
+#: and its group reads it, so the web's archiver, in that group, can (ADR 14). Who reaches the files
+#: is the directory's mode: 0700 keeps them the server's alone, 2770 lets the group read them and
+#: remove the ones it has archived. Ours.
+RECORDING_FILE_MODE = 0o640
+
 #: A city's recording starts a new segment, with a keyframe, this often, so playback can seek and
 #: a finished segment reaches the archiver soon. Ours (the web plan: about every 5 minutes).
 RECORDING_ROTATE_SECONDS = 300.0
