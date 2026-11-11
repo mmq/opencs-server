@@ -30,6 +30,7 @@ from opencs.cities import CityManager
 from opencs.config import ServiceConfig
 from opencs.control import Control
 from opencs.service import HELLO, ServiceServer
+from opencs.store.base import ARGON2ID
 from opencs.store.memory import memory_stores
 
 pytestmark = pytest.mark.skipif(not hasattr(socket, "AF_UNIX"), reason="needs Unix sockets")
@@ -316,6 +317,31 @@ def test_a_reset_over_the_channel_opens_an_account_the_guessers_locked(sock_dir:
             password = (await c.result("reset-password", name="alice"))["password"]
             again = enter_lobby(world, f"ALICE,{password}", address="10.6.0.1")
             assert again.session.pilot is not None
+
+    run(scenario())
+
+
+def test_a_password_the_web_chooses_meets_every_rule_and_is_hashed_with_argon2id(
+    sock_dir: Path,
+) -> None:
+    async def scenario() -> None:
+        async with running(sock_dir) as (path, world, _):
+            c = await hello(path)
+            await c.result("register", name="chooser", password="FIRST1")
+            for op in ("register", "reset-password"):
+                name = "NEWCOMER" if op == "register" else "CHOOSER"
+                for password, reason in (
+                    ("PASSWORD1", "THAT PASSWORD IS TOO COMMON"),
+                    (name, "A PASSWORD MUST NOT BE THE ACCOUNT NAME"),
+                ):
+                    reply = await c.ask(op, name=name, password=password)
+                    assert reply["error"] == "refused" and reply["message"].startswith(reason)
+            first = world.services.identity._store.get("CHOOSER")
+            await c.result("reset-password", name="CHOOSER")
+            again = world.services.identity._store.get("CHOOSER")
+            assert first is not None and again is not None
+            assert first.kdf.algorithm == again.kdf.algorithm == ARGON2ID
+            assert again.password_hash != first.password_hash
 
     run(scenario())
 
