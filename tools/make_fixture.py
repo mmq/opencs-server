@@ -1,4 +1,4 @@
-"""Turn one reference-server capture log into a compact fixture (dev tool, not part of the package).
+"""Turn one test-server capture log into a compact fixture (dev tool, not part of the package).
 
     uv run python tools/make_fixture.py LOG [-o OUT] [--source NAME] [--chamber] [--info-frames]
 

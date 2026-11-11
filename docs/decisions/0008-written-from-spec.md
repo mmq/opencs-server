@@ -6,7 +6,7 @@ OpenCS needs one source of truth for what a server must do. Code taken from anot
 
 ## Decision
 
-OpenCS is written from spec v1.0 alone. Captures of test servers are evidence for tests, never a source of code.
+OpenCS is written from spec v1.0 alone. Captures of test servers (servers built while OpenCS and its specification were being developed, never the original service) are evidence for tests, never a source of code.
 
 ## Consequences
 

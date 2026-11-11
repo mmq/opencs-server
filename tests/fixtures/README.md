@@ -5,7 +5,11 @@
 Frames and payloads copied from I App. A.1 and I App. A.2 (real captures, byte for byte). Used by the
 wire and message tests.
 
-## `captures/*.txt`: real traffic from a test server
+## `captures/*.txt`: real traffic from test servers
+
+A *test server* here is one of the servers built while OpenCS and its specification were
+being developed. These captures record the game client talking to those servers. None is a
+capture of the original service.
 
 Each file is one connection's game traffic, made by `tools/make_fixture.py` from a capture log of a
 test server (one log per run). Frames are never altered; only

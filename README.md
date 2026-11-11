@@ -103,7 +103,7 @@ uv run mypy                  # strict, on src/
 | level | what |
 |---|---|
 | unit | codecs and frames against the spec's own hex examples, every message round-tripped, every rule module with a manual clock |
-| replay | traffic captured from real client sessions (deaths, guppy legs, Muncher trips) driven through the world |
+| replay | traffic captured from the real client playing on development test servers (deaths, guppy legs, Muncher trips) driven through the world |
 | fuzz and long run | random and hostile input against the net and session layers; a simulated 48-hour city |
 | end to end | a real server on loopback, and the judge: two scripted pilots through the Chamber and a game, 19 checks (`tools/smoke.sh`, or `pytest -m judge`) |
 
