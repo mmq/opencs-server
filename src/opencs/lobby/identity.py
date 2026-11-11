@@ -42,8 +42,9 @@ class LoginGate(Protocol):
         ...
 
     def may_try_account(self, name: str) -> bool:
-        """Whether a password for account ``name`` may be checked now: not while its recent
-        failures are over their limit, whoever made them."""
+        """Whether a password for account ``name`` may be checked now: not while the recent
+        failures from this source, or from the sources its owner has not used, are over their
+        limit."""
         ...
 
     def account_failed(self, name: str) -> None:
@@ -51,7 +52,7 @@ class LoginGate(Protocol):
         ...
 
     def account_succeeded(self, name: str) -> None:
-        """The right password was given for ``name``: its failures are forgotten."""
+        """The right password was given for ``name``: this source's failures are forgotten."""
         ...
 
 

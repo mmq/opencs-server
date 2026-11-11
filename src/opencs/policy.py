@@ -244,12 +244,24 @@ LOGIN_ATTEMPTS_GLOBAL = (60, 10.0)
 NEW_ACCOUNTS_PER_ADDRESS = (3, 1 / 300)
 NEW_ACCOUNTS_GLOBAL = (10, 0.5)
 
-#: Wrong passwords for one account, from anywhere: a token bucket ``(burst, per second)``, spent
-#: only by a wrong password; while it is empty the account's logins are refused without a check,
-#: and a right password refills it. The per-address and global limits do not stop a guesser with
-#: many addresses aiming at one account; this does, and since it refills in minutes it cannot lock
-#: the owner out for long. Ours (DESIGN §5).
+#: Wrong passwords for one account from one source: a token bucket ``(burst, per second)``. While
+#: it is empty that source's logins to the account are refused without a check; a right password
+#: from the source refills it. A player mistypes a few times at most, and it refills in minutes.
+#: Ours (DESIGN §5).
+FAILED_LOGINS_PER_ACCOUNT_AND_SOURCE = (5, 1 / 60)
+
+#: Wrong passwords for one account from every source it has not been logged into from since the
+#: server started (``KNOWN_SOURCES_PER_ACCOUNT``): a token bucket ``(burst, per second)``. The
+#: per-source limits do not stop a guesser with many addresses aiming at one account; this does.
+#: A source the owner has logged in from is not held to it, so a guesser elsewhere cannot lock the
+#: owner out there; from a new source (or after a restart) the owner waits like anyone else until
+#: the guessing stops. Ours (DESIGN §5).
 FAILED_LOGINS_PER_ACCOUNT = (5, 1 / 60)
+
+#: Sources remembered per account as ones its owner has logged in from (in memory only, the most
+#: recent kept): home, work, a phone and one more. At most ``MAX_TRACKED_SOURCES`` accounts are
+#: remembered, the oldest forgotten first. Ours (DESIGN §5).
+KNOWN_SOURCES_PER_ACCOUNT = 4
 
 #: Threads that hash passwords (``PBKDF2_ITERATIONS``), so a login never stalls the event loop. A
 #: login waits for one of them; ``LOGIN_ATTEMPTS_GLOBAL`` bounds the queue. Ours (DESIGN §3.3).

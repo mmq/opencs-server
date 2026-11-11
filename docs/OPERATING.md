@@ -595,6 +595,9 @@ Anyone can connect any program to the game port, so before opening it to the int
 6. **Passwords.** The game sends them in plain text and nothing can change that, so tell players to use
    one they use nowhere else. The server stores only salted PBKDF2 hashes, refuses guessing per address,
    per account and server-wide, and hashes on its own threads, so a login flood cannot stall the games.
+   Guesses at an account from elsewhere do not lock its owner out of an address they have logged in from
+   since the server started; from a new address, or just after a restart, the owner may be refused until
+   the guessing stops. `reset-password` clears an account's limits.
 7. **Backups** (above), and an upgrade path you have tried (`tools/smoke.sh` after each one).
 
 What the server cannot defend against alone is in `docs/robustness.md`, "Threat model".

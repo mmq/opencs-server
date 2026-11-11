@@ -136,7 +136,7 @@ def test_wrong_passwords_for_one_account_are_limited_whatever_the_address() -> N
     assert refused(attempt(world, "OTHER,secret", "10.2.0.2"), b"PASSWORD: ")  # others unaffected
 
 
-def test_a_locked_account_opens_again_in_minutes_and_a_right_password_refills_it() -> None:
+def test_a_locked_account_opens_again_in_minutes() -> None:
     world = make_world()
     register(world, "VICTIM")
     burst, rate = policy.FAILED_LOGINS_PER_ACCOUNT
@@ -144,9 +144,70 @@ def test_a_locked_account_opens_again_in_minutes_and_a_right_password_refills_it
         attempt(world, "VICTIM,guess", f"10.1.{n}.1")
     world.clock.advance(1 / rate)
     assert refused(attempt(world, "VICTIM,secret", "10.2.0.1"), b"PASSWORD: ")
-    # The right password forgot the failures: a whole burst of them is allowed again.
-    outs = [attempt(world, "VICTIM,guess", f"10.3.{n}.1") for n in range(burst)]
-    assert all(refused(o, b"WRONG PASSWORD") for o in outs)
+
+
+def test_a_guesser_cannot_lock_the_owner_out_where_the_owner_has_logged_in() -> None:
+    world = make_world()
+    register(world, "VICTIM")
+    assert refused(attempt(world, "VICTIM,secret", "10.9.0.1"), b"PASSWORD: ")
+    burst = policy.FAILED_LOGINS_PER_ACCOUNT[0]
+    outs = [attempt(world, "VICTIM,guess", f"10.1.{n}.1") for n in range(burst * 2)]
+    assert refused(outs[-1], b"TOO MANY WRONG PASSWORDS")  # the guessers are stopped
+    assert refused(attempt(world, "VICTIM,guess", "10.1.0.1"), b"TOO MANY WRONG PASSWORDS")
+    assert refused(attempt(world, "VICTIM,secret", "10.9.0.1"), b"PASSWORD: ")  # the owner is not
+
+
+def test_wrong_passwords_from_a_source_the_owner_uses_are_still_limited() -> None:
+    world = make_world()
+    register(world, "VICTIM")
+    attempt(world, "VICTIM,secret", "10.9.0.1")
+    burst = policy.FAILED_LOGINS_PER_ACCOUNT_AND_SOURCE[0]
+    outs = [attempt(world, "VICTIM,guess", "10.9.0.1") for _ in range(burst + 1)]
+    assert all(refused(o, b"WRONG PASSWORD") for o in outs[:burst])
+    assert refused(outs[burst], b"TOO MANY WRONG PASSWORDS")
+
+
+def test_one_source_s_wrong_passwords_spend_nothing_of_another_known_source() -> None:
+    world = make_world()
+    register(world, "VICTIM")
+    attempt(world, "VICTIM,secret", "10.8.0.1")  # a housemate, say
+    attempt(world, "VICTIM,secret", "10.9.0.1")
+    for _ in range(policy.FAILED_LOGINS_PER_ACCOUNT_AND_SOURCE[0]):
+        attempt(world, "VICTIM,guess", "10.8.0.1")
+    assert refused(attempt(world, "VICTIM,secret", "10.9.0.1"), b"PASSWORD: ")
+
+
+def test_an_account_remembers_only_its_latest_sources() -> None:
+    clock = ManualClock(0.0)
+    limits = LoginLimits(clock)
+    sources = [f"10.9.0.{n}" for n in range(policy.KNOWN_SOURCES_PER_ACCOUNT + 1)]
+    for source in sources:
+        limits.account_succeeded("VICTIM", source)
+    for n in range(policy.FAILED_LOGINS_PER_ACCOUNT[0]):
+        limits.account_failed("VICTIM", f"10.1.{n}.1")
+    assert not limits.may_try_account(
+        "VICTIM", sources[0]
+    )  # forgotten: held to the guessers' limit
+    assert all(limits.may_try_account("VICTIM", s) for s in sources[1:])
+
+
+def test_the_table_of_known_sources_is_bounded() -> None:
+    limits = LoginLimits(ManualClock(0.0))
+    for n in range(policy.MAX_TRACKED_SOURCES * 2):
+        limits.account_succeeded(f"ACCT{n}", "10.9.0.1")
+    assert len(limits._known) <= policy.MAX_TRACKED_SOURCES
+
+
+def test_forgetting_an_account_forgets_its_failures_and_sources() -> None:
+    limits = LoginLimits(ManualClock(0.0))
+    limits.account_succeeded("VICTIM", "10.9.0.1")
+    for _ in range(policy.FAILED_LOGINS_PER_ACCOUNT_AND_SOURCE[0]):
+        limits.account_failed("VICTIM", "10.9.0.1")
+    for n in range(policy.FAILED_LOGINS_PER_ACCOUNT[0]):
+        limits.account_failed("VICTIM", f"10.1.{n}.1")
+    limits.forget_account("VICTIM")
+    assert limits.may_try_account("VICTIM", "10.9.0.1")
+    assert limits.may_try_account("VICTIM", "10.2.0.1")
 
 
 def test_a_refused_check_spends_nothing_from_the_account() -> None:

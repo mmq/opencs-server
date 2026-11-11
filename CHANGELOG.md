@@ -21,8 +21,9 @@ play testing.
 - Accounts and progress are saved and restored, and `/SCORE` and `/WHO <callsign>` show the record.
   Guests are never saved.
 - New accounts take a name of 3 to 12 letters, digits, `_` or `-` (a few, such as `ADMIN`, are reserved)
-  and a password of at least 6 characters. Five wrong passwords lock an account for a few minutes,
-  wherever they come from. Accounts never played are removed after 30 days.
+  and a password of at least 6 characters. Five wrong passwords lock an account for a few minutes
+  from that address, and five from addresses its owner has not logged in from lock it for all of those;
+  guessing elsewhere never locks the owner out of an address they have logged in from. Accounts never played are removed after 30 days.
 - A dropped line from a real account holds the game for 10 minutes, and `/RESUME` brings it back (3 minutes
   to type it once you are in the Chamber again). A drop within 20 seconds of an attack counts as a death.
 - Callsigns are up to 12 characters. A duplicate gets a number from 2 to 999 (`JOINGENIE`, `JOINGENIE2`).

@@ -234,6 +234,7 @@ class Control:
         result = self._services.identity.reset_password(name)
         if isinstance(result, Refused):
             return [f"refused: {result.reason}"]
+        self._services.login_limits.forget_account(name.upper())
         log.info("password of %s reset by the operator", name.upper())
         return [f"new password for {name.upper()} (shown once): {result}"]
 

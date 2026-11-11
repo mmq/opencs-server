@@ -379,6 +379,19 @@ def test_the_operator_resets_a_password(caplog: pytest.LogCaptureFixture) -> Non
     assert ctl.execute("reset-password NOBODY") == ["refused: NO SUCH ACCOUNT"]
 
 
+def test_a_reset_password_opens_an_account_the_guessers_locked() -> None:
+    world = make_world()
+    ctl, _ = control(world)
+    enter_lobby(world, "ALICE,oldsecret").session.closed()
+    for n in range(policy.FAILED_LOGINS_PER_ACCOUNT[0]):
+        connect(world, address=f"10.7.{n}.1").feed("HHH\rALICE,guess\r")
+    locked = connect(world, address="10.6.0.1")
+    locked.feed("HHH\rALICE,oldsecret\r")
+    assert b"TOO MANY WRONG PASSWORDS" in locked.take()
+    password = ctl.execute("reset-password alice")[0].rsplit(" ", 1)[1]
+    assert enter_lobby(world, f"ALICE,{password}", address="10.6.0.1").session.pilot is not None
+
+
 def test_progress_and_accounts_are_wiped_only_while_the_player_is_offline() -> None:
     world = make_world()
     ctl, _ = control(world)

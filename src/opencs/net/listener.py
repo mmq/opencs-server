@@ -137,7 +137,7 @@ class Listener:
         self._clock = clock
         self._sleep = sleep
         self._limits = limits
-        self._connect_rate = KeyedBuckets(*limits.connect_rate)
+        self._connect_rate: KeyedBuckets[str] = KeyedBuckets(*limits.connect_rate)
         self._refusals = RefusalLog(clock)
         self._ids = itertools.count(1)
         self._connections: dict[int, Connection] = {}  # oldest first

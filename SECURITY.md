@@ -34,6 +34,8 @@ threat model, [`docs/robustness.md`](docs/robustness.md#threat-model)):
 - passwords travel in plain text: the client cannot encrypt;
 - scores, bays, hits and positions are reported by the client and can be cheated;
 - account names can be probed at logon;
+- someone guessing an account's password can keep its owner out until the guessing stops, from an address
+  the owner has not logged in from since the server started;
 - floods large enough to saturate the network, which only the host's provider and firewall can stop.
 
 If you find a way to make one of these worse than the threat model says, that is in scope.
