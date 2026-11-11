@@ -470,3 +470,20 @@ def test_unplayed_accounts_are_pruned_but_not_played_or_online_ones() -> None:
         "RECENT",
     }
     identity.release(online)
+
+
+@pytest.mark.parametrize("made_up", [None, "NEWPILOT", "PASSWORD1"])
+def test_a_password_the_server_makes_up_is_never_refused_by_the_rules_for_chosen_ones(
+    made_up: str | None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A minimum an operator may set is above the made-up length; and a made-up password that
+    # happened to be the name or a common one would be no guess an attacker could make.
+    if made_up is not None:
+        monkeypatch.setattr("opencs.lobby.identity.make_password", lambda: made_up)
+    identity = Identity(MemoryAccountStore(), kdf=FAST, min_password_length=12)
+    assert policy.GENERATED_PASSWORD_LENGTH < 12
+    made = identity.register("NEWPILOT")
+    assert not isinstance(made, Refused), made
+    assert pilot(identity.login(f"NEWPILOT,{made[1]}")).account == "NEWPILOT"
+    refused = identity.register("OTHER", "SHORT1")  # a chosen one is held to them
+    assert isinstance(refused, Refused) and "12 CHARACTERS" in refused.reason

@@ -283,12 +283,15 @@ class Identity:
 
     # --- accounts, outside a login -----------------------------------------------------------
 
-    def new_account_refusal(self, name: str, password: str) -> Refused | None:
+    def new_account_refusal(self, name: str, password: str | None) -> Refused | None:
         """Why ``name`` (upper case) with ``password`` cannot be a new account, None if it can:
-        every rule a registration must pass, wherever it comes from (a first login now; a
-        registration command or page later). It does not look at the limits on how often."""
+        every rule a registration must pass, wherever it comes from (a first login, the
+        operator). It does not look at the limits on how often. A password the server made up
+        (None here) is not held to the rules for a chosen one: they guard against a player's poor
+        choice, and ``min_password_length`` may be above its length."""
         if (
-            reason := self._new_name_problem(name) or self._new_password_problem(name, password)
+            reason := self._new_name_problem(name)
+            or (None if password is None else self._new_password_problem(name, password))
         ) is not None:
             return Refused(reason)
         if self._store.count() >= self._max_accounts:
@@ -342,14 +345,14 @@ class Identity:
         registration command or page), hashing here and now. Without ``password`` one is made up.
         Returns the account and its password, to be shown once and never logged."""
         name = name.strip().upper()
-        if password is None:
-            password = make_password()
-        elif (reason := _untypeable(password)) is not None:
+        if password is not None and (reason := _untypeable(password)) is not None:
             return Refused(reason)
         if self._store.get(name) is not None:
             return Refused("THAT NAME IS TAKEN")
         if (refusal := self.new_account_refusal(name, password)) is not None:
             return refusal
+        if password is None:
+            password = make_password()
         account = self._new_hash(name, password)
         if not self._store.create(account):
             return Refused("THAT NAME IS TAKEN")
