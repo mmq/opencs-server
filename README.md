@@ -1,5 +1,7 @@
 # OpenCS
 
+[![CI](https://github.com/mmq/opencs-server/actions/workflows/ci.yml/badge.svg)](https://github.com/mmq/opencs-server/actions/workflows/ci.yml)
+
 OpenCS is a server for *CyberStrike*, the online game Simutronics launched on GEnie in 1993 and later
 ran on America Online and play.net. The original GEnie DOS client connects to it unchanged, so the game
 can be played again over the internet. It implements the [CyberStrike Server

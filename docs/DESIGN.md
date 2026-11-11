@@ -164,6 +164,8 @@ tools/
   judge.py               the black-box conformance check, 19 checks
   smoke.sh               start a throwaway server and run the judge
   make_fixture.py        turn a capture log into a replay fixture
+.github/workflows/
+  ci.yml                 lint, types and tests on 3.12 and 3.13, and the smoke test
 ```
 
 ### 3.2 How a message flows
