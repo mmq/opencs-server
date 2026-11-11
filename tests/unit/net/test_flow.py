@@ -61,6 +61,53 @@ def test_a_tag_seen_again_after_wrapping_means_the_new_frame() -> None:
     assert w.worst_delay == 999.0 - (240 * 3 - 1)
 
 
+class _CountedTag(int):
+    """A tag that counts how often it is compared, to measure how hard the window searches."""
+
+    compared = 0
+
+    def __eq__(self, other: object) -> bool:
+        _CountedTag.compared += 1
+        return int(self) == other
+
+    def __ne__(self, other: object) -> bool:
+        return not self.__eq__(other)
+
+    __hash__ = int.__hash__
+
+
+def test_a_frame_of_unknown_tags_costs_no_search_of_a_full_window() -> None:
+    w = AckWindow(1_000_000, PROBE)
+    sent = [0x10 + i for i in range(AckWindow.MAX_OUTSTANDING)]
+    for tag in sent:
+        w.wrote(10, _CountedTag(tag), 0.0)
+    unknown = [t for t in range(256) if t not in sent]
+    frame = bytes(unknown[i % len(unknown)] for i in range(233))  # as many as a frame holds
+    _CountedTag.compared = 0
+    assert not w.acked(frame, 1.0)
+    assert _CountedTag.compared == 0
+    assert w.unacked == 10 * AckWindow.MAX_OUTSTANDING
+
+
+def test_a_known_tag_is_found_by_comparing_only_what_it_vouches_for() -> None:
+    w = AckWindow(1_000_000, PROBE)
+    for i in range(AckWindow.MAX_OUTSTANDING):
+        w.wrote(10, _CountedTag(0x10 + i), 0.0)
+    _CountedTag.compared = 0
+    assert w.acked(bytes([0x10 + 50]), 1.0)
+    assert _CountedTag.compared <= 52  # the 51 it vouches for, and the look-up
+    assert w.unacked == 10 * (AckWindow.MAX_OUTSTANDING - 51)
+
+
+def test_only_the_last_tags_of_a_frame_are_read() -> None:
+    w = AckWindow(1000, PROBE)
+    w.wrote(100, 0x10, 0.0)
+    frame = bytes([0x10] + [0x77] * policy.MAX_ACK_TAGS)
+    assert not w.acked(frame, 1.0)
+    assert w.unacked == 100
+    assert w.acked(frame[: policy.MAX_ACK_TAGS], 1.0)
+
+
 def test_the_peak_and_the_worst_delay_are_kept() -> None:
     w = AckWindow(1000, PROBE)
     w.wrote(300, 0x10, 5.0)

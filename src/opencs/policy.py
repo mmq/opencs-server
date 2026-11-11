@@ -190,6 +190,10 @@ ACK_PROBE_BYTES = 384
 #: takes to load and start acknowledging. Ours (ADR 11).
 ACK_STALL_SECONDS = 5.0
 
+#: Tags read from one acknowledgement frame. The client sends at most 11 (I §8.26); a frame can hold
+#: 233, and each is looked up in the window. Ours (ADR 11).
+MAX_ACK_TAGS = 16
+
 #: Items queued for one client past which another player's relayed shot is not queued for it if it
 #: was fired beyond ``SHOT_KEEP_FEET``, and past which none is. A shot is only something to see:
 #: the client that fired it reports the hit (I §9.1), so the damage still lands. Above the ~16

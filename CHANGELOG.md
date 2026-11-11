@@ -59,6 +59,8 @@ play testing.
     and a limit on how often one address reconnects;
   - refusals logged at most once a minute per address, in a line fail2ban can match;
   - password checks on worker threads, so a burst of logins never delays a game.
+  - at most 16 tags read from one acknowledgement frame, each found without searching what is
+    awaiting acknowledgement, so frames of made-up tags cannot keep the server busy.
 - `registration = "open" | "closed"`, a cap on the number of accounts, and an optional `[limits]` table
   in `server.toml` to tune the security limits (for example behind a shared NAT).
 - Admin commands `accounts`, `create-account`, `reset-password`, `reset-progress` and
