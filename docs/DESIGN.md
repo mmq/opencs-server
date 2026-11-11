@@ -328,6 +328,7 @@ One file each; [the index](decisions/README.md) has the same list.
 12. [A web front end runs in its own process and reaches the server over a service channel](decisions/0012-web-front-end-over-a-service-channel.md).
 13. [Argon2id for passwords](decisions/0013-argon2id-for-passwords.md).
 14. [Games are recorded as append-only segments of wire payloads](decisions/0014-games-recorded-as-segments.md).
+15. [Archived recordings are one-minute chunks, transformed, then compressed with xz](decisions/0015-archive-chunks-predicted-then-xz.md).
 
 ## 10. Naming and trademarks
 

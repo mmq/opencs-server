@@ -5,8 +5,10 @@ own SQLite database. It talks to the game server only over the service channel (
 game recorder's segments (ADR 14); it never opens the server's `opencs.db`. Its dependencies are its
 own: the server still needs only `argon2-cffi`.
 
-So far this is a skeleton: settings, a `/healthz` page and the `opencs-web` command. The recording
-archiver, the public pages, registration and administration come next.
+So far this is a skeleton: settings, a `/healthz` page and the `opencs-web` command, and the start of
+the recording archiver: `opencs_web.recordings` cuts segments into one-minute chunks and transforms
+them losslessly before compression (ADR 15). The archiver itself, the public pages, registration and
+administration come next.
 
 ## Settings
 
@@ -36,4 +38,13 @@ From the repository root:
 uv run pytest web
 uv run mypy --config-file web/pyproject.toml
 uv run ruff check . && uv run ruff format --check .   # covers web/ too
+```
+
+## Compression benchmark
+
+`benchmarks/compression.py` compares compressors for the archive per one-minute chunk, on a directory
+of recorded segments (ADR 15 has the results). Its compressors are in the `benchmark` group:
+
+```sh
+uv run --package opencs-web --group benchmark python web/benchmarks/compression.py DIR --memory
 ```

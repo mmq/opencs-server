@@ -50,8 +50,8 @@ What is left out, because it can be worked out again or says nothing about the g
 - the `'B'` load and its repeats, and everything from the logon: a join is a PLAYER record.
 
 The server does not compress. Compression is the archiver's job, off the game's machine time, and its
-method is to be chosen by measuring real recordings; raw records keep the writer simple and a cut file
-readable.
+method was chosen by measuring real recordings (ADR 15); raw records keep the writer simple and a cut
+file readable.
 
 **Crash safety.** Records are only appended and each is length-prefixed. A reader takes every whole record
 and stops at the first incomplete one or at a zero byte where a kind should be (a zero-filled tail after a
