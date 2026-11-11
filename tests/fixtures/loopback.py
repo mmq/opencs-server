@@ -127,6 +127,25 @@ class Client:
             seen = [f.payload[:1] for f in self._parsed]
             raise AssertionError(f"no {letter!r} frame; unclaimed frames: {seen!r}") from None
 
+    async def frames_until(self, letter: str) -> list[ServerMessage]:
+        """Read until a server frame of this type letter has arrived; return it and every frame
+        before it, decoded, in order."""
+        want = letter.encode()
+
+        async def find() -> list[ServerMessage]:
+            while True:
+                for i, frame in enumerate(self._parsed):
+                    if frame.payload[:1] == want:
+                        taken, self._parsed = self._parsed[: i + 1], self._parsed[i + 1 :]
+                        return [decode_server(f.payload)[0] for f in taken]
+                await self._receive()
+
+        try:
+            return await asyncio.wait_for(find(), TIMEOUT)
+        except TimeoutError:
+            seen = [f.payload[:1] for f in self._parsed]
+            raise AssertionError(f"no {letter!r} frame; unclaimed frames: {seen!r}") from None
+
     async def enter_chamber(self, reply: str = "\r", callsign: str = "") -> None:
         """Answer the version check with ``reply`` and, for a new account, the callsign prompt
         with ``callsign`` (Return keeps the name); return once the Chamber's buttons are up."""
