@@ -166,9 +166,10 @@ class Pilots:
     @classmethod
     def random(cls) -> Pilots:
         """Accounts that cannot collide with a real player's, and that nobody else can log in to
-        (for a server that outlives the run). Within the 8 characters the fake client keeps."""
+        (for a server that outlives the run). Names within the 8 characters the fake client keeps;
+        a password of 12, the most a new account may have (48 random bits)."""
         suffix = "".join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(3))
-        return cls("ALPHA" + suffix, "BRAVO" + suffix, secrets.token_hex(8).upper())
+        return cls("ALPHA" + suffix, "BRAVO" + suffix, secrets.token_hex(6).upper())
 
     def normalise(self, output: str) -> str:
         return output.replace(self.alpha, "ALPHA").replace(self.bravo, "BRAVO")

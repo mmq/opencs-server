@@ -1,4 +1,4 @@
-"""The judge's ``--checks`` syntax (tools/judge.py)."""
+"""The judge's ``--checks`` syntax and its random accounts (tools/judge.py)."""
 
 from __future__ import annotations
 
@@ -8,6 +8,9 @@ import sys
 from pathlib import Path
 
 import pytest
+
+from opencs.lobby.identity import Identity
+from opencs.store.memory import MemoryAccountStore
 
 SPEC = importlib.util.spec_from_file_location(
     "judge", Path(__file__).parents[2] / "tools" / "judge.py"
@@ -39,7 +42,7 @@ def test_random_pilots_cannot_collide_with_real_accounts() -> None:
         assert pilots.alpha.startswith("ALPHA") and pilots.bravo.startswith("BRAVO")
         assert pilots.alpha != "ALPHA" and pilots.bravo != "BRAVO"
         assert len(pilots.alpha) == len(pilots.bravo) == 8  # the fake client keeps 8 characters
-        assert len(pilots.password) >= 16 and pilots.password != judge.DEFAULT_PASSWORD
+        assert len(pilots.password) == 12 and pilots.password != judge.DEFAULT_PASSWORD
 
 
 def test_fixed_pilots_are_alpha_and_bravo() -> None:
@@ -68,3 +71,13 @@ def test_the_fake_client_takes_a_password() -> None:
     fake_spec.loader.exec_module(fake)
     assert fake.parse_args([]).password == "FAKECLIENT"
     assert fake.parse_args(["--password", "s3cret"]).password == "s3cret"
+
+
+def test_the_random_accounts_are_ones_a_server_registers() -> None:
+    # Against a running server the judge registers its two accounts at their first login, so they
+    # must pass the rules for a new account, a 12-character password at most among them.
+    identity = Identity(MemoryAccountStore())
+    for _ in range(50):
+        pilots = judge.Pilots.random()
+        for name in (pilots.alpha, pilots.bravo):
+            assert identity.new_account_refusal(name, pilots.password) is None, pilots
