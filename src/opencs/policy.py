@@ -244,10 +244,11 @@ LOGIN_ATTEMPTS_GLOBAL = (60, 10.0)
 NEW_ACCOUNTS_PER_ADDRESS = (3, 1 / 300)
 NEW_ACCOUNTS_GLOBAL = (10, 0.5)
 
-#: Wrong passwords for one account from one source: a token bucket ``(burst, per second)``. While
-#: it is empty that source's logins to the account are refused without a check; a right password
-#: from the source refills it. A player mistypes a few times at most, and it refills in minutes.
-#: Ours (DESIGN §5).
+#: Wrong passwords for one account from one source: a token bucket ``(burst, per second)``. Each
+#: check spends a token as it starts, so checks made at once cannot all slip past, and a right
+#: password gives it back. While it is empty that source's logins to the account are refused
+#: without a check; a right password from the source refills it. A player mistypes a few times at
+#: most, and it refills in minutes. Ours (DESIGN §5).
 FAILED_LOGINS_PER_ACCOUNT_AND_SOURCE = (5, 1 / 60)
 
 #: Wrong passwords for one account from every source it has not been logged into from since the

@@ -44,15 +44,18 @@ class LoginGate(Protocol):
     def may_try_account(self, name: str) -> bool:
         """Whether a password for account ``name`` may be checked now: not while the recent
         failures from this source, or from the sources its owner has not used, are over their
-        limit."""
+        limit. A yes spends one, before the check, so checks running at once cannot all pass;
+        a wrong password keeps it spent."""
         ...
 
-    def account_failed(self, name: str) -> None:
-        """A wrong password was given for ``name``."""
+    def account_not_tried(self, name: str) -> None:
+        """No password for ``name`` was checked after all: what ``may_try_account`` spent comes
+        back."""
         ...
 
     def account_succeeded(self, name: str) -> None:
-        """The right password was given for ``name``: this source's failures are forgotten."""
+        """The right password was given for ``name``: what ``may_try_account`` spent comes back,
+        and this source's failures are forgotten."""
         ...
 
 
@@ -194,11 +197,11 @@ class Identity:
         if check.stored is None:
             account = Account(check.name, check.salt, digest, check.iterations)
             if not self._store.create(account):
+                if gate is not None:
+                    gate.account_not_tried(check.name)  # a lost race to register, not a guess
                 return Refused("THAT NAME WAS JUST TAKEN: TRY AGAIN")
         elif not hmac.compare_digest(check.stored.password_hash, digest):
-            if gate is not None:
-                gate.account_failed(check.name)
-            return Refused("WRONG PASSWORD")
+            return Refused("WRONG PASSWORD")  # the guess stays spent
         if gate is not None:
             gate.account_succeeded(check.name)
         if check.name in self._accounts:
@@ -324,6 +327,14 @@ class Identity:
     def _account(self, name: str, password: str, gate: LoginGate | None) -> Refused | PasswordCheck:
         if (refusal := self._refuse_account(name, password, gate)) is not None:
             return refusal
+        result = self._check_or_register(name, password, gate)
+        if isinstance(result, Refused) and gate is not None:
+            gate.account_not_tried(name)  # refused before any hashing
+        return result
+
+    def _check_or_register(
+        self, name: str, password: str, gate: LoginGate | None
+    ) -> Refused | PasswordCheck:
         account = self._store.get(name)
         if account is not None:
             return PasswordCheck(name, password, account.salt, account.iterations, account)
@@ -348,6 +359,7 @@ class Identity:
         if gate is not None and not gate.may_try_account(name):
             return Refused("TOO MANY WRONG PASSWORDS FOR THAT ACCOUNT: WAIT A FEW MINUTES")
         if gate is not None and not gate.may_check_password():
+            gate.account_not_tried(name)
             return Refused("TOO MANY LOGIN ATTEMPTS: WAIT A MOMENT")
         return None
 

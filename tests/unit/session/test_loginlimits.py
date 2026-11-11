@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fixtures.sessions import World, connect, make_world
+from fixtures.sessions import DeferredHasher, World, connect, make_world
 from opencs import policy
 from opencs.clock import ManualClock
 from opencs.lobby.identity import Pilot
@@ -29,6 +29,11 @@ def register(world: World, *names: str) -> None:
 
 def refused(out: bytes, fragment: bytes) -> bool:
     return fragment in out
+
+
+def told_wrong(out: bytes) -> bool:
+    """The password was checked and was wrong (not refused unchecked)."""
+    return b"WRONG PASSWORD" in out and b"TOO MANY" not in out
 
 
 def test_one_address_is_limited_in_password_checks_across_connections() -> None:
@@ -130,7 +135,7 @@ def test_wrong_passwords_for_one_account_are_limited_whatever_the_address() -> N
     register(world, "VICTIM", "OTHER")
     burst = policy.FAILED_LOGINS_PER_ACCOUNT[0]
     outs = [attempt(world, "VICTIM,guess", f"10.1.{n}.1") for n in range(burst + 1)]
-    assert all(refused(o, b"WRONG PASSWORD") for o in outs[:burst])
+    assert all(told_wrong(o) for o in outs[:burst])
     assert refused(outs[burst], b"TOO MANY WRONG PASSWORDS FOR THAT ACCOUNT")
     assert refused(attempt(world, "VICTIM,secret", "10.2.0.1"), b"TOO MANY WRONG")  # even the owner
     assert refused(attempt(world, "OTHER,secret", "10.2.0.2"), b"PASSWORD: ")  # others unaffected
@@ -163,7 +168,7 @@ def test_wrong_passwords_from_a_source_the_owner_uses_are_still_limited() -> Non
     attempt(world, "VICTIM,secret", "10.9.0.1")
     burst = policy.FAILED_LOGINS_PER_ACCOUNT_AND_SOURCE[0]
     outs = [attempt(world, "VICTIM,guess", "10.9.0.1") for _ in range(burst + 1)]
-    assert all(refused(o, b"WRONG PASSWORD") for o in outs[:burst])
+    assert all(told_wrong(o) for o in outs[:burst])
     assert refused(outs[burst], b"TOO MANY WRONG PASSWORDS")
 
 
@@ -184,11 +189,10 @@ def test_an_account_remembers_only_its_latest_sources() -> None:
     for source in sources:
         limits.account_succeeded("VICTIM", source)
     for n in range(policy.FAILED_LOGINS_PER_ACCOUNT[0]):
-        limits.account_failed("VICTIM", f"10.1.{n}.1")
-    assert not limits.may_try_account(
-        "VICTIM", sources[0]
-    )  # forgotten: held to the guessers' limit
-    assert all(limits.may_try_account("VICTIM", s) for s in sources[1:])
+        limits.try_account("VICTIM", f"10.1.{n}.1")
+    # The oldest was forgotten, so it is held to the guessers' limit; the others are not.
+    assert limits.try_account("VICTIM", sources[0]) is None
+    assert all(limits.try_account("VICTIM", s) is not None for s in sources[1:])
 
 
 def test_the_table_of_known_sources_is_bounded() -> None:
@@ -202,12 +206,12 @@ def test_forgetting_an_account_forgets_its_failures_and_sources() -> None:
     limits = LoginLimits(ManualClock(0.0))
     limits.account_succeeded("VICTIM", "10.9.0.1")
     for _ in range(policy.FAILED_LOGINS_PER_ACCOUNT_AND_SOURCE[0]):
-        limits.account_failed("VICTIM", "10.9.0.1")
+        limits.try_account("VICTIM", "10.9.0.1")
     for n in range(policy.FAILED_LOGINS_PER_ACCOUNT[0]):
-        limits.account_failed("VICTIM", f"10.1.{n}.1")
+        limits.try_account("VICTIM", f"10.1.{n}.1")
     limits.forget_account("VICTIM")
-    assert limits.may_try_account("VICTIM", "10.9.0.1")
-    assert limits.may_try_account("VICTIM", "10.2.0.1")
+    assert limits.try_account("VICTIM", "10.9.0.1") is not None
+    assert limits.try_account("VICTIM", "10.2.0.1") is not None
 
 
 def test_a_refused_check_spends_nothing_from_the_account() -> None:
@@ -217,3 +221,57 @@ def test_a_refused_check_spends_nothing_from_the_account() -> None:
         attempt(world, "VICTIM,guess", f"10.1.{n}.1")
     world.clock.advance(1 / policy.FAILED_LOGINS_PER_ACCOUNT[1])  # one failure's worth
     assert refused(attempt(world, "VICTIM,secret", "10.2.0.1"), b"PASSWORD: ")
+
+
+# --- guesses at once ---------------------------------------------------------------------------
+
+
+def test_guesses_made_at_once_are_charged_before_any_is_hashed() -> None:
+    hasher = DeferredHasher()
+    world = make_world(hasher=hasher)
+    register(world, "VICTIM")
+    guessers = [connect(world) for _ in range(policy.LOGIN_ATTEMPTS_GLOBAL[0])]
+    for h in guessers:
+        h.feed("HHH\rVICTIM,guess\r")
+    burst = policy.FAILED_LOGINS_PER_ACCOUNT[0]
+    assert len(hasher.waiting) == burst
+    hasher.run()
+    outs = [h.take() for h in guessers]
+    locked = sum(refused(o, b"TOO MANY WRONG PASSWORDS") for o in outs)
+    assert locked == len(guessers) - burst  # the rest were each told the password was wrong
+
+
+def test_a_right_password_gives_its_charge_back() -> None:
+    world = make_world()
+    register(world, "VICTIM")
+    burst = policy.FAILED_LOGINS_PER_ACCOUNT[0]
+    for n in range(burst - 1):
+        attempt(world, "VICTIM,guess", f"10.1.{n}.1")
+    assert refused(attempt(world, "VICTIM,secret", "10.2.0.1"), b"PASSWORD: ")
+    assert told_wrong(attempt(world, "VICTIM,guess", "10.3.0.1"))  # the last one
+    assert refused(attempt(world, "VICTIM,guess", "10.3.1.1"), b"TOO MANY WRONG PASSWORDS")
+
+
+def test_a_check_the_address_may_not_make_charges_nothing_to_the_account() -> None:
+    world = make_world()
+    burst = policy.LOGIN_ATTEMPTS_PER_ADDRESS[0]
+    register(world, "VICTIM", *(f"ACCT{n}" for n in range(burst)))
+    for n in range(burst):
+        attempt(world, f"ACCT{n},wrong", "1.1.1.1")
+    for _ in range(policy.FAILED_LOGINS_PER_ACCOUNT[0] * 2):
+        assert refused(attempt(world, "VICTIM,guess", "1.1.1.1"), b"TOO MANY LOGIN ATTEMPTS")
+    guesses = policy.FAILED_LOGINS_PER_ACCOUNT[0]
+    outs = [attempt(world, "VICTIM,guess", f"10.1.{n}.1") for n in range(guesses)]
+    assert all(told_wrong(o) for o in outs)
+
+
+def test_a_guess_whose_player_hung_up_during_the_check_stays_charged() -> None:
+    hasher = DeferredHasher()
+    world = make_world(hasher=hasher)
+    register(world, "VICTIM")
+    for n in range(policy.FAILED_LOGINS_PER_ACCOUNT[0]):
+        h = connect(world, address=f"10.1.{n}.1")
+        h.feed("HHH\rVICTIM,guess\r")
+        h.session.closed()
+    hasher.run()
+    assert refused(attempt(world, "VICTIM,guess", "10.3.0.1"), b"TOO MANY WRONG PASSWORDS")

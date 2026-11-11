@@ -40,6 +40,11 @@ class TokenBucket:
         self._tokens -= 1.0
         return True
 
+    def give_back(self, now: float) -> None:
+        """Return a token a ``take`` spent on something that did not happen after all."""
+        self._tokens = min(self._capacity, self._tokens + max(0.0, now - self._at) * self._rate + 1)
+        self._at = now
+
 
 class KeyedBuckets[K: Hashable]:
     """One ``TokenBucket`` per key (an address, say), created on first use.
@@ -67,6 +72,13 @@ class KeyedBuckets[K: Hashable]:
         nothing (a key never seen has a full bucket)."""
         bucket = self._buckets.get(key)
         return bucket is None or bucket.has_token(now)
+
+    def give_back(self, key: K, now: float) -> None:
+        """Return a token ``take`` spent for ``key``; nothing if its bucket was dropped since (it
+        starts full)."""
+        bucket = self._buckets.get(key)
+        if bucket is not None:
+            bucket.give_back(now)
 
     def forget(self, key: K) -> None:
         """Drop ``key``'s bucket: it starts full again."""

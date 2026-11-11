@@ -14,10 +14,21 @@ to ``Identity`` is made per attempt.
 from __future__ import annotations
 
 from collections import Counter
+from dataclasses import dataclass
 
 from opencs import policy
 from opencs.clock import Clock
 from opencs.ratelimit import KeyedBuckets, TokenBucket
+
+
+@dataclass(frozen=True, slots=True)
+class Guess:
+    """A password check charged to account ``name`` from ``source``; ``shared`` if it was charged
+    to the allowance of the sources the account has not logged in from too."""
+
+    name: str
+    source: str
+    shared: bool
 
 
 class LoginLimits:
@@ -49,24 +60,34 @@ class LoginLimits:
             str, list[str]
         ] = {}  # account: the sources it logged in from, oldest first
 
-    def may_try_account(self, name: str, source: str) -> bool:
-        """Whether ``source`` has wrong passwords to spare for account ``name``: its own
+    def try_account(self, name: str, source: str) -> Guess | None:
+        """Spend a password check for account ``name`` from ``source``, before it is made, so
+        checks running at once cannot all slip past the limit: one from the source's own allowance
         (``FAILED_LOGINS_PER_ACCOUNT_AND_SOURCE``) and, unless the account has logged in from it,
-        those of every such source (``FAILED_LOGINS_PER_ACCOUNT``)."""
+        one from that of every such source (``FAILED_LOGINS_PER_ACCOUNT``). None, spending
+        nothing, if either is empty. A wrong password keeps it spent; ``give_back`` returns it."""
         now = self._clock.now()
-        if not self._failures.has_token((name, source), now):
-            return False
-        return self._is_known(name, source) or self._failures_unknown.has_token(name, now)
-
-    def account_failed(self, name: str, source: str) -> None:
-        now = self._clock.now()
-        self._failures.take((name, source), now)
-        if not self._is_known(name, source):
+        own = (name, source)
+        shared = not self._is_known(name, source)
+        if not self._failures.has_token(own, now) or (
+            shared and not self._failures_unknown.has_token(name, now)
+        ):
+            return None
+        self._failures.take(own, now)
+        if shared:
             self._failures_unknown.take(name, now)
+        return Guess(name, source, shared)
+
+    def give_back(self, guess: Guess) -> None:
+        """Return what ``try_account`` spent: no password was checked, or it was right."""
+        now = self._clock.now()
+        self._failures.give_back((guess.name, guess.source), now)
+        if guess.shared:
+            self._failures_unknown.give_back(guess.name, now)
 
     def account_succeeded(self, name: str, source: str) -> None:
         """The right password for ``name`` came from ``source``: its failures there are forgotten,
-        and from now on it is a source the owner uses."""
+        and from now on it is a source the owner uses. Give the check back first."""
         self._failures.forget((name, source))
         self._learn(name, source)
 
@@ -129,6 +150,7 @@ class AddressGate:
     def __init__(self, limits: LoginLimits, address: str) -> None:
         self._limits = limits
         self._address = address
+        self._guess: Guess | None = None  # what may_try_account spent
 
     def may_check_password(self) -> bool:
         return self._limits.attempt(self._address)
@@ -140,10 +162,18 @@ class AddressGate:
         return self._limits.may_admit_guest(self._address)
 
     def may_try_account(self, name: str) -> bool:
-        return self._limits.may_try_account(name, self._address)
+        self._guess = self._limits.try_account(name, self._address)
+        return self._guess is not None
 
-    def account_failed(self, name: str) -> None:
-        self._limits.account_failed(name, self._address)
+    def account_not_tried(self, name: str) -> None:
+        if (guess := self._take_guess(name)) is not None:
+            self._limits.give_back(guess)
 
     def account_succeeded(self, name: str) -> None:
+        if (guess := self._take_guess(name)) is not None:
+            self._limits.give_back(guess)
         self._limits.account_succeeded(name, self._address)
+
+    def _take_guess(self, name: str) -> Guess | None:
+        guess, self._guess = self._guess, None
+        return guess if guess is not None and guess.name == name else None
