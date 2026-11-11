@@ -39,9 +39,12 @@ class HeldGames:
         self._clock = clock
         self._held: dict[str, _Held] = {}
 
-    def hold(self, record: ResumeRecord, address: str = "?") -> None:
-        """Keep ``record``; a newer drop of the same identity replaces the older."""
-        self._held[record.identity] = _Held(record, address=address)
+    def hold(
+        self, record: ResumeRecord, address: str = "?", *, told_at: float | None = None
+    ) -> None:
+        """Keep ``record``; a newer drop of the same identity replaces the older. ``told_at`` starts
+        the typing window at once (a record given back by a failed resume: the player was told)."""
+        self._held[record.identity] = _Held(record, told_at=told_at, address=address)
 
     def has_room(self, address: str, identity: str) -> bool:
         """True if a drop of ``identity`` from ``address`` may hold a slot: the address has fewer

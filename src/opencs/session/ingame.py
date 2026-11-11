@@ -34,6 +34,7 @@ from opencs.wire.codec import BYTE_MIN
 from opencs.wire.frame import Frame, FrameReader, build_frame
 from opencs.wire.text import QuitScanner
 from opencs.world.city import City
+from opencs.world.resume import ResumeRecord
 from opencs.world.seating import JoinRefused
 
 if TYPE_CHECKING:
@@ -136,6 +137,7 @@ class InGamePhase(Phase):
             # A bug in the world: log it with the request and close; nobody is seated (DESIGN §5).
             self.host.log.exception("city %s failed on a join", city.config.letter)
             self.host.services.city_health.failed(city.config.letter)
+            self._give_back(resume, now)
             self.stage = Stage.GONE
             self.host.close("city failed on the join")
             return
@@ -143,6 +145,7 @@ class InGamePhase(Phase):
             # The Chamber has already told the client to launch; there is no way back but a new
             # connection.
             self.host.log.warning("city %s refused the join: %s", city.config.letter, joined.reason)
+            self._give_back(resume, now)
             self.stage = Stage.GONE
             self.host.close(f"city refused the join: {joined.reason}")
             return
@@ -160,6 +163,14 @@ class InGamePhase(Phase):
         self._hello_size = len(build_frame(server_payload(joined.hello, BYTE_MIN)))
         self._next_hello = now
         self._send_hello(now)
+
+    def _give_back(self, resume: ResumeRecord | None, now: float) -> None:
+        """A resume whose join failed: hold the record again, so the player can come back and type
+        ``/RESUME`` once more within ``TYPE_SECONDS`` (the Chamber gave it up for the join)."""
+        if resume is None:
+            return
+        self.host.services.held.hold(resume, self.host.source, told_at=now)
+        self.host.log.info("the held game is kept for another /RESUME")
 
     def _send_hello(self, now: float) -> None:
         assert self._hello is not None

@@ -26,6 +26,8 @@ play testing.
   guessing elsewhere never locks the owner out of an address they have logged in from. Accounts never played are removed after 30 days.
 - A dropped line from a real account holds the game for 10 minutes, and `/RESUME` brings it back (3 minutes
   to type it once you are in the Chamber again). A drop within 20 seconds of an attack counts as a death.
+  If the server cannot seat a resuming player, the game stays held and `/RESUME` can be typed again
+  within 3 minutes.
 - Callsigns are up to 12 characters. A duplicate gets a number from 2 to 999 (`JOINGENIE`, `JOINGENIE2`).
 - A player whose game falls behind gets fewer, fresher positions of other pods, sees fewer shots and
   misses some chat lines, rather than seeing the game later and later, losing data or crashing. Damage

@@ -305,7 +305,9 @@ class ChamberPhase(TextPhase):
 
     def _resume(self) -> None:
         """``/RESUME``: launch into the held city and team (II §4.2, II §13, II §13 items 4 and 5).
-        The record stays held until the game takes it, so a launch that fails can be tried again."""
+        The record stays held until the client launches, so a launch the client cannot make can be
+        tried again. Then the game takes it, since the join needs its slot to be the player's; a
+        join that fails gives it back for another ``TYPE_SECONDS`` (``InGamePhase.enter``)."""
         if self.member.account is None:
             self._say(replies.resume_refused(guest=True))
             return

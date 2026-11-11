@@ -4,6 +4,8 @@ and 5, D3, D8, D9)."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from fixtures.lobbies import city
 from fixtures.pods import report
 from fixtures.sessions import Harness, World, login, make_world, play
@@ -12,6 +14,7 @@ from opencs.messages import ClientMessage, WirePos, client, client_payload, serv
 from opencs.session.chamber import ChamberPhase
 from opencs.session.ingame import InGamePhase
 from opencs.wire.frame import build_frame
+from opencs.world.seating import JoinRefused
 
 ALICE = "ALICE,SECRET"
 KEY = "acct:ALICE"
@@ -212,6 +215,47 @@ def test_a_failed_launch_leaves_the_game_held_to_try_again() -> None:
     assert phase_of(h) is ChamberPhase
     assert b"RESUMING IN CITY A" in ask(h, "/RESUME")
     assert ask(h, "/GO 0").endswith(b"\x05C\r")
+
+
+def _resume_into_a_failing_join(world: World, failure: Callable[..., object]) -> Harness:
+    """ALICE drops, comes back near the end of the hold, and resumes into a join that fails."""
+    drop_alice(world)
+    world.clock.advance(policy.HOLD_SECONDS - 1.0)
+    h, _ = back(world)
+    city = world.services.cities["A"]
+    join = city.join
+    city.join = failure  # type: ignore[method-assign]
+    assert launch(h).endswith(b"\x05C\r")
+    city.join = join  # type: ignore[method-assign]
+    assert h.io.closed
+    h.session.closed()  # the server closed the line
+    return h
+
+
+def test_a_resume_whose_join_raises_keeps_the_game_held_for_another_try() -> None:
+    world = make_world()
+
+    def boom(*args: object, **kwargs: object) -> object:
+        raise RuntimeError("bug")
+
+    _resume_into_a_failing_join(world, boom)
+    assert world.services.held.get(KEY) is not None
+    world.clock.advance(policy.TYPE_SECONDS - 1.0)  # past the hold, inside a fresh typing window
+    again, out = back(world)
+    assert b"YOUR GAME IN CITY A WAS INTERRUPTED." in out
+    assert b"RESUMING IN CITY A" in ask(again, "/RESUME")
+    assert ask(again, "/GO 0").endswith(b"\x05C\r") and phase_of(again) is InGamePhase
+
+
+def test_a_resume_whose_join_is_refused_keeps_the_game_held_for_another_try() -> None:
+    world = make_world()
+    _resume_into_a_failing_join(world, lambda *args, **kwargs: JoinRefused("full"))
+    assert world.services.held.get(KEY) is not None
+    assert world.services.held.slots("A") == [(KEY, 1)]  # the seat is reserved again
+    again, _ = back(world)
+    assert b"RESUMING IN CITY A" in ask(again, "/RESUME")
+    world.clock.advance(policy.TYPE_SECONDS)
+    assert world.services.held.get(KEY) is None  # the window runs from the failure
 
 
 def test_a_second_resume_is_not_possible_once_the_game_is_taken() -> None:
