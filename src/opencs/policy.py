@@ -491,9 +491,9 @@ MAX_PASSWORD_LENGTH = 64
 #: characters; the client sends whatever its ``CS.CFG`` holds, so a guess must cost more than a few
 #: tries; at most 12, because the client's password entry takes no more (a longer one could be
 #: chosen on the web but never typed in), and printable ASCII without spaces, which is all the
-#: entry can type. A password set outside a login also has no lower case: the client's entry turns
-#: what is typed into capitals, so ``secret`` could never be sent, while a first login has shown
-#: its password can be. Ours; the 12 and the capitals are the client's.
+#: entry can type. A password set outside a login (the web, the operator) also has no lower case:
+#: the entry turns what is typed into capitals, so ``secret`` could never be sent, while a first
+#: login has shown its password can be. Ours; the 12, the capitals and no spaces are the client's.
 ACCOUNT_NAME_CHARACTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"
 MIN_ACCOUNT_NAME_LENGTH = 3
 MIN_PASSWORD_LENGTH = 6
@@ -665,7 +665,7 @@ ACCOUNT_PRUNE_PAUSE = 0.5
 REGISTRATION_MODES = ("open", "closed")
 DEFAULT_REGISTRATION = "open"
 
-#: Length of a password the admin channel makes (``create-account``, ``reset-password``), from
+#: Length of a password the server makes (``create-account``, ``reset-password``, the web), from
 #: capitals and digits without look-alikes, all of which the client's entry can type. About 50
 #: bits. Ours.
 GENERATED_PASSWORD_LENGTH = 10

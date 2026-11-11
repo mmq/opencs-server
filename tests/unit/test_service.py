@@ -288,7 +288,11 @@ def test_the_web_may_choose_the_password_within_the_servers_rules(
                 assert again["password"] == "SECOND2"
             assert "PICK,ME!1" not in caplog.text and "SECOND2" not in caplog.text
             assert enter_lobby(world, "CHOOSER,SECOND2").session.pilot is not None
-            for password, reason in (("X" * 13, "A PASSWORD MAY BE AT MOST 12"), ("ABC", "A NEW")):
+            for password, reason in (
+                ("X" * 13, "A PASSWORD MAY BE AT MOST 12"),
+                ("ABC", "A NEW"),
+                ("secret", "A PASSWORD MAY HAVE NO LOWER CASE"),
+            ):
                 reply = await c.ask("register", name="OTHER", password=password)
                 assert (reply["error"], reply["message"][: len(reason)]) == ("refused", reason)
             reply = await c.ask("reset-password", name="CHOOSER", password=12345678)

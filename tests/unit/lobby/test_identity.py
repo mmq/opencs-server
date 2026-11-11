@@ -502,7 +502,12 @@ def test_a_chosen_password_must_pass_the_new_password_rules() -> None:
     assert not isinstance(made, Refused) and made[1] == "MY,PW!12"
     assert pilot(identity.login("PILOT,MY,PW!12")).account == "PILOT"
     identity.release(Pilot("PILOT", "PILOT"))
-    for bad, fragment in (("SHORT", "OR MORE"), ("X" * 13, "AT MOST 12"), ("A B C D", "SPACES")):
+    for bad, fragment in (
+        ("SHORT", "OR MORE"),
+        ("X" * 13, "AT MOST 12"),
+        ("A B C D", "SPACES"),
+        ("Mixed1", "NO LOWER CASE"),
+    ):
         refused = identity.reset_password("PILOT", bad)
         assert isinstance(refused, Refused) and fragment in refused.reason
         assert isinstance(identity.register("OTHER", bad), Refused)

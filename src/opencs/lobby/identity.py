@@ -162,7 +162,7 @@ class NewPassword:
 
 def _untypeable(password: str) -> str | None:
     """Why a password set outside a login could not be typed into the client, whose entry turns
-    letters into capitals (``policy.GENERATED_PASSWORD_ALPHABET``)."""
+    letters into capitals (``policy.NEW_PASSWORD_CHARACTERS``)."""
     if password != password.upper():
         return "A PASSWORD MAY HAVE NO LOWER CASE: THE GAME TYPES IT IN CAPITALS"
     return None
@@ -411,7 +411,9 @@ class Identity:
             return Refused("NO SUCH ACCOUNT")
         if password is None:
             password = make_password()
-        elif (reason := self._new_password_problem(name, password)) is not None:
+        elif (
+            reason := _untypeable(password) or self._new_password_problem(name, password)
+        ) is not None:
             return Refused(reason)
         salt = os.urandom(policy.PASSWORD_SALT_BYTES)
         return NewPassword(name, password, salt, self._kdf, new_account=False)
