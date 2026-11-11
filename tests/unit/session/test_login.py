@@ -245,6 +245,15 @@ def test_an_address_may_have_only_so_many_guests_online() -> None:
     assert not login(world, address="10.9.9.9").io.closed
 
 
+def test_guests_from_one_ipv6_slash_64_count_as_from_one_address() -> None:
+    world = make_world()
+    for n in range(policy.MAX_GUESTS_PER_ADDRESS):
+        assert not login(world, address=f"2001:db8:0:1::{n + 1:x}").io.closed
+    extra = login(world, address="2001:db8:0:1:ffff::1")
+    assert extra.io.closed_with == ["login refused"]
+    assert not login(world, address="2001:db8:0:2::1").io.closed  # the next /64 is another source
+
+
 def test_the_server_has_only_so_many_guests_online() -> None:
     world = make_world()
     for _ in range(policy.MAX_GUESTS):

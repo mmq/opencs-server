@@ -67,7 +67,7 @@ class Services:
     sessions: SessionRegistry = field(default_factory=SessionRegistry)
     #: Which cities have failed, for the rebuild and the admin channel (DESIGN §5, §6).
     city_health: CityHealth = field(default_factory=CityHealth)
-    #: Chat, per source address, over all of that address's connections (DESIGN §5).
+    #: Chat, per source (an address, or an IPv6 /64), over all of its connections (DESIGN §5).
     chat_limits: KeyedBuckets[str] = field(
         default_factory=lambda: KeyedBuckets(*policy.CHAT_PER_ADDRESS)
     )

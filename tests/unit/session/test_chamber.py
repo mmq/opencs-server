@@ -727,6 +727,19 @@ def test_chat_from_one_address_shares_one_budget_over_its_connections() -> None:
     assert all(b"TOO MANY LINES" in h.take() for h in talkers[1:])
 
 
+def test_chat_from_one_ipv6_slash_64_shares_one_budget() -> None:
+    world = make_world()
+    listener = enter_lobby(world, "LISTENER,secret", address="2001:db8:0:9::1")
+    talkers = [
+        enter_lobby(world, f"TALKER{n},secret", address=f"2001:db8:0:1::{n + 1:x}")
+        for n in range(3)
+    ]
+    listener.take()
+    for h in talkers:
+        h.feed("hello\r" * policy.CHAMBER_BURST_LINES)
+    assert listener.take().count(b"hello") == policy.CHAT_PER_ADDRESS[0]
+
+
 def test_a_listener_that_has_stopped_reading_is_skipped_not_cut_off() -> None:
     world = make_world()
     listener = enter_lobby(world, "LISTENER,secret", address="10.0.0.9")

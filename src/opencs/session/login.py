@@ -116,7 +116,7 @@ class LoginPhase(TextPhase):
             self._star_line(text)
 
     def _account(self, text: str) -> None:
-        gate = self.host.services.login_limits.gate(self.host.address)
+        gate = self.host.services.login_limits.gate(self.host.source)
         result = self.host.services.identity.begin(text, gate)
         if isinstance(result, PasswordCheck):
             self._stage = Stage.CHECKING

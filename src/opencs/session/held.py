@@ -22,7 +22,8 @@ class _Held:
     record: ResumeRecord
     #: When the player was told it is held (back in the Chamber): starts the typing window.
     told_at: float | None = None
-    #: The source address of the connection that dropped (see ``policy.MAX_HELD_PER_ADDRESS``).
+    #: The source of the connection that dropped: its address, or its IPv6 /64
+    #: (``ConnectionContext.source``, ``policy.MAX_HELD_PER_ADDRESS``).
     address: str = "?"
 
     def expires_at(self) -> float:

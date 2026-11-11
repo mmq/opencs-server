@@ -218,7 +218,7 @@ class InGamePhase(Phase):
         crowded = (
             account
             and member is not None
-            and not services.held.has_room(self.host.address, member.key)
+            and not services.held.has_room(self.host.source, member.key)
         )
         services.router.unregister(city.config.letter, self._player_id)
         try:
@@ -251,7 +251,7 @@ class InGamePhase(Phase):
                 policy.MAX_HELD_PER_ADDRESS,
             )
         else:
-            services.held.hold(record, self.host.address)
+            services.held.hold(record, self.host.source)
             self.host.log.info(
                 "line dropped; %s",
                 "held for /RESUME" if record.eligible else f"counted as a death ({record.reason})",
@@ -335,13 +335,13 @@ class InGamePhase(Phase):
 
     def _within_budget(self, message: ClientMessage) -> bool:
         """Spend the message's relay budget: its kind's on this connection and, for chat, the
-        source address's, which its other connections share (``policy.CHAT_PER_ADDRESS``)."""
+        source's, which its other connections share (``policy.CHAT_PER_ADDRESS``)."""
         now = self.host.now()
         bucket = self._relay_buckets.get(type(message))
         if bucket is not None and not bucket.take(now):
             return False
         if isinstance(message, client.Chat):
-            return self.host.services.chat_limits.take(self.host.address, now)
+            return self.host.services.chat_limits.take(self.host.source, now)
         return True
 
     def _note_shot(self, shot: client.Shot) -> None:

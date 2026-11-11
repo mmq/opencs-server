@@ -20,10 +20,13 @@ class ConnectionContext:
     the net layer's lines too.
     """
 
-    def __init__(self, conn_id: int, address: str = "?") -> None:
+    def __init__(self, conn_id: int, address: str = "?", source: str | None = None) -> None:
         self.conn_id = conn_id
-        #: The peer's IP address, which the session layer limits what one source may hold by.
+        #: The peer's IP address, as logs show it.
         self.address = address
+        #: What the per-address limits key this connection by: the address for IPv4, its network
+        #: for IPv6 (``policy.SOURCE_PREFIX_V6``), since one host is given a block of those.
+        self.source = address if source is None else source
         self.callsign = "-"
         #: True once the player has logged in: the listener limits connections that have not.
         self.authenticated = False

@@ -1,8 +1,9 @@
 """Server-wide limits on logins (DESIGN §5 "login attempts").
 
 A password check costs a PBKDF2 run on one of a few hashing threads, so a flood of logins, from one
-address or many, would hold every other login up. Each costly step spends a token from the source
-address's bucket and from a global one; and guests, who cost no check, are counted online.
+address or many, would hold every other login up. Each costly step spends a token from the
+source's bucket and from a global one; and guests, who cost no check, are counted online. A source
+is an address, or an IPv6 /64 (``ConnectionContext.source``), since a host may use all of one.
 
 Wrong passwords for an account are limited per source, so one source's guesses never spend
 another's allowance, and across every source the owner has not logged in from since the server

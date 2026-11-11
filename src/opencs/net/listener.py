@@ -67,6 +67,18 @@ def subnet_of(address: str) -> str:
     return str(ipaddress.ip_network(f"{ip}/{prefix}", strict=False))
 
 
+def source_of(address: str) -> str:
+    """What the per-address limits key ``address`` by: itself for IPv4, its network for IPv6
+    (``policy.SOURCE_PREFIX_V6``), so a host cannot pick a fresh address for a fresh allowance."""
+    try:
+        ip = ipaddress.ip_address(address)
+    except ValueError:
+        return address
+    if ip.version == 4:
+        return str(ip)
+    return str(ipaddress.ip_network(f"{ip}/{policy.SOURCE_PREFIX_V6}", strict=False))
+
+
 @dataclass(frozen=True, slots=True)
 class ConnectionLimits:
     """What the listener admits (``policy.MAX_CONNECTIONS*``, ``policy.MAX_UNAUTHENTICATED*``)."""
@@ -76,7 +88,7 @@ class ConnectionLimits:
     per_subnet: int = policy.MAX_CONNECTIONS_PER_SUBNET
     unauthenticated: int = policy.MAX_UNAUTHENTICATED
     unauthenticated_per_address: int = policy.MAX_UNAUTHENTICATED_PER_ADDRESS
-    #: New connections from one address: a token bucket ``(burst, per second)``.
+    #: New connections from one source (``source_of``): a token bucket ``(burst, per second)``.
     connect_rate: tuple[int, float] = policy.CONNECT_RATE_PER_ADDRESS
     #: What is written to each connection, 0 for no pacing (``policy.CLIENT_BYTES_PER_SECOND``).
     bytes_per_second: int = policy.CLIENT_BYTES_PER_SECOND
@@ -117,10 +129,11 @@ class RefusalLog:
 class Listener:
     """Accept, count and track connections.
 
-    A new connection is refused at once past the total, per-address or per-subnet limit, or when its
-    address already has ``limits.unauthenticated_per_address`` connections that have not logged in.
-    Past ``limits.unauthenticated`` such connections in all, the oldest of them is cut to make room,
-    so connections that never log in can hold the logon only until honest ones arrive.
+    A new connection is refused at once past its source's connect rate, the total, per-address or
+    per-subnet limit, or when its source (``source_of``) already has
+    ``limits.unauthenticated_per_address`` connections that have not logged in. Past
+    ``limits.unauthenticated`` such connections in all, the oldest of them is cut to make room, so
+    connections that never log in can hold the logon only until honest ones arrive.
     """
 
     def __init__(
@@ -193,18 +206,19 @@ class Listener:
     async def _accept(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         peer = writer.get_extra_info("peername")
         address = normalize_address(str(peer[0])) if peer else "?"
+        source = source_of(address)
         subnet = subnet_of(address)
         if self._stopping:
             await self._refuse(writer)
             return
-        if (reason := self._over_limit(address, subnet)) is not None:
+        if (reason := self._over_limit(address, source, subnet)) is not None:
             self._refusals.refused(address, reason)
             await self._refuse(writer)
             return
         self._make_room_to_log_in()
         enable_keepalive(writer.get_extra_info("socket"))
         conn_id = next(self._ids)
-        context = ConnectionContext(conn_id, address)
+        context = ConnectionContext(conn_id, address, source)
         connection = Connection(
             reader,
             writer,
@@ -233,10 +247,10 @@ class Listener:
             if not self._per_subnet[subnet]:
                 del self._per_subnet[subnet]
 
-    def _over_limit(self, address: str, subnet: str) -> str | None:
+    def _over_limit(self, address: str, source: str, subnet: str) -> str | None:
         """Why a new connection from ``address`` is refused, None if it is not. Every attempt
-        spends from the address's connect rate, refused or not: a reconnect loop stays refused."""
-        if not self._connect_rate.take(address, self._clock.now()):
+        spends from its source's connect rate, refused or not: a reconnect loop stays refused."""
+        if not self._connect_rate.take(source, self._clock.now()):
             return "connecting too often"
         if len(self._connections) >= self._limits.total:
             return f"{len(self._connections)} connections"
@@ -244,9 +258,9 @@ class Listener:
             return f"{self._per_address[address]} from that address"
         if self._per_subnet[subnet] >= self._limits.per_subnet:
             return f"{self._per_subnet[subnet]} from {subnet}"
-        logging_in = sum(1 for c in self._logging_in() if c.context.address == address)
+        logging_in = sum(1 for c in self._logging_in() if c.context.source == source)
         if logging_in >= self._limits.unauthenticated_per_address:
-            return f"{logging_in} from that address not logged in"
+            return f"{logging_in} from {source} not logged in"
         return None
 
     def _logging_in(self) -> list[Connection]:

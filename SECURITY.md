@@ -24,7 +24,8 @@ In scope: the server in this repository, its default configuration, and the depl
 guide describes (systemd unit, file permissions, admin channel). Examples:
 
 - one client crashing the server, stalling the event loop, or disconnecting other players;
-- getting around a connection, login, chat or account limit;
+- getting around a connection, login, chat or account limit, including from many addresses of one IPv6
+  /64, which the server counts as one source;
 - reading or changing another player's account or progress;
 - reaching the admin channel without its token, or getting a secret into the logs.
 

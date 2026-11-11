@@ -140,6 +140,12 @@ MAX_CONNECTIONS_PER_SUBNET = 12
 SUBNET_PREFIX_V4 = 24
 SUBNET_PREFIX_V6 = 64
 
+#: The prefix length of one IPv6 "address" for every per-address limit (connect rate, connections
+#: not logged in, logins, guests, chat, held games): a host is given at least a /64 and can use any
+#: address in it, so a limit keyed by the full address would be one per address it cares to pick.
+#: An IPv4 address is its own source. Ours.
+SOURCE_PREFIX_V6 = 64
+
 #: Connections that have not logged in yet (no account line accepted), in all and from one address.
 #: Past the total, the oldest such connection is cut to make room (so silent connections cannot keep
 #: honest players from logging in); past the per-address number, a new one is refused. A client

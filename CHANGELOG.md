@@ -57,6 +57,9 @@ play testing.
   model). They last for the whole connection, not one phase of it:
   - connections per address (4), per /24 (12) and in all (128), a cap on connections not yet logged in,
     and a limit on how often one address reconnects;
+  - an IPv6 client limited by its /64, not its address, everywhere a limit is per address except
+    the count of connections at once (which the /64 also caps at 12), so a host cannot pick fresh
+    addresses for fresh allowances; logs show the full address;
   - refusals logged at most once a minute per address, in a line fail2ban can match;
   - password checks on worker threads, so a burst of logins never delays a game.
   - at most 16 tags read from one acknowledgement frame, each found without searching what is

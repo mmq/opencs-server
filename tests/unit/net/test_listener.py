@@ -19,6 +19,7 @@ from opencs.net.listener import (
     RefusalLog,
     enable_keepalive,
     normalize_address,
+    source_of,
     subnet_of,
 )
 
@@ -346,3 +347,59 @@ def test_the_refusal_log_remembers_a_bounded_number_of_addresses() -> None:
     for n in range(policy.MAX_TRACKED_SOURCES + 10):
         refusals.refused(f"10.{n // 65536}.{n // 256 % 256}.{n % 256}", "x")
     assert len(refusals._last) <= policy.MAX_TRACKED_SOURCES
+
+
+# --- one source: an IPv4 address, or an IPv6 /64 ---------------------------------------------
+
+#: Two addresses in one IPv6 /64, and two IPv4 addresses in one /24.
+SAME_64 = ("2001:db8:1:2::a", "2001:db8:1:2:ffff::b")
+TWO_V4 = ("203.0.113.7", "203.0.113.8")
+
+
+@pytest.mark.parametrize(
+    ("address", "source"),
+    [
+        ("203.0.113.7", "203.0.113.7"),
+        ("2001:db8:1:2:3:4:5:6", "2001:db8:1:2::/64"),
+        ("?", "?"),
+    ],
+)
+def test_a_source_is_the_ipv4_address_or_the_ipv6_slash_64(address: str, source: str) -> None:
+    assert source_of(address) == source
+
+
+def connect_rate_refusals(addresses: tuple[str, str]) -> list[str | None]:
+    """Three connections in a row from the two ``addresses`` in turn, at a burst of 2."""
+    listener = Listener(factory, ManualClock(), limits=ConnectionLimits(connect_rate=(2, 0.5)))
+    return [
+        listener._over_limit(a, source_of(a), subnet_of(a))
+        for a in (addresses[0], addresses[1], addresses[0])
+    ]
+
+
+def test_addresses_in_one_ipv6_slash_64_share_one_connect_rate() -> None:
+    assert connect_rate_refusals(SAME_64) == [None, None, "connecting too often"]
+
+
+def test_two_ipv4_addresses_each_have_their_own_connect_rate() -> None:
+    assert connect_rate_refusals(TWO_V4) == [None, None, None]
+
+
+class _Waiting:
+    """A connection that has not logged in, as ``_over_limit`` sees one."""
+
+    def __init__(self, address: str) -> None:
+        self.context = ConnectionContext(0, address, source_of(address))
+
+
+@pytest.mark.parametrize(("addresses", "shared"), [(SAME_64, True), (TWO_V4, False)])
+def test_connections_not_logged_in_are_counted_per_source(
+    addresses: tuple[str, str], shared: bool
+) -> None:
+    listener = Listener(
+        factory, ManualClock(), limits=ConnectionLimits(unauthenticated_per_address=1)
+    )
+    listener._connections[1] = _Waiting(addresses[0])  # type: ignore[assignment]
+    second = addresses[1]
+    reason = listener._over_limit(second, source_of(second), subnet_of(second))
+    assert (reason is not None and "not logged in" in reason) is shared

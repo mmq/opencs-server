@@ -307,3 +307,16 @@ def test_the_limit_is_per_address() -> None:
     bob.session.closed()
     other.session.closed()
     assert held(world, "acct:DAVE") is not None
+
+
+def test_drops_from_one_ipv6_slash_64_hold_as_from_one_address() -> None:
+    world = make_world()
+    hs = []
+    for n, (name, team) in enumerate((("ALICE", 0), ("BOB", 1), ("CAROL", 2))):
+        h = play(world, "A", team, f"{name},SECRET", address=f"2001:db8:0:1::{n + 1:x}")
+        fly(h)
+        hs.append(h)
+    for h in hs:
+        h.session.closed()
+    assert held(world, "acct:CAROL") is None
+    assert [k for k, _ in world.services.held.slots("A")] == ["acct:ALICE", "acct:BOB"]

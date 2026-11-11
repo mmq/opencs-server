@@ -28,15 +28,32 @@ in policy.
 
 ## Network and login
 
+A per-address limit keys a connection by its source: an IPv4 address (an IPv4-mapped IPv6 one as
+that address), or the IPv6 /64 the address is in (`SOURCE_PREFIX_V6`, `net.listener.source_of`), since
+a host is given a whole /64 and can use any address in it. That covers the connect rate, connections
+not logged in, password checks, new accounts, wrong passwords per account and source (and the sources
+an owner is known by), guests, chat and held `/RESUME` slots. Two exceptions: connections at once per
+address count each full address, with the per-subnet limit (also a /64 for IPv6) above them; and the
+refusal log is kept per full address. Log lines show the full address. Tests:
+`net/test_listener::test_a_source_is_the_ipv4_address_or_the_ipv6_slash_64`,
+`test_addresses_in_one_ipv6_slash_64_share_one_connect_rate`,
+`test_two_ipv4_addresses_each_have_their_own_connect_rate`,
+`test_connections_not_logged_in_are_counted_per_source`,
+`session/test_login::test_guests_from_one_ipv6_slash_64_count_as_from_one_address`,
+`session/test_loginlimits::test_addresses_in_one_ipv6_slash_64_share_one_allowance_of_password_checks`,
+`session/test_loginlimits::test_the_owner_s_known_source_is_its_ipv6_slash_64_not_one_address`,
+`session/test_chamber::test_chat_from_one_ipv6_slash_64_shares_one_budget`,
+`session/test_line_drop_session::test_drops_from_one_ipv6_slash_64_hold_as_from_one_address`.
+
 | input | bound | on violation | test |
 |---|---|---|---|
 | TCP accept, total | `MAX_CONNECTIONS` | refused at once | `net/test_listener::test_total_connection_limit_refuses_the_extra_one_at_once` |
-| TCP accept rate, per address | `CONNECT_RATE_PER_ADDRESS` (every attempt spends, refused or not) | closed before a session is made | `net/test_listener::test_an_address_that_connects_too_often_is_refused_until_its_rate_refills` |
+| TCP accept rate, per source | `CONNECT_RATE_PER_ADDRESS` (every attempt spends, refused or not) | closed before a session is made | `net/test_listener::test_an_address_that_connects_too_often_is_refused_until_its_rate_refills` |
 | log lines from refusals | one per address per `REFUSAL_LOG_INTERVAL`, the rest summed up in the next (`RefusalLog`, bounded by `MAX_TRACKED_SOURCES`); accepts log at DEBUG, logins at INFO with the address | held back and counted | `net/test_listener::test_refusals_are_logged_once_a_minute_per_address_and_summed_up`, `test_the_refusal_log_remembers_a_bounded_number_of_addresses` |
 | TCP accept, per address | `MAX_CONNECTIONS_PER_ADDRESS`; an IPv4-mapped IPv6 address counts as its IPv4 one | refused at once | `net/test_listener::test_per_address_limit`, `test_addresses_are_keyed_as_one_host_and_grouped_by_subnet` |
 | TCP accept, per subnet | `MAX_CONNECTIONS_PER_SUBNET` (/24, /64: `SUBNET_PREFIX_*`) | refused at once | `net/test_listener::test_per_subnet_limit` |
-| connections not logged in | `MAX_UNAUTHENTICATED_PER_ADDRESS`; `MAX_UNAUTHENTICATED` in all | per address: refused at once; in all: the oldest not logged in is cut to make room | `net/test_listener::test_an_address_may_have_only_so_many_connections_not_logged_in`, `test_past_the_total_not_logged_in_the_oldest_such_connection_is_cut` |
-| held `/RESUME` slots, per address | `MAX_HELD_PER_ADDRESS` (< connections per address; seats per address = `MAX_SEATS_PER_ADDRESS`) | the drop holds nothing (a death still applies) | `session/test_line_drop_session::test_the_limit_is_per_address`, `test_policy_limits` |
+| connections not logged in | `MAX_UNAUTHENTICATED_PER_ADDRESS` per source; `MAX_UNAUTHENTICATED` in all | per source: refused at once; in all: the oldest not logged in is cut to make room | `net/test_listener::test_an_address_may_have_only_so_many_connections_not_logged_in`, `test_past_the_total_not_logged_in_the_oldest_such_connection_is_cut` |
+| held `/RESUME` slots, per source | `MAX_HELD_PER_ADDRESS` (< connections per address; seats per address = `MAX_SEATS_PER_ADDRESS`) | the drop holds nothing (a death still applies) | `session/test_line_drop_session::test_the_limit_is_per_address`, `test_policy_limits` |
 | dead peers | TCP keepalive (`KEEPALIVE_*`) | the socket ends, the player is dropped | `net/test_listener::test_accepted_sockets_get_keepalive` |
 | time to log in | `LOGIN_TIMEOUT` | close | `session/test_login` (timeout tests) |
 | silence at the `*` prompt | `GENIE_IDLE_TIMEOUT` | close | `session/test_login::test_a_silent_star_prompt_times_out_much_later` |
@@ -59,7 +76,7 @@ in policy.
 |---|---|---|---|
 | line length | `MAX_LINE_BYTES` (client armed buffer 512, I §5.2) | line discarded and charged to the line bucket below (so a stream of them closes the connection); within the budget, "too long" | `session/test_chamber::test_an_overlong_line_is_refused_not_relayed`, `test_a_stream_of_overlong_lines_is_a_flood_and_closes_the_connection`, `wire/test_text` |
 | line rate | token bucket, then `CHAMBER_FLOOD_*` | dropped with one warning; close on a sustained flood | `session/test_chamber::test_a_burst_of_chat_is_cut_to_the_budget_and_the_sender_is_warned_once`, `test_sustained_flooding_closes_the_connection`, `test_honest_pace_is_never_limited` |
-| chat, per source address | `CHAT_PER_ADDRESS`, shared by every connection of the address, in the Chamber and in game | dropped (the Chamber warns once), not counted | `session/test_chamber::test_chat_from_one_address_shares_one_budget_over_its_connections`, `session/test_ingame::test_chat_from_one_address_shares_one_budget_over_its_connections` |
+| chat, per source | `CHAT_PER_ADDRESS`, shared by every connection of the source, in the Chamber and in game | dropped (the Chamber warns once), not counted | `session/test_chamber::test_chat_from_one_address_shares_one_budget_over_its_connections`, `session/test_ingame::test_chat_from_one_address_shares_one_budget_over_its_connections` |
 | chat to a client that reads slowly | over `DROPPABLE_WATERMARK` queued items, chat (`Event.droppable`, `Member.congested`) is skipped for that client; game state never is | skipped and tallied (`Lobby.chat_dropped`, `Router.dropped`), so many senders within their budgets cannot overflow a 9600-baud reader's outbox and cut it off | `session/test_chamber::test_a_listener_that_has_stopped_reading_is_skipped_not_cut_off`, `lobby/test_lobby::test_chat_skips_a_member_whose_connection_is_too_far_behind`, `test_routing::test_a_droppable_event_skips_a_congested_player_and_nothing_else_does`, `net/test_connection::test_the_backlog_is_what_is_queued_and_not_yet_written` |
 | chat text | `CHAT_MAX_CHARS`; bytes outside `0x20..0x7e` stripped | truncated, sanitized | `lobby/test_commands`, `wire/test_text` |
 | leaving and re-entering (`/QUIT`, `M 1380;3`) | `CHAMBER_REENTRY_LIMIT` trips; the line budget is the session's, so a trip does not refill it | close | `session/test_chamber::test_leaving_and_reentering_the_chamber_does_not_refill_the_line_budget`, `test_a_flood_spread_over_trips_to_the_star_prompt_still_closes`, `test_leaving_the_chamber_too_often_closes_the_connection`, `test_a_player_who_leaves_the_chamber_now_and_then_is_never_closed` |

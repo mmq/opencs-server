@@ -66,6 +66,16 @@ def test_another_address_is_not_affected() -> None:
     assert not refused(attempt(world, "OTHER,secret", "2.2.2.2"), b"TOO MANY")
 
 
+def test_addresses_in_one_ipv6_slash_64_share_one_allowance_of_password_checks() -> None:
+    world = make_world()
+    burst = policy.LOGIN_ATTEMPTS_PER_ADDRESS[0]
+    register(world, *(f"ACCT{n}" for n in range(burst + 1)))
+    outs = [attempt(world, f"ACCT{n},wrong", f"2001:db8:0:1::{n + 1:x}") for n in range(burst + 1)]
+    assert not any(refused(o, b"TOO MANY") for o in outs[:burst])
+    assert refused(outs[burst], b"TOO MANY LOGIN ATTEMPTS")
+    assert not refused(attempt(world, "ACCT0,secret", "2001:db8:0:2::1"), b"TOO MANY")
+
+
 def test_guests_cost_nothing() -> None:
     world = make_world()
     for _ in range(policy.LOGIN_ATTEMPTS_PER_ADDRESS[0] * 3):
@@ -160,6 +170,17 @@ def test_a_guesser_cannot_lock_the_owner_out_where_the_owner_has_logged_in() -> 
     assert refused(outs[-1], b"TOO MANY WRONG PASSWORDS")  # the guessers are stopped
     assert refused(attempt(world, "VICTIM,guess", "10.1.0.1"), b"TOO MANY WRONG PASSWORDS")
     assert refused(attempt(world, "VICTIM,secret", "10.9.0.1"), b"PASSWORD: ")  # the owner is not
+
+
+def test_the_owner_s_known_source_is_its_ipv6_slash_64_not_one_address() -> None:
+    world = make_world()
+    register(world, "VICTIM")
+    assert refused(attempt(world, "VICTIM,secret", "2001:db8:9::1"), b"PASSWORD: ")
+    burst = policy.FAILED_LOGINS_PER_ACCOUNT[0]
+    for n in range(burst * 2):
+        attempt(world, "VICTIM,guess", f"10.1.{n}.1")
+    # The owner's host picked a new address in the same /64: still the source it logged in from.
+    assert refused(attempt(world, "VICTIM,secret", "2001:db8:9::2"), b"PASSWORD: ")
 
 
 def test_wrong_passwords_from_a_source_the_owner_uses_are_still_limited() -> None:

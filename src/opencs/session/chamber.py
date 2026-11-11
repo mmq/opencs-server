@@ -284,7 +284,7 @@ class ChamberPhase(TextPhase):
     def _relay(self, text: str) -> None:
         """Relay a line of chat, within the budget of the sender's address, which its other
         connections share (``policy.CHAT_PER_ADDRESS``)."""
-        if not self.host.services.chat_limits.take(self.host.address, self.host.now()):
+        if not self.host.services.chat_limits.take(self.host.source, self.host.now()):
             if not self._warned:
                 self._warned = True
                 self._say(replies.denied("TOO MANY LINES: SLOW DOWN"))

@@ -15,6 +15,7 @@ from opencs.connlog import ConnectionContext, ConnectionLog
 from opencs.lobby.identity import Identity
 from opencs.lobby.lobby import Lobby
 from opencs.messages import ServerMessage
+from opencs.net.listener import source_of
 from opencs.routing import Router
 from opencs.session.held import HeldGames
 from opencs.session.loginlimits import LoginLimits
@@ -162,12 +163,15 @@ def make_world(
 
 def connect(world: World, conn_id: int | None = None, address: str | None = None) -> Harness:
     """A new session. Unless ``address`` is given, each connection comes from an address of its
-    own, as players do, so the per-address limits only bite where a test asks for them."""
+    own, as players do, so the per-address limits only bite where a test asks for them. The source
+    is the address's, as the listener sets it."""
     io = FakeIO()
     n = conn_id if conn_id is not None else len(world.sessions) + 1
     if address is None:
         address = f"10.{len(world.sessions) // 256 % 256}.{len(world.sessions) % 256}.1"
-    log = ConnectionLog(logging.getLogger("test.session"), ConnectionContext(n, address))
+    log = ConnectionLog(
+        logging.getLogger("test.session"), ConnectionContext(n, address, source_of(address))
+    )
     harness = Harness(Session(io, world.services, log), io, world)
     world.sessions.append(harness)
     return harness

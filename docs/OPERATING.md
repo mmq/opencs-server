@@ -224,7 +224,9 @@ module: after a kernel upgrade, reboot.
 
 The game listener limits connections to 128 in total, 4 per address and 12 per /24, and allows 2 guests
 per address and 24 in all; the rest are refused at once. An address that connects more than 10 times in
-a burst (then once every 6 s) is refused too. Each
+a burst (then once every 6 s) is refused too. An IPv6 client counts as its /64 for every per-address
+limit but the 4 connections at once (12 per /64 bound those), because a host can use any address in
+its /64; logs still show the full address. Each
 `[limits]` key defaults to the `policy.py` value of the same name in capitals (`MAX_CONNECTIONS`,
 `MAX_CONNECTIONS_PER_ADDRESS`, ...), where the reasons for the numbers are given. The link is plain TCP carrying the
 game's own protocol with no encryption: a password travels in the clear, so tell players to use one they
@@ -233,7 +235,8 @@ use nowhere else.
 ### Players behind one address
 
 Players who share one public address, such as a household or a LAN party behind one router, share the
-per-address limits: 4 connections, 2 not yet logged in and 2 guests. For them, raise
+per-address limits: 4 connections, 2 not yet logged in and 2 guests. Over IPv6, every device on one
+home network is usually in one /64 and shares the same limits. For them, raise
 `max_connections_per_address`, `max_connections_per_subnet`, `max_unauthenticated_per_address` and
 `max_guests_per_address` under `[limits]` in `server.toml`.
 
@@ -568,8 +571,10 @@ Anyone can connect any program to the game port, so before opening it to the int
    layer against connection floods, let the kernel refuse an address that opens connections too fast,
    before the server sees it: `sudo ufw limit 2399/tcp` (6 new connections in 30 s per address), or
    with nftables, `tcp dport 2399 ct state new meter opencs { ip saddr limit rate over 20/minute } drop`
-   and `tcp dport 2399 meter opencs-count { ip saddr ct count over 8 } reject`. The server's own limits
-   (`[limits]`, and 10 connections in a burst then one every 6 s per address) still apply behind it.
+   and `tcp dport 2399 meter opencs-count { ip saddr ct count over 8 } reject`. These two nftables rules
+   match IPv4 only (`ip saddr`); if the server listens on IPv6 too, it limits each IPv6 /64 itself. The
+   server's own limits (`[limits]`, and 10 connections in a burst then one every 6 s per address or IPv6
+   /64) still apply behind it.
 2. **Reachable from outside.** Forward TCP 2399 on the router to the host's LAN address. If the host has
    no public address (carrier-grade NAT), forward through a VPS or a tunnel (for example `ssh -R`). Give
    players the public IP or a DNS name, and check it from a machine on another network:
