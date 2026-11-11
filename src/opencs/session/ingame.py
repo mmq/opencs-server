@@ -34,6 +34,7 @@ from opencs.wire.codec import BYTE_MIN
 from opencs.wire.frame import Frame, FrameReader, build_frame
 from opencs.wire.text import QuitScanner
 from opencs.world.city import City
+from opencs.world.events import Event
 from opencs.world.resume import ResumeRecord
 from opencs.world.seating import JoinRefused
 
@@ -243,10 +244,11 @@ class InGamePhase(Phase):
             services.router.deliver(city, dropped.events)
             services.persistence.flush(city)
         except Exception:
-            # A bug in the world: the player must still be gone from the city (DESIGN §5).
+            # A bug in the world: the player must still be gone from the city, and its pod from the
+            # others' screens (DESIGN §5).
             self.host.log.exception("city %s failed on a line drop", city.config.letter)
             services.city_health.failed(city.config.letter)
-            city.leave(self._player_id, self.host.now())
+            self._leave_after_a_failed_drop(city)
             return
         record = dropped.record
         if by_server:
@@ -266,6 +268,26 @@ class InGamePhase(Phase):
             self.host.log.info(
                 "line dropped; %s",
                 "held for /RESUME" if record.eligible else f"counted as a death ({record.reason})",
+            )
+
+    def _leave_after_a_failed_drop(self, city: City) -> None:
+        """Take the player out the plain way, tell the others and save what can be, each step
+        guarded on its own so one failing does not stop the rest."""
+        services = self.host.services
+        events: list[Event] = []
+        try:
+            events = city.leave(self._player_id, self.host.now())
+        except Exception:
+            self.host.log.exception("city %s failed on the leave after it", city.config.letter)
+        try:
+            services.router.deliver(city, events)
+        except Exception:
+            self.host.log.exception("could not tell city %s the player left", city.config.letter)
+        try:
+            services.persistence.flush(city)
+        except Exception:
+            self.host.log.exception(
+                "could not save city %s after the line drop", city.config.letter
             )
 
     # --- bytes in ----------------------------------------------------------------------------

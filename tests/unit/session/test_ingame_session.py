@@ -462,16 +462,37 @@ def test_a_leave_that_raises_is_logged_and_the_quit_goes_on() -> None:
 
 def test_a_line_drop_that_raises_marks_the_city_and_still_removes_the_player() -> None:
     world = make_world()
-    h = play(world)
+    h, other_h = play(world), play(world)
+    other = city_a(world).player(1)
+    assert other is not None
+    other.view.hold(0)
+    sent(other_h)
 
     def boom(*args: object, **kwargs: object) -> None:
         raise RuntimeError("bug")
 
     city_a(world).line_drop = boom  # type: ignore[method-assign,assignment]
     h.session.closed()
-    assert city_a(world).players() == []
+    assert city_a(world).player(0) is None and city_a(world).player(1) is other
+    assert sent(other_h) == [server.Delete(0)]  # no ghost pod left on the other screen
     assert world.services.city_health.tainted("A")
     h.session.closed()  # and the line drop afterward does not try again
+
+
+def test_a_line_drop_whose_leave_also_raises_still_saves_the_city() -> None:
+    world = make_world()
+    h = play(world)
+    city = city_a(world)
+    flushed: list[object] = []
+
+    def boom(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("bug")
+
+    city.line_drop = boom  # type: ignore[method-assign,assignment]
+    city.leave = boom  # type: ignore[method-assign,assignment]
+    world.services.persistence.flush = flushed.append  # type: ignore[method-assign,assignment]
+    h.session.closed()
+    assert flushed == [city]
 
 
 def test_a_quit_line_that_arrives_after_the_return_is_not_chat() -> None:

@@ -42,7 +42,8 @@ play testing.
 - A city that hits a bug keeps running, is shown as failed by `status`, and is rebuilt from its
   configuration the next time its game is empty. A bug in the work done after a tick (applying a
   reload or a rebuild) is handled the same way rather than stopping the city's clock, and a
-  background task that ends with an error says so in the log.
+  background task that ends with an error says so in the log. A player whose line drops as the
+  city hits a bug still vanishes from the other players' screens.
 - A city call or tick over 20 ms, which holds up every player on the server, is logged at most once a
   minute per city and counted in `status`.
 - Configuration in TOML (`config/server.toml` and one file per city), validated at start with errors that
