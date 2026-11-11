@@ -93,8 +93,9 @@ class Hits:
         audience = self._host.playing(but=player.id)
         # The recipient's client may link a node under the shooter's id when it spawns the shot
         # (I §8.25), which would be one the server never recorded: treat the id as held for
-        # the id-reuse guard (I §6.2, II §8). Conservative, and bounded by the id ranges.
-        if is_allocatable(fired.shooter):
+        # the id-reuse guard (I §6.2, II §8). Conservative, and bounded by the id ranges. Not for
+        # a mismatch: a client could otherwise mark every id as held by naming each in turn.
+        if not mismatch and is_allocatable(fired.shooter):
             for p in self._host.players():
                 if p.id in audience.player_ids:
                     p.view.ever_held.add(fired.shooter)

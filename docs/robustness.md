@@ -105,7 +105,7 @@ in policy.
 | bytes written to a connection | `CLIENT_BYTES_PER_SECOND` (`[limits] client_bytes_per_second`), so a backlog stays in the outbox and these limits see it; a close is not paced | `net/test_pacing::test_while_the_pump_holds_back_the_rest_is_a_backlog_the_server_can_see`, `test_a_close_is_not_paced_so_a_long_backlog_still_says_goodbye` |
 | shot log | `SHOT_LOG_MAX` | `world/test_combat`; ceiling in `fuzz/test_fuzz_session::test_a_long_hostile_run_leaves_each_players_records_bounded` |
 | hit set, loadout and score ledgers, attack history | aged out or fixed size | same ceiling test |
-| a client's view | `ever_held` is bounded by the id ranges | `longrun/test_city_48h` |
+| a client's view | `ever_held` is bounded by the id ranges; a relayed shot adds its shooter only when that is the sender's pod or a known NPC, so a client naming other ids marks none as held | `longrun/test_city_48h`, `world/test_shots::test_a_shooter_id_that_is_not_the_senders_marks_nothing_as_held` |
 | player ids held by long-connected clients | a pilot who stays through every id's introduction holds the 240-id range (I §6.2: one byte, a registry that never unlinks); inherent in II §8 | the join is refused ("NO FREE PLAYER ID") until one leaves; a warning names the longest-connected players | `world/test_seating::test_a_join_refused_for_want_of_a_player_id_is_logged_with_who_holds_the_range` |
 | dropped modules, mines, called Sentinels, Munchers | `MAX_DROPS`, `MAX_MINES`, `MAX_CALLED_SENTINELS`, `MAX_MUNCHERS` | `world/test_drops`, `test_effects`, `test_sentinels`, `test_munchers` |
 | waiting guppy jobs | `MAX_WAITING_JOBS`, `MAX_WAITING_TOWER_ORDERS` | `world/test_orders`, `test_module_orders` |

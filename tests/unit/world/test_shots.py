@@ -70,10 +70,25 @@ def test_a_relayed_shooter_id_counts_as_possibly_held_by_each_recipient_and_not_
 ):
     # I §6.2: the recipient's client may have linked a node under the shot's shooter id.
     c, (a, b, d) = seat([0, 1, 1])
-    c.client_message(a, shot(4100, kind=2), 1.0)
+    c.spawn(Npc(4100), 0.0)
     views = {pid: c.player(pid).view for pid in (a, b, d)}  # type: ignore[union-attr]
+    for view in views.values():
+        view.ever_held.discard(4100)  # as if no one had been told of the NPC yet
+    c.client_message(a, shot(4100, kind=2), 1.0)
     assert views[b].has_had(4100) and views[d].has_had(4100)
     assert not views[a].has_had(4100)
+
+
+@pytest.mark.parametrize("claimed", [1, 77, 4100])
+def test_a_shooter_id_that_is_not_the_senders_marks_nothing_as_held(claimed: int) -> None:
+    # A client naming any id it likes would otherwise fill every view's ids that may never be
+    # given out again, up to the whole range.
+    c, (a, b, d) = seat([0, 1, 1])
+    before = {pid: set(c.player(pid).view.ever_held) for pid in (a, b, d)}  # type: ignore[union-attr]
+    c.client_message(a, shot(claimed, kind=2), 1.0)
+    assert c.shooter_mismatches == 1
+    after = {pid: c.player(pid).view.ever_held for pid in (a, b, d)}  # type: ignore[union-attr]
+    assert after == before
 
 
 def test_a_shot_that_is_not_relayed_leaves_no_trace_in_the_views() -> None:
