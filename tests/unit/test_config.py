@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 import pytest
@@ -539,3 +540,50 @@ def test_a_limit_out_of_range_stops_the_server(tmp_path: Path, line: str) -> Non
     path = write_config(tmp_path, {"A": CITY}, server=f'default_city = "A"\n[limits]\n{line}\n')
     with pytest.raises(ConfigError, match="limits"):
         load_config(path)
+
+
+def test_recording_is_off_by_default(tmp_path: Path) -> None:
+    recording = load_config(write_config(tmp_path, {"A": CITY})).server.recording
+    assert recording.directory is None and not recording.enabled
+    assert (recording.when, recording.chat, recording.bots) == ("humans", "all", ())
+    assert recording.max_bytes == policy.DEFAULT_RECORDING_MAX_BYTES
+
+
+def test_the_recording_table_and_its_city_overrides_are_read(tmp_path: Path) -> None:
+    text = (
+        'default_city = "A"\n[recording]\ndir = "rec"\nmax_bytes = 5000000\n'
+        'min_free_bytes = 0\nwhen = "any"\nchat = "public"\nbots = ["bot01", " Bot02 "]\n'
+        '[recording.cities.A]\nwhen = "off"\n[recording.cities.B]\nchat = "none"\n'
+    )
+    cities = {"A": CITY, "B": CITY.replace('"A"', '"B"')}
+    recording = load_config(write_config(tmp_path, cities, server=text)).server.recording
+    assert recording.directory == tmp_path / "rec" and recording.enabled
+    assert (recording.max_bytes, recording.min_free_bytes) == (5_000_000, 0)
+    assert recording.bots == ("BOT01", "BOT02")
+    assert (recording.when_for("A"), recording.chat_for("A")) == ("off", "public")
+    assert (recording.when_for("B"), recording.chat_for("B")) == ("any", "none")
+    assert (recording.when_for("C"), recording.chat_for("C")) == ("any", "public")
+
+
+@pytest.mark.parametrize(
+    ("lines", "key"),
+    [
+        ('when = "bots"', "recording.when"),
+        ('chat = "team"', "recording.chat"),
+        ("max_bytes = 10", "recording.max_bytes"),
+        ("min_free_bytes = -1", "recording.min_free_bytes"),
+        ('bots = [""]', "recording.bots"),
+        ("dir = 1", "recording.dir"),
+        ("rotate = 1", "recording.rotate"),
+        ('[recording.cities.a]\nwhen = "any"', "recording.cities.a"),
+        ('[recording.cities.A]\nwhen = "never"', "recording.cities.A.when"),
+        ('[recording.cities.A]\nchat = "most"', "recording.cities.A.chat"),
+        ("[recording.cities.A]\nbots = []", "recording.cities.A.bots"),
+        ("cities = 1", "recording.cities"),
+        ('[recording.cities.Q]\nwhen = "any"', "recording.cities.Q"),
+    ],
+)
+def test_bad_recording_values_name_the_key(tmp_path: Path, lines: str, key: str) -> None:
+    text = f'default_city = "A"\n[recording]\n{lines}\n'
+    with pytest.raises(ConfigError, match=f"{re.escape(key)}:"):
+        load_config(write_config(tmp_path, {"A": CITY}, server=text))

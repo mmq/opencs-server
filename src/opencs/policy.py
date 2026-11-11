@@ -47,6 +47,38 @@ CAPTURE_DIR_MAX_BYTES = 200_000_000
 #: Capture files go here by default, relative to the config file. Ours.
 DEFAULT_CAPTURE_DIR = "../captures"
 
+#: Game recording (``[recording]``, ``opencs.recording``). ``when``: record a city while a human
+#: pilot is in it, while any pilot is (bots count), or never. ``chat``: keep every chat line, only
+#: the open channel, or none. Ours.
+RECORDING_WHEN_MODES = ("humans", "any", "off")
+DEFAULT_RECORDING_WHEN = "humans"
+RECORDING_CHAT_MODES = ("all", "public", "none")
+DEFAULT_RECORDING_CHAT = "all"
+
+#: The recordings directory holds at most this many bytes of segments, and the filesystem keeps at
+#: least this much free; only segments the archiver has marked done are ever removed to make room.
+#: Ours: a busy city records about 600 bytes a second, 2 GB is weeks of it.
+DEFAULT_RECORDING_MAX_BYTES = 2_000_000_000
+MIN_RECORDING_BYTES = 1_000_000
+MAX_RECORDING_BYTES = 10_000_000_000_000
+DEFAULT_RECORDING_MIN_FREE_BYTES = 1_000_000_000
+
+#: The room a new segment is opened with: about five busy minutes (``RECORDING_ROTATE_SECONDS``)
+#: with margin. Ours.
+RECORDING_SEGMENT_RESERVE = 1_000_000
+
+#: A city's recording starts a new segment, with a keyframe, this often, so playback can seek and
+#: a finished segment reaches the archiver soon. Ours (the web plan: about every 5 minutes).
+RECORDING_ROTATE_SECONDS = 300.0
+
+#: The writer thread wakes this often to write what the loop queued. Ours: a crash loses at most
+#: this much.
+RECORDING_FLUSH_SECONDS = 0.5
+
+#: Records the loop may queue for the writer. More means the disk cannot keep up: recording stops
+#: for the run rather than grow memory (DESIGN §5). Ours: minutes of a full city.
+RECORDING_BUFFER_ITEMS = 50_000
+
 #: The loggers a ``[logging.levels]`` table may set: one per layer (DESIGN §3, §6), named
 #: ``opencs.<layer>``, plus the parts that are not layers.
 LOG_LAYERS = (
@@ -62,6 +94,7 @@ LOG_LAYERS = (
     "admin",
     "service",
     "capture",
+    "recording",
 )
 
 #: Valid TCP port numbers (0 asks the OS for a free one). I §3: transport is TCP.

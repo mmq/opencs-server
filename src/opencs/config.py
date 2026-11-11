@@ -88,6 +88,47 @@ class ServiceConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class RecordingRules:
+    """One city's ``[recording.cities.<letter>]``: ``when`` and ``chat`` for it, None where the
+    global value applies."""
+
+    when: str | None = None
+    chat: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class RecordingConfig:
+    """``[recording]``: the game recorder (``opencs.recording``). Off unless ``directory`` is
+    given. ``when`` and ``chat`` (``policy.RECORDING_WHEN_MODES``, ``RECORDING_CHAT_MODES``) apply
+    to every city unless ``cities`` overrides them; ``bots`` are the callsigns (upper case) of guest
+    pilots that are bots, for ``when = "humans"``."""
+
+    directory: Path | None = None
+    max_bytes: int = policy.DEFAULT_RECORDING_MAX_BYTES
+    min_free_bytes: int = policy.DEFAULT_RECORDING_MIN_FREE_BYTES
+    when: str = policy.DEFAULT_RECORDING_WHEN
+    chat: str = policy.DEFAULT_RECORDING_CHAT
+    bots: tuple[str, ...] = ()
+    #: City letter -> its overrides, sorted by letter.
+    cities: tuple[tuple[str, RecordingRules], ...] = ()
+
+    def _rules(self, letter: str) -> RecordingRules:
+        return next((rules for city, rules in self.cities if city == letter), RecordingRules())
+
+    def when_for(self, letter: str) -> str:
+        return self._rules(letter).when or self.when
+
+    def chat_for(self, letter: str) -> str:
+        return self._rules(letter).chat or self.chat
+
+    @property
+    def enabled(self) -> bool:
+        """True if a directory is set and some city may be recorded."""
+        modes = {self.when, *(rules.when for _, rules in self.cities if rules.when)}
+        return self.directory is not None and modes != {"off"}
+
+
+@dataclass(frozen=True, slots=True)
 class ServerConfig:
     """Process-wide settings (``server.toml``)."""
 
@@ -105,6 +146,7 @@ class ServerConfig:
     registration: str = policy.DEFAULT_REGISTRATION
     limits: LimitsConfig = LimitsConfig()
     service: ServiceConfig = ServiceConfig()
+    recording: RecordingConfig = RecordingConfig()
 
 
 @dataclass(frozen=True, slots=True)
@@ -223,6 +265,10 @@ class _Table:
 
     def has(self, key: str) -> bool:
         return key in self._data
+
+    def keys(self) -> list[str]:
+        """Every key, for a table whose keys are names (``[recording.cities]``)."""
+        return list(self._data)
 
     def table(self, key: str) -> _Table:
         """A ``[key]`` sub-table (empty when absent), checked like this one."""
@@ -427,6 +473,62 @@ def _parse_service(path: Path, table: _Table) -> ServiceConfig:
     return ServiceConfig(path.parent / socket if socket else None)
 
 
+def _recording_mode(table: _Table, key: str, modes: tuple[str, ...], default: Any) -> Any:
+    value = table.string(key, default) if default is not None or table.has(key) else None
+    if value is not None and value not in modes:
+        raise table.fail(key, f"must be one of {', '.join(modes)}")
+    return value
+
+
+def _parse_recording(path: Path, table: _Table) -> RecordingConfig:
+    """``[recording]`` and its per-city ``[recording.cities.<letter>]`` tables. Whether each letter
+    names a loaded city is checked in ``load_config``."""
+    section = table.table("recording")
+    directory = section.string("dir", "")
+    max_bytes = section.integer(
+        "max_bytes",
+        policy.DEFAULT_RECORDING_MAX_BYTES,
+        low=policy.MIN_RECORDING_BYTES,
+        high=policy.MAX_RECORDING_BYTES,
+    )
+    min_free = section.integer(
+        "min_free_bytes",
+        policy.DEFAULT_RECORDING_MIN_FREE_BYTES,
+        low=0,
+        high=policy.MAX_RECORDING_BYTES,
+    )
+    when = _recording_mode(
+        section, "when", policy.RECORDING_WHEN_MODES, policy.DEFAULT_RECORDING_WHEN
+    )
+    chat = _recording_mode(
+        section, "chat", policy.RECORDING_CHAT_MODES, policy.DEFAULT_RECORDING_CHAT
+    )
+    bots = tuple(name.strip().upper() for name in section.str_list("bots", ()))
+    cities_table = section.table("cities")
+    cities: list[tuple[str, RecordingRules]] = []
+    for letter in sorted(cities_table.keys()):
+        if len(letter) != 1 or not "A" <= letter <= "Z":
+            raise cities_table.fail(letter, "is not one uppercase letter A-Z")
+        city = cities_table.table(letter)
+        rules = RecordingRules(
+            when=_recording_mode(city, "when", policy.RECORDING_WHEN_MODES, None),
+            chat=_recording_mode(city, "chat", policy.RECORDING_CHAT_MODES, None),
+        )
+        city.done()
+        cities.append((letter, rules))
+    cities_table.done()
+    section.done()
+    return RecordingConfig(
+        directory=path.parent / directory if directory else None,
+        max_bytes=max_bytes,
+        min_free_bytes=min_free,
+        when=when,
+        chat=chat,
+        bots=bots,
+        cities=tuple(cities),
+    )
+
+
 def _parse_limits(table: _Table) -> LimitsConfig:
     section = table.table("limits")
     d = LimitsConfig()
@@ -499,6 +601,7 @@ def _parse_server(path: Path, data: Mapping[str, Any]) -> ServerConfig:
         registration=table.string("registration", policy.DEFAULT_REGISTRATION),
         limits=_parse_limits(table),
         service=_parse_service(path, table),
+        recording=_parse_recording(path, table),
     )
     if config.registration not in policy.REGISTRATION_MODES:
         raise table.fail("registration", f"must be one of {', '.join(policy.REGISTRATION_MODES)}")
@@ -604,4 +707,9 @@ def load_config(path: Path | str) -> AppConfig:
             f"{server_path}: default_city: {server.default_city!r} is disabled; "
             "name an enabled city or enable it"
         )
+    for letter, _ in server.recording.cities:
+        if letter not in cities:
+            raise ConfigError(
+                f"{server_path}: recording.cities.{letter}: {letter!r} is not a loaded city"
+            )
     return AppConfig(server=server, cities=tuple(cities[k] for k in sorted(cities)))
