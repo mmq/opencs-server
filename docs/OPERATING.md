@@ -41,6 +41,11 @@ port with a throwaway data directory, plays the 19 judge checks against it (a mi
 small machine) and prints `smoke: ok (19 of 19 checks passed)`. Run it again after
 every upgrade. (It uses the `.venv` it finds in the checkout.)
 
+`tools/smoke.sh <port>` judges a server that is already running instead. It creates two accounts, named
+`ALPHA` and `BRAVO` plus three random characters, with a random password, and leaves them on that server:
+the last lines it prints are the two `delete-account` commands that remove them (see the admin channel
+below). Do that once it has finished.
+
 ### Layout
 
 | path | holds |

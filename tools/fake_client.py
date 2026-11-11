@@ -14,6 +14,7 @@ Usage (run the server first)::
 
     uv run python tools/fake_client.py --port 2399
     uv run python tools/fake_client.py --name BRAVO --say hi --play "B RED"
+    uv run python tools/fake_client.py --name MYNAME --password "A SECRET"
     uv run python tools/fake_client.py --lobby "/CITY,/WHO" --stop-after-launch
 """
 
@@ -34,6 +35,9 @@ from opencs.wire.codec import BIAS88_MAX, BIAS88_MIN, enc_num_decode
 from opencs.wire.frame import FrameReader, build_frame
 
 HOST, PORT = "127.0.0.1", policy.DEFAULT_PORT
+
+#: The password it logs in with unless told otherwise. Not a common one, which a server refuses.
+DEFAULT_PASSWORD = "FAKECLIENT"
 
 #: The real client reports its own state about once a second.
 TELEMETRY_PERIOD = 1.0
@@ -143,8 +147,16 @@ def printable_lines(data: bytes) -> list[str]:
 
 
 class FakeClient:
-    def __init__(self, name: str, quiet: bool, say: str | None, still: bool) -> None:
+    def __init__(
+        self,
+        name: str,
+        quiet: bool,
+        say: str | None,
+        still: bool,
+        password: str = DEFAULT_PASSWORD,
+    ) -> None:
         self.name = name.upper()[:8]
+        self.password = password.upper()  # the real client capitalises what is typed
         self.still = still
         self.say = say
         self.quiet = quiet
@@ -189,7 +201,7 @@ class FakeClient:
         await term.send(b"HHH")
         await term.expect(b"U#")
         await term.send(b"\r")
-        await term.send(self.name.encode("ascii") + b",FAKECLIENT\r")
+        await term.send(self.name.encode("ascii") + b"," + self.password.encode("ascii") + b"\r")
         await asyncio.sleep(0.3)
         await term.send(b"<Not Telling!>\r")
         await term.expect(b"*")
@@ -532,6 +544,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     ap.add_argument("--name", default="BRAVO", help="callsign / GEnie login (max 8 chars)")
+    ap.add_argument(
+        "--password", default=DEFAULT_PASSWORD, help="the account's password (a new one gets it)"
+    )
     ap.add_argument("--port", type=int, default=PORT, help="server port")
     ap.add_argument("--host", default=HOST, help="server address")
     ap.add_argument("--still", action="store_true", help="stand still instead of walking a circle")
@@ -581,7 +596,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 async def main(argv: list[str] | None = None) -> None:
     a = parse_args(argv)
-    fc = FakeClient(a.name, a.quiet, a.say, a.still)
+    fc = FakeClient(a.name, a.quiet, a.say, a.still, a.password)
     fc.orders = [(float(t), k) for k, t in (o.split("@") for o in a.order.split(",") if o)]
     fc.play_args, fc.quit_after = a.play, a.quit_after
     fc.drop_after, fc.resume, fc.freeze_after = a.drop_after, a.resume, a.freeze_after

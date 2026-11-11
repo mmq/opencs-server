@@ -11,6 +11,10 @@ judges every implementation by the same rules.
     uv run python tools/judge.py --server --stage 2 --checks 1-14,17-19   # ranges are allowed
     uv run python tools/judge.py --port 2399 --stage 2      # an already running server, 19 checks
 
+Against a running server it logs in as accounts it creates, with a random password and names
+ending in a random suffix, and prints the two names and the admin command that removes them. With
+``--server`` the throwaway database makes fixed names harmless.
+
 ``--stage 2`` adds eight meta-game checks (a tower and a module order, status, bounty, territory).
 Exit status is 0 if and only if every selected check passes.
 
@@ -24,7 +28,9 @@ from __future__ import annotations
 import argparse
 import pathlib
 import re
+import secrets
 import signal
+import string
 import subprocess
 import sys
 import tempfile
@@ -37,6 +43,8 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 FAKE = ROOT / "tools" / "fake_client.py"
 CONFIG = ROOT / "config" / "server.toml"
 LISTENING = re.compile(r"listening on (\S+):(\d+)")
+
+DEFAULT_PASSWORD = "FAKECLIENT"  # what tools/fake_client.py logs in with unless told otherwise
 
 #: Checks that need only the Chamber flow: with only these selected, the clients stop at the launch.
 CHAMBER_CHECKS = frozenset({1, 2})
@@ -146,8 +154,28 @@ def parse_checks(text: str) -> list[int]:
     return sorted(numbers)
 
 
+@dataclass(frozen=True)
+class Pilots:
+    """The two accounts a run logs in as. The checks are written for ALPHA and BRAVO; ``grade``
+    maps other names back to those before it applies them."""
+
+    alpha: str = "ALPHA"
+    bravo: str = "BRAVO"
+    password: str = DEFAULT_PASSWORD
+
+    @classmethod
+    def random(cls) -> Pilots:
+        """Accounts that cannot collide with a real player's, and that nobody else can log in to
+        (for a server that outlives the run). Within the 8 characters the fake client keeps."""
+        suffix = "".join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(3))
+        return cls("ALPHA" + suffix, "BRAVO" + suffix, secrets.token_hex(8).upper())
+
+    def normalise(self, output: str) -> str:
+        return output.replace(self.alpha, "ALPHA").replace(self.bravo, "BRAVO")
+
+
 def run_client(
-    port: int, name: str, play: str, extra: list[str], quit_after: float
+    port: int, name: str, password: str, play: str, extra: list[str], quit_after: float
 ) -> subprocess.Popen[str]:
     cmd = [
         sys.executable,
@@ -156,6 +184,8 @@ def run_client(
         str(port),
         "--name",
         name,
+        "--password",
+        password,
         "--quiet",
         "--quit-after",
         str(quit_after),
@@ -224,8 +254,11 @@ class ManagedServer:
         self._data.cleanup()
 
 
-def grade(port: int, selected: list[int], stage: int, play: str) -> tuple[int, str]:
+def grade(
+    port: int, selected: list[int], stage: int, play: str, pilots: Pilots | None = None
+) -> tuple[int, str]:
     """Run two fake clients against ``port``; return (failures, report)."""
+    pilots = pilots or Pilots()
     chamber_only = set(selected) <= CHAMBER_CHECKS
     if stage == 2 and not play:
         # The fake client always stands in RED's corner. On another team it would be ordering
@@ -238,9 +271,9 @@ def grade(port: int, selected: list[int], stage: int, play: str) -> tuple[int, s
     if chamber_only:
         first.append("--stop-after-launch")
         second.append("--stop-after-launch")
-    p1 = run_client(port, "ALPHA", play, first, 60 if long else 20)
+    p1 = run_client(port, pilots.alpha, pilots.password, play, first, 60 if long else 20)
     time.sleep(3)
-    p2 = run_client(port, "BRAVO", play, second, 50 if long else 12)
+    p2 = run_client(port, pilots.bravo, pilots.password, play, second, 50 if long else 12)
     out2 = p2.communicate(timeout=120)[0]
     out1 = p1.communicate(timeout=120)[0]
     lines = []
@@ -248,7 +281,7 @@ def grade(port: int, selected: list[int], stage: int, play: str) -> tuple[int, s
     for check in CHECKS:
         if check.number not in selected:
             continue
-        ok = check.passed(out1, out2)
+        ok = check.passed(pilots.normalise(out1), pilots.normalise(out2))
         failures += not ok
         lines.append(f"{'ok  ' if ok else 'FAIL'} {check.number:2d} {check.name}")
     lines.append(f"\n{failures} failure(s) of {len(lines)}")
@@ -293,12 +326,19 @@ def main() -> int:
         stage = 2  # a meta-game check needs the meta-game played
 
     server = ManagedServer() if a.server else None
+    pilots = Pilots() if server else Pilots.random()
     try:
-        failures, report = grade(server.port if server else a.port, selected, stage, a.play)
+        failures, report = grade(server.port if server else a.port, selected, stage, a.play, pilots)
     finally:
         if server:
             server.stop()
     print(report)
+    if not server:
+        print(
+            f"\nThe server now has accounts {pilots.alpha} and {pilots.bravo}. "
+            "Remove them with the admin commands:\n"
+            f"  delete-account {pilots.alpha}\n  delete-account {pilots.bravo}"
+        )
     if failures and server:
         print("\n--- SERVER ---\n" + "".join(server.lines)[-3000:])
     return 1 if failures else 0

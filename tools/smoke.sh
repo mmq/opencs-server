@@ -5,7 +5,9 @@
 #
 #   tools/smoke.sh            # start a server, judge it, stop it
 #   tools/smoke.sh 2399       # judge an already running server on that port instead
-#                             # (it logs two test pilots in; use a staging server, not a busy one)
+#                             # (it creates two test accounts with random names and a random
+#                             # password, and prints the delete-account commands for them; use a
+#                             # staging server, not a busy one)
 set -euo pipefail
 
 cd "$(dirname "$0")/.."

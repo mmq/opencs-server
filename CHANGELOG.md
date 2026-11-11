@@ -50,6 +50,9 @@ play testing.
   the counts.
 - A city call or tick over 20 ms, which holds up every player on the server, is logged at most once a
   minute per city and counted in `status`.
+- `tools/smoke.sh <port>`, run against a server that is already running, logs in as two accounts with
+  random names and a random password instead of fixed ones, and prints the `delete-account` commands
+  that remove them. `tools/fake_client.py` takes `--password`.
 - Configuration in TOML (`config/server.toml` and one file per city), validated at start with errors that
   name the file and key.
 - Logging per layer with an optional rotating file; passwords are never logged.
