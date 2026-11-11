@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import logging
+
+import pytest
+
 from fixtures.lobbies import add, city, fill
 from fixtures.sessions import Harness, World, enter_lobby, login, make_world
 from opencs import policy
@@ -861,3 +865,20 @@ def test_quit_at_the_prompt_leaves_and_the_prompt_comes_back() -> None:
     h.feed("M 1380;3\r")
     h.take()
     assert b"NEW PILOT" in ask(h, "CSTTBT 105 150")
+
+
+def test_a_callsign_chosen_with_a_percent_sign_keeps_the_players_log_lines(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    world = make_world()
+    alice = enter_lobby(world, "ALICE,sesame")
+    assert b"YOUR CALLSIGN IS NOW A%sB" in ask(alice, "/CALLSIGN A%sB")
+    alice.session.closed()
+    with caplog.at_level(logging.INFO):
+        again = enter_lobby(world, "ALICE,sesame")  # every line of this connection carries it
+    assert again.session.pilot == Pilot("A%sB", "ALICE")
+    assert any(
+        r.getMessage().startswith("[conn=")
+        and "A%sB] logged in as A%sB (account)" in r.getMessage()
+        for r in caplog.records
+    )
