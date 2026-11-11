@@ -39,6 +39,7 @@ from opencs.session.session import Session
 from opencs.store.base import Stores
 from opencs.store.memory import memory_stores
 from opencs.store.sqlite import SqliteStore, open_stores
+from opencs.tasks import watch
 from opencs.world.city import City
 
 log = logging.getLogger("opencs.app")
@@ -307,8 +308,11 @@ async def _listen(
     control = Control(services, cities, stop, config_file, delay=seams.delay)
     admin: AdminServer | None = None
     reload_signal = _on_sighup(cities, config_file)
-    pruning = asyncio.create_task(
-        _prune_accounts_daily(services, config.server.limits.unplayed_account_days)
+    pruning = watch(
+        asyncio.create_task(
+            _prune_accounts_daily(services, config.server.limits.unplayed_account_days)
+        ),
+        "the daily prune of unplayed accounts",
     )
     try:
         if token is not None and config.server.admin.port is not None:
@@ -330,6 +334,7 @@ async def _listen(
         await stop.wait()
     finally:
         pruning.cancel()
+        await asyncio.gather(pruning, return_exceptions=True)
         reload_signal()
         control.close()
         if admin is not None:

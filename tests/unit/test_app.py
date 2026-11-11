@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import logging
+import random
 import runpy
 import socket
 import threading
@@ -22,7 +23,7 @@ from opencs.app import (
     prune_accounts,
     serve,
 )
-from opencs.cities import run_city
+from opencs.cities import CityManager, run_city
 from opencs.clock import ManualClock
 from opencs.config import AdminConfig, LimitsConfig, load_config
 from opencs.lobby.identity import Refused
@@ -31,6 +32,7 @@ from opencs.routing import Router
 from opencs.session.cityhealth import CityHealth
 from opencs.store.base import ProgressRecord
 from opencs.store.memory import memory_stores
+from opencs.tasks import watch
 from opencs.wire.frame import build_frame
 from opencs.world.city import City
 from opencs.world.seating import JoinResult
@@ -219,6 +221,80 @@ def test_the_ticker_notes_a_slow_tick_and_a_failed_one() -> None:
     assert health.slow_calls(letter) == 2  # a tick that raises took its time as well
     assert health.worst_call(letter) == pytest.approx(0.05)
     assert health.failures(letter) == 1
+
+
+def test_a_failure_after_a_tick_is_noted_and_the_ticker_goes_on(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    class Stop(BaseException):
+        pass
+
+    city = City(load_config(SHIPPED).cities[0])
+    clock, health = ManualClock(10.0), CityHealth()
+    letter = city.config.letter
+    sleeps = 0
+    settled = 0
+
+    async def fake_sleep(seconds: float) -> None:
+        nonlocal sleeps
+        sleeps += 1
+        if sleeps > 3:
+            raise Stop
+
+    def after_tick() -> bool:
+        nonlocal settled
+        settled += 1
+        if settled == 1:
+            raise RuntimeError("settle bug")
+        return False
+
+    async def scenario() -> None:
+        with contextlib.suppress(Stop):
+            await run_city(city, Router(), clock, fake_sleep, after_tick, health)
+
+    with caplog.at_level(logging.ERROR, logger="opencs.app"):
+        asyncio.run(scenario())
+    assert settled == 3  # the ticker outlived the failure
+    assert health.failures(letter) == 1
+    assert f"city {letter} failed after a tick" in caplog.text
+
+
+def test_a_city_ticker_that_ends_with_an_exception_is_logged(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    config = replace(local_config(), cities=(load_config(SHIPPED).cities[0],))
+    letter = config.cities[0].letter
+
+    async def broken_sleep(seconds: float) -> None:
+        raise RuntimeError("sleep bug")
+
+    async def scenario() -> None:
+        services = build_services(config, clock=ManualClock(10.0))
+        manager = CityManager(services, services.clock, random.Random(1), broken_sleep)
+        manager.start()
+        for _ in range(3):
+            await asyncio.sleep(0)
+        await manager.stop()
+
+    with caplog.at_level(logging.ERROR, logger="opencs.app"):
+        asyncio.run(scenario())
+    assert f"the ticker of city {letter} stopped unexpectedly" in caplog.text
+    assert "sleep bug" in caplog.text
+
+
+def test_a_watched_task_that_is_cancelled_or_returns_logs_nothing(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    async def scenario() -> None:
+        done = watch(asyncio.create_task(asyncio.sleep(0)), "a quick task")
+        waiting = watch(asyncio.create_task(asyncio.sleep(60)), "a waiting task")
+        await done
+        waiting.cancel()
+        await asyncio.gather(waiting, return_exceptions=True)
+
+    with caplog.at_level(logging.DEBUG, logger="opencs.app"):
+        asyncio.run(scenario())
+    assert "stopped unexpectedly" not in caplog.text
 
 
 def test_two_clients_chat_in_the_chamber_and_the_second_gets_a_new_callsign() -> None:

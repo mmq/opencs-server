@@ -22,6 +22,7 @@ from opencs.lobby.identity import Refused, identity_key
 from opencs.messages import server
 from opencs.routing import Router
 from opencs.session.phases import Services
+from opencs.tasks import watch
 from opencs.world import chat
 
 log = logging.getLogger("opencs.admin")
@@ -327,7 +328,9 @@ class Control:
             self._stop.set()
             return ["shutting down now"]
         announce(self._services, f"{SHUTDOWN_NOTICE} IN {seconds} SECONDS")
-        self._countdown = asyncio.create_task(self._count_down(seconds))
+        self._countdown = watch(
+            asyncio.create_task(self._count_down(seconds)), "the shutdown countdown"
+        )
         return [f"shutting down in {seconds} s"]
 
     def reload(self) -> list[str]:

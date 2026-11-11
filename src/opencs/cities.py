@@ -32,6 +32,7 @@ from opencs.routing import Router
 from opencs.session.cityhealth import CityHealth
 from opencs.session.held import HeldGames
 from opencs.session.phases import Services
+from opencs.tasks import watch
 from opencs.world.city import City
 
 log = logging.getLogger("opencs.app")
@@ -99,15 +100,18 @@ class CityManager:
 
     def _start_ticker(self, letter: str) -> None:
         city = self._services.cities[letter]
-        self._tickers[letter] = asyncio.create_task(
-            run_city(
-                city,
-                self._services.router,
-                self._clock,
-                self._sleep,
-                after_tick=lambda: self._settle(letter, city),
-                health=self._services.city_health,
-            )
+        self._tickers[letter] = watch(
+            asyncio.create_task(
+                run_city(
+                    city,
+                    self._services.router,
+                    self._clock,
+                    self._sleep,
+                    after_tick=lambda: self._settle(letter, city),
+                    health=self._services.city_health,
+                )
+            ),
+            f"the ticker of city {letter}",
         )
 
     def _settle(self, letter: str, city: City) -> bool:
@@ -231,7 +235,8 @@ async def run_city(
     """Tick one city ``TICK_HZ`` times a second and deliver what it says (DESIGN §3.3). A bug in
     the city's rules is logged, noted in ``health``, and the next tick runs (DESIGN §5). A slow
     tick is noted there too. ``sleep`` is for tests. ``after_tick`` runs after each tick and returns
-    True to end the ticker."""
+    True to end the ticker; if it raises, that is logged and noted as a failure of the city, and the
+    ticker goes on."""
     while True:
         await sleep(1 / policy.TICK_HZ)
         started = clock.now()
@@ -243,5 +248,12 @@ async def run_city(
                 health.failed(city.config.letter)
         if health is not None:
             health.called(city.config.letter, "a tick", started, clock.now())
-        if after_tick is not None and after_tick():
-            return
+        if after_tick is None:
+            continue
+        try:
+            if after_tick():
+                return
+        except Exception:
+            log.exception("city %s failed after a tick", city.config.letter)
+            if health is not None:
+                health.failed(city.config.letter)
