@@ -17,7 +17,9 @@ KillSignal=SIGTERM
 TimeoutStopSec=30
 Restart=on-failure
 ProtectSystem=strict
-ReadWritePaths=/var/lib/opencs /var/log/opencs /var/lib/opencs-captures
+# The recordings directory is optional (the leading -): without it the server starts and,
+# if [recording] is on, logs that recording stopped.
+ReadWritePaths=/var/lib/opencs /var/log/opencs /var/lib/opencs-captures -/var/lib/opencs-recordings
 # /run/opencs, for the service socket; the server's group may enter it.
 RuntimeDirectory=opencs
 RuntimeDirectoryMode=0750

@@ -28,7 +28,8 @@ guide describes (systemd unit, file permissions, admin channel, service channel)
   /64, which the server counts as one source;
 - reading or changing another player's account or progress;
 - reaching the admin channel without its token, or the service channel from outside the server's group;
-- getting a secret into the logs.
+- getting a secret into the logs;
+- making the game recorder hold up a game, or fill a disk past its `[recording]` limits.
 
 Out of scope, because the original client or the protocol makes them unavoidable (each is explained in the
 threat model, [`docs/robustness.md`](docs/robustness.md#threat-model)):

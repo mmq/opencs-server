@@ -13,6 +13,10 @@ upgrading.
 - An optional service channel for a web front end (`[service] socket`): JSON lines over a Unix socket
   that only the server's group can reach, with a snapshot of who plays where, registration and the
   operator's commands (ADR 12).
+- An optional game recorder (`[recording] dir`): while a human pilot is in a city, what happens there
+  is written to segment files for a future archiver, on a thread of its own, under a size cap and a
+  free-space floor. A slow or failing disk stops the recording, never the game. Recordings hold chat;
+  the server deletes only segments the archiver has marked done (ADR 14).
 - `create-account` and `reset-password` hash their password off the game's loop.
 - The daily removal of unplayed accounts goes in small batches, and guest callsign checks use an index,
   so neither slows the games as the account table grows.

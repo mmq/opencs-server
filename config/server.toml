@@ -78,3 +78,17 @@ enabled = false
 # 0660, so the web process must run in the server's group.
 # [service]
 # socket = "/run/opencs/service.sock"
+
+# Record the games (docs/OPERATING.md, ADR 14): one file per city every few minutes, for the web
+# front end's archiver. Off unless `dir` is set (relative to this file, or absolute). Recordings hold
+# callsigns and chat. The server deletes only segments the archiver has marked done.
+# [recording]
+# dir = "/var/lib/opencs-recordings"
+# max_bytes = 2000000000        # the directory's cap
+# min_free_bytes = 1000000000   # what the filesystem keeps free
+# when = "humans"               # "humans", "any" (bots count) or "off"
+# chat = "all"                  # "all" (team chat too), "public" or "none"
+# bots = ["BOT01", "BOT02"]     # guest callsigns that are bots, for when = "humans"
+# A different `when` or `chat` for one city:
+# [recording.cities.A]
+# when = "off"

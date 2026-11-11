@@ -56,11 +56,13 @@ below). Do that once it has finished.
 | `/var/lib/opencs` | the data directory: `opencs.db` (accounts and progress) |
 | `/var/log/opencs` | the log file, if `[logging] file` is set |
 | `/var/lib/opencs-captures` | session captures, if `[capture]` is enabled |
+| `/var/lib/opencs-recordings` | game recordings, if `[recording] dir` is set; better on a filesystem of its own ("Recording games") |
 | `/run/opencs` | the service socket, if `[service]` is set (systemd makes the directory) |
 
 ```bash
 sudo useradd --system --home /var/lib/opencs --shell /usr/sbin/nologin opencs
-sudo install -d -o opencs -g opencs /var/lib/opencs /var/log/opencs /var/lib/opencs-captures
+sudo install -d -o opencs -g opencs /var/lib/opencs /var/log/opencs /var/lib/opencs-captures \
+    /var/lib/opencs-recordings
 sudo install -d /etc/opencs
 sudo cp -r /opt/opencs/config/. /etc/opencs/
 ```
@@ -79,6 +81,10 @@ file = "/var/log/opencs/opencs.log"
 
 [capture]
 dir = "/var/lib/opencs-captures"   # only used if capture is enabled
+
+# Optional: record the games ("Recording games" below).
+# [recording]
+# dir = "/var/lib/opencs-recordings"
 
 # Optional: the operator channel, on 127.0.0.1 only.
 [admin]
@@ -114,17 +120,18 @@ admin channel, leave out the `env` part.
 
 ### Data on another disk
 
-Everything the server writes goes to three places: the data directory, the log file and the capture
-directory. To keep them off the system disk, put all three under one directory on the
-other disk, which must use a file system with Unix ownership and permissions (ext4, btrfs, xfs; not FAT
+Everything the server writes goes to four places: the data directory, the log file, the capture
+directory and the recordings directory. To keep them off the system disk, put them all under one
+directory on the other disk, which must use a file system with Unix ownership and permissions (ext4, btrfs, xfs; not FAT
 or exFAT):
 
 ```bash
 sudo install -d -m 0750 -o opencs -g opencs /srv/disk/opencs
-sudo install -d -m 0700 -o opencs -g opencs /srv/disk/opencs/data /srv/disk/opencs/log /srv/disk/opencs/captures
+sudo install -d -m 0700 -o opencs -g opencs /srv/disk/opencs/data /srv/disk/opencs/log /srv/disk/opencs/captures \
+    /srv/disk/opencs/recordings
 ```
 
-Then use those paths in `server.toml` (`data_dir`, `[logging] file`, `[capture] dir`) and in the unit
+Then use those paths in `server.toml` (`data_dir`, `[logging] file`, `[capture] dir`, `[recording] dir`) and in the unit
 (`deploy/opencs.service`, copied to `/etc/systemd/system`): `--data-dir /srv/disk/opencs/data` in `ExecStart`, `ReadWritePaths=/srv/disk/opencs`, and
 `RequiresMountsFor=/srv/disk` under `[Unit]`, so the service waits for the disk to be mounted instead of
 starting without it. The systemd journal, which also receives every log line, stays on the system disk.
@@ -159,18 +166,19 @@ Its settings:
 - `ExecStart` runs the server from the `.venv` with `/etc/opencs/server.toml` and `/var/lib/opencs`;
   `ExecReload` re-reads the city files; `KillSignal=SIGTERM` with `TimeoutStopSec=30` is a graceful stop
   in which players are saved (the server's shutdown deadline is 10 s).
-- `ProtectSystem=strict` with `ReadWritePaths` for the data, log and capture directories, and the other
-  sandboxing and resource settings below them. `systemd-analyze security opencs` scores what is left.
+- `ProtectSystem=strict` with `ReadWritePaths` for the data, log, capture and recordings directories
+  (the last marked optional with `-`, so the unit starts without it), and the other sandboxing and
+  resource settings below them. `systemd-analyze security opencs` scores what is left.
 - `RuntimeDirectory=opencs` with `RuntimeDirectoryMode=0750`: systemd makes `/run/opencs` for the
   service socket at start and removes it at stop; the server's group may enter it.
 
 The paths in `server.toml` are relative to the file, and `/etc` is read-only under `ProtectSystem=strict`.
 `ProtectHome=true` hides `/home` and `/root`, so the `.venv` must use a Python outside them (the install
 above uses `/usr/bin/python3.12`). `UMask=0077` keeps every file the server makes (the database and its
-WAL files, logs, captures) readable by the `opencs` user only; the server also makes the database file
+WAL files, logs, captures, recordings) readable by the `opencs` user only; the server also makes the database file
 mode 0600 itself. `LimitNOFILE=1024` is well above `[limits] max_connections` plus the files it keeps
 open; raise both together.
-`--data-dir` puts the database in a writable place; the log file and capture directory take absolute paths
+`--data-dir` puts the database in a writable place; the log file, capture and recordings directories take absolute paths
 that match `ReadWritePaths` (as in the configuration above).
 
 ```bash
@@ -261,9 +269,16 @@ start; **only the city files are re-read by `reload`** (below).
 | `[admin] token` | none | at least 16 characters | the admin token, in the file. Prefer the environment variable: with a token here, the server logs a warning at start if `server.toml` is readable by group or others (`chmod 600` it) |
 | `[admin] token_env` | `"OPENCS_ADMIN_TOKEN"` | an environment variable name | where the token is read when `token` is absent |
 | `[service] socket` | none (off) | a path, its directory existing | the service channel's Unix socket, made mode 0660 |
+| `[recording] dir` | none (off) | a directory, created | where game recordings go; setting it turns recording on |
+| `[recording] max_bytes` | `2000000000` | 1e6 to 1e13 | the recordings directory's cap, counting every segment |
+| `[recording] min_free_bytes` | `1000000000` | 0 to 1e13 | free space the filesystem keeps; below it no new segment starts |
+| `[recording] when` | `"humans"` | `"humans"`, `"any"`, `"off"` | record a city while a pilot who is not a bot is in it, while any pilot is, or never |
+| `[recording] chat` | `"all"` | `"all"`, `"public"`, `"none"` | the chat kept: all of it (team chat too), the open channel only, or none. System lines are always kept |
+| `[recording] bots` | `[]` | callsigns, in any case | guests with these callsigns are bots, for `when = "humans"` |
+| `[recording.cities.<letter>] when`, `chat` | the values above | as above; the letter of a loaded city | one city's own setting |
 
 Layers for `[logging.levels]`: `wire`, `messages`, `net`, `session`, `lobby`, `world`, `routing`, `store`,
-`app`, `admin`, `service`, `capture`. Every logger in the code is `opencs.<layer>[.<detail>]`, so a level set for a
+`app`, `admin`, `service`, `capture`, `recording`. Every logger in the code is `opencs.<layer>[.<detail>]`, so a level set for a
 layer reaches its children.
 
 ### A city file (`cities/*.toml`)
@@ -337,6 +352,56 @@ To make a bug into a test: copy the file into `tests/fixtures/captures/`, load i
 client's messages with the same server messages in order). `2026-10-18-120000_001-live-loopback-p1` is a
 capture of the server's own, committed as the example. Remove anything you do not want in the repository
 (callsigns, chat) before committing one.
+
+## Recording games
+
+Set `[recording] dir` and restart. While a city has a pilot to record in it (`when`), the server writes
+what happens there to segment files in that directory, one per city at a time, a new one about every 5
+minutes (`RECORDING_ROTATE_SECONDS`). The format is ADR 14. They are for the web front end's archiver,
+which will store them compressed and show replays. An empty city writes nothing.
+
+```toml
+[recording]
+dir = "/var/lib/opencs-recordings"
+bots = ["BOT01", "BOT02"]          # guests that are bots: under when = "humans" they alone record nothing
+
+[recording.cities.A]
+when = "off"                       # never record the training city
+```
+
+A bot is a guest whose callsign is in `bots`, so list the guest names your bots log in with (they must
+be in `guest_names` too). A segment is `<letter>-<UTC time>.ocsrec.part` while it is written and
+`<letter>-<UTC time>.ocsrec` once finished; a `.part` left by a crash is finished at the next start and
+reads up to its last whole record.
+
+**The archiver is not built yet.** The server never deletes a segment the archiver has not marked: only
+files renamed to `.ocsrec.done` are removed, oldest first, to keep the directory under `max_bytes`. Until
+there is an archiver, nothing is ever removed: move the finished `.ocsrec` files elsewhere, or delete them,
+by hand or from cron (never a `.part`). Once the directory reaches `max_bytes`, or the filesystem has less
+than `min_free_bytes` free, recording pauses until there is room again; the games go on. Renaming the
+ones you are done with to `.ocsrec.done` lets the server remove them itself when it needs the room.
+
+Disk: a busy city records about 600 bytes a second, some 2 MB an hour. Put the directory on a filesystem
+of its own (a partition, or a small LVM volume), so recordings can never fill the disk the database and
+logs are on; `min_free_bytes` guards that only if they share one. Under the shipped unit the files are
+the `opencs` user's alone (`UMask=0077`).
+
+Recording never holds up a game: the game only queues what to write, and a thread writes it. If the
+queue fills because the disk cannot keep up, or a write fails, recording stops for the rest of the run;
+restart the server to start it again. Log lines (logger `opencs.recording`):
+
+| line | meaning |
+|---|---|
+| `recording games in DIR` | at start: recording is on |
+| `recording city X in FILE` | a segment began |
+| `no room for a recording in DIR (...); recording paused until there is` | over `max_bytes` or under `min_free_bytes`; once, until `room for recordings again` |
+| `recordings reached their N-byte cap; city X paused until its next segment` | the cap was reached while writing |
+| `recordings over their N-byte cap: removed FILE` | a `.done` segment was removed to make room |
+| `recording stopped: REASON` | an `ERROR`: nothing more is recorded until a restart. The reason says why (the writer fell behind, the directory cannot be written, a bug) |
+
+Recordings hold callsigns and chat, team chat included unless `chat` says otherwise: treat them as
+private. Recorded chat is meant for administrators only. Whether to tell players their games and chat are
+recorded is your decision.
 
 ## The admin channel
 
@@ -492,7 +557,7 @@ error changes nothing and the first one is reported. Then, per city:
 
 A running game is never changed under its players (II §17). A `/PLAY` begun against the old
 configuration just before the swap is told "CITY x FILLED UP: TRY AGAIN". A change to `server.toml` (the
-port, logging, capture, admin, `default_city`, `guest_names`, `registration`, `[limits]`) needs a restart; a reload says that it saw one. A
+port, logging, capture, recording, admin, `default_city`, `guest_names`, `registration`, `[limits]`) needs a restart; a reload says that it saw one. A
 config whose `default_city` is missing or has `enabled = false` is refused at validation, at start-up and
 on `reload` alike (nothing changes), so the lobby always has a city to offer.
 
