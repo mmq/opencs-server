@@ -332,6 +332,8 @@ class ServiceServer:
             log.info("account %s created over the service channel", account.name)
             # None: the player is asked for a callsign at the first login.
             return {"name": account.name, "password": password, "callsign": callsign}
+        # As the operator's reset does: the guesses that locked the owner out are forgotten.
+        self._services.login_limits.forget_account(account.name)
         log.info("password of %s reset over the service channel", account.name)
         return {"name": account.name, "password": password}
 

@@ -23,6 +23,7 @@ from fixtures.loopback import TIMEOUT, frame, local_config, start
 from fixtures.loopback import connect as connect_game
 from fixtures.pods import report
 from fixtures.sessions import World, enter_lobby, make_world, play
+from fixtures.sessions import connect as connect_session
 from opencs import __version__, policy
 from opencs.app import Seams, StartupError, serve
 from opencs.cities import CityManager
@@ -298,6 +299,23 @@ def test_the_web_may_choose_the_password_within_the_servers_rules(
                 assert (reply["error"], reply["message"][: len(reason)]) == ("refused", reason)
             reply = await c.ask("reset-password", name="CHOOSER", password=12345678)
             assert reply["error"] == "bad-request"
+
+    run(scenario())
+
+
+def test_a_reset_over_the_channel_opens_an_account_the_guessers_locked(sock_dir: Path) -> None:
+    async def scenario() -> None:
+        async with running(sock_dir) as (path, world, _):
+            enter_lobby(world, "ALICE,oldsecret").session.closed()
+            for n in range(policy.FAILED_LOGINS_PER_ACCOUNT[0]):
+                connect_session(world, address=f"10.7.{n}.1").feed("HHH\rALICE,guess\r")
+            locked = connect_session(world, address="10.6.0.1")
+            locked.feed("HHH\rALICE,oldsecret\r")
+            assert b"TOO MANY WRONG PASSWORDS" in locked.take()
+            c = await hello(path)
+            password = (await c.result("reset-password", name="alice"))["password"]
+            again = enter_lobby(world, f"ALICE,{password}", address="10.6.0.1")
+            assert again.session.pilot is not None
 
     run(scenario())
 

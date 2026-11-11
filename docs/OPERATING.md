@@ -441,7 +441,7 @@ printf '%s\n' '{"hello":"opencs-service","version":1}' '{"id":1,"op":"snapshot"}
 | `snapshot` | | uptime, account count, cap and registration mode, connections in game and in the Chamber, each city's name, capacity, whether it is open and its pilots (callsign, team, guest or not), held games. No addresses, account details or chat |
 | `account` | `name` | whether that account exists and is online, and its callsign (`null` if there is no account) |
 | `register` | `name`, `password`, `callsign` (both optional) | a new account, `{"name", "password", "callsign"}`: with `password` the one given, without it a made-up one; with `callsign` the account plays under it (the `/CALLSIGN` rules, and free), without it (`null`) the player is asked at the first login. The password is in the reply only, never logged. The rules are those of every new account (a chosen password too: 6 to 12 printable characters, no spaces, and no lower case, since the client's entry types capitals); a refusal (`"refused"`) says why. Whether players may choose is the web's setting; the game sends passwords in the clear, so a made-up one is the safer default |
-| `reset-password` | `name`, `password` | a new password for an account, chosen or made up, as `register` |
+| `reset-password` | `name`, `password` | a new password for an account, chosen or made up, as `register`; it clears the account's wrong-password limits, as the admin command does |
 | `status`, `reload` | | the admin command's reply lines, `{"lines": [...]}` |
 | `announce` | `text` | as the admin command |
 | `kick` | `callsign`, `reason` (optional) | as the admin command; the callsign in any case |
@@ -646,9 +646,10 @@ Anyone can connect any program to the game port, so before opening it to the int
    server-wide, and hashes on its own threads, so a login flood cannot stall the games.
    Guesses at an account from elsewhere do not lock its owner out of an address they have logged in from
    since the server started; from a new address, or just after a restart, the owner may be refused until
-   the guessing stops. `reset-password` clears an account's limits. Players cannot change their own
-   password: the game has no command for it, so a player who wants a new one asks the operator, who runs
-   `reset-password` (a front end for it is the web service's job, not this server's).
+   the guessing stops. `reset-password`, the operator's or the service channel's, clears an account's
+   limits. Players cannot change their own password: the game has no command for it, so a player who
+   wants a new one asks the operator, who runs `reset-password` (a front end for it is the web service's
+   job, not this server's).
 7. **Backups** (above), and an upgrade path you have tried (`tools/smoke.sh` after each one).
 
 What the server cannot defend against alone is in `docs/robustness.md`, "Threat model".
