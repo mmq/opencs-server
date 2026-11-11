@@ -134,6 +134,14 @@ def hash_password(password: str, salt: bytes, kdf: Kdf) -> bytes:
     raise ValueError(f"unknown password hash algorithm {kdf.algorithm!r}")
 
 
+def _untypeable(password: str) -> str | None:
+    """Why a password set outside a login could not be typed into the client, whose entry turns
+    letters into capitals (``policy.GENERATED_PASSWORD_ALPHABET``)."""
+    if password != password.upper():
+        return "A PASSWORD MAY HAVE NO LOWER CASE: THE GAME TYPES IT IN CAPITALS"
+    return None
+
+
 def make_password() -> str:
     """A random password with no look-alike characters (``policy.GENERATED_PASSWORD_*``)."""
     return "".join(
@@ -334,7 +342,10 @@ class Identity:
         registration command or page), hashing here and now. Without ``password`` one is made up.
         Returns the account and its password, to be shown once and never logged."""
         name = name.strip().upper()
-        password = password if password is not None else make_password()
+        if password is None:
+            password = make_password()
+        elif (reason := _untypeable(password)) is not None:
+            return Refused(reason)
         if self._store.get(name) is not None:
             return Refused("THAT NAME IS TAKEN")
         if (refusal := self.new_account_refusal(name, password)) is not None:

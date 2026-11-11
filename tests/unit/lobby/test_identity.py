@@ -422,6 +422,26 @@ def test_register_follows_the_same_rules_and_makes_a_password_when_none_is_given
     assert isinstance(identity.register("PILOT"), Refused)  # taken
 
 
+def test_every_password_set_outside_a_login_can_be_typed_in_the_client() -> None:
+    # The client's settings screen turns what is typed into capitals.
+    identity, _ = make()
+    for name in ("PILOT1", "PILOT2", "PILOT3"):
+        made = identity.register(name)
+        assert not isinstance(made, Refused)
+        assert made[1] == made[1].upper()
+        assert pilot(identity.login(f"{name},{made[1]}")).account == name
+    identity.release(pilot(identity.login("ALICE,oldsecret")))
+    for _ in range(3):
+        new = identity.reset_password("ALICE")
+        assert isinstance(new, str) and new == new.upper()
+    assert set(policy.GENERATED_PASSWORD_ALPHABET) <= set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+    made = identity.register("CHOSEN", "MY,PW!12")
+    assert not isinstance(made, Refused) and made[1] == "MY,PW!12"
+    assert pilot(identity.login("CHOSEN,MY,PW!12")).account == "CHOSEN"
+    refused = identity.register("OTHER", "Mixed1x")
+    assert isinstance(refused, Refused) and "NO LOWER CASE" in refused.reason
+
+
 def test_a_reset_password_replaces_the_old_one() -> None:
     identity, _ = make()
     identity.release(pilot(identity.login("ALICE,oldsecret")))

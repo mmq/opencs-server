@@ -72,8 +72,8 @@ Before you log on, press the game's SETTINGS button and set:
 - the **baud rate** to **9600**, the speed the server sends at (at any lower setting the game falls behind);
 - your **account name** and **password**, as described next, or leave the stock guest name `JOINGENIE`.
 
-A name or password **must not contain a space**, and the password is **case-sensitive**: type it the same
-way every time. The game saves these settings in `CS.CFG`, in its folder.
+A name or password **must not contain a space**, and the game's settings screen types both in
+capitals. The game saves these settings in `CS.CFG`, in its folder.
 
 > [!WARNING]
 > **Connections to the server are not encrypted.** The original game sends your account name and

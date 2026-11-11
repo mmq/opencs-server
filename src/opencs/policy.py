@@ -447,7 +447,9 @@ MAX_PASSWORD_LENGTH = 64
 #: an account's callsign is always its whole name, and never one a guest could be given
 #: (``JOINGENIE2``). Passwords: at least 6
 #: characters; the client sends whatever its ``CS.CFG`` holds, so a guess must cost more than a few
-#: tries. Ours.
+#: tries. A password set outside a login also has no lower case: the client's entry turns what is
+#: typed into capitals, so ``secret`` could never be sent, while a first login has shown its
+#: password can be. Ours; the capitals are the client's.
 ACCOUNT_NAME_CHARACTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"
 MIN_ACCOUNT_NAME_LENGTH = 3
 MIN_PASSWORD_LENGTH = 6
@@ -611,10 +613,11 @@ ACCOUNT_PRUNE_INTERVAL = 24 * 3600.0
 REGISTRATION_MODES = ("open", "closed")
 DEFAULT_REGISTRATION = "open"
 
-#: Length of a password the admin channel makes (``create-account``, ``reset-password``), from an
-#: alphabet without look-alike characters. Ours.
+#: Length of a password the admin channel makes (``create-account``, ``reset-password``), from
+#: capitals and digits without look-alikes, all of which the client's entry can type. About 50
+#: bits. Ours.
 GENERATED_PASSWORD_LENGTH = 10
-GENERATED_PASSWORD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789"
+GENERATED_PASSWORD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
 #: Argon2id cost for new password hashes (ADR 13): 19 MiB of memory, 2 passes, 1 lane, a 32-byte
 #: hash. OWASP's minimum Argon2id setting; the memory is what makes a guessing rig pay per guess.
