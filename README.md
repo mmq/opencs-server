@@ -158,6 +158,7 @@ policy (holding a game for `/RESUME`). A behavior that is not traced to a sectio
 | [`docs/decisions/`](docs/decisions/README.md) | architecture decision records |
 | [`docs/robustness.md`](docs/robustness.md) | every input path and the limit that bounds it |
 | [`CHANGELOG.md`](CHANGELOG.md) | what changed for players and operators |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | setting up, the checks, and what a change needs |
 | [`SECURITY.md`](SECURITY.md) | reporting a vulnerability, and what is in scope |
 
 ## Author
