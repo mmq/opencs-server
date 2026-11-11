@@ -57,14 +57,19 @@ imports what its layer may not.
 
 ### 3.1 Package layout
 
+Every module under `src/opencs` is named here; `tests/unit/test_design_doc.py` fails if one is missing
+or listed but gone. (`__init__.py` files and `py.typed` are left out.)
+
 ```
 src/opencs/
-  __main__.py            python -m opencs [--config PATH]
+  __main__.py            python -m opencs [--config PATH] [--port N] [--host H]
   app.py                 wiring, signals, graceful shutdown
-  cities.py              the city tickers and reloading city config (M12)
-  control.py             the operator's commands as text in, text out (M12)
-  admin.py               the loopback admin channel: token, bounds, carries Control (M12)
-  logsetup.py            [logging] applied to the opencs logger tree (M12)
+  cities.py              the city tickers and reloading city config
+  control.py             the operator's commands as text in, text out
+  admin.py               the loopback admin channel: token, bounds, carries Control
+  tasks.py               long-lived background tasks: a failure is logged, not silent
+  logsetup.py            [logging] applied to the opencs logger tree
+  connlog.py             the per-connection log context: connection id and callsign on every record
   config.py              typed config: ServerConfig, CityConfig (validated from TOML)
   policy.py              every value the server chooses (spec I §10), named, each citing its spec section
   clock.py               Clock protocol; MonotonicClock; ManualClock for tests
@@ -73,36 +78,39 @@ src/opencs/
     codec.py             bias10, bias88, enc_num, str, grid byte            (spec I §4.3, I §6.1)
     frame.py             build_frame, FrameReader (sans-IO, incremental)    (spec I §4.1)
     text.py              LineReader, arm()/command lines                    (spec I §5.2)
+    errors.py            the one exception the wire layer raises
   messages/
     base.py              Message base class, registry, decode_client()
+    fields.py            field groups and checks shared by the message classes
+    limits.py            limits that are facts about the client or the frame (I §4.1, I §8)
+    catalog.py           the client's own tables of module indices (I §9.3.1)
     server.py            S→C: B, A, G, H, J, I, M, N, F, P, Q, K, L, O, R, S, T, D, E-*, a, b, c, C
     client.py            C→S: S, A, b, c, I, J, U, C, D-*, E-*, M, K, Q, d
   net/
     listener.py          start_server, connection accounting and limits
     connection.py        Connection: read pump, outbox, write pump, tags
-    capture.py           optional wire capture in the fixture format (M12)
-  session/
-    phases.py            the phase machine (B.1)
-    login.py             GEnie logon (I §5.1)
-    chamber.py           lobby text session (I §5.2-§5.5, II §4)
-    ingame.py            binary session: decode → city calls; quit handshake (I §5.5)
-    persistence.py       loads a record before a join, writes what a city reports changed (II §11.3)
-    held.py              the games held for dropped players: windows, reserved slots (II §13)
-    registry.py          every live session, for the operator (M12)
-    cityhealth.py        which cities have failed, and so need rebuilding when empty
-    budgets.py           a connection's rate limits, which outlive its phases (ADR 9)
-  lobby/
-    lobby.py             Lobby: members, locations, city choice, teams (S9)
-    commands.py          parsing /PLAY, /CITY, … (pure)
-    identity.py          accounts vs JOINGENIE, callsigns (S8)
+    flow.py              how much a client has been sent and not yet acknowledged (ADR 11)
+    traffic.py           what one connection sent: totals and busiest stretches, for the log at close
+    capture.py           optional wire capture in the fixture format
+  store/
+    base.py              AccountStore, ProgressStore protocols (resume records are in memory)
+    sqlite.py            SQLite implementation, versioned forward-only migrations
+    memory.py            in-memory implementation (tests)
   world/
     city.py              City: owns one game's state; join/leave; tick(now)
+    seating.py           who may join a city and what a seat is made of (I §6.2, I §7.2)
+    lifecycle.py         when a city's game begins and ends (II §17)
     ids.py               id ranges and guarded reuse (I §6.2, II §8)
+    entities.py          telling a client an entity exists, exactly once (I §7.2, I §7.3)
     view.py              ClientView: what one client has been told (late-joiner sync, I §7.3)
     events.py            Event = (message, Audience)
+    ledger.py            the records a city says have changed, for the session to save (II §11.3)
     pods.py              a player's pod life: drop, death handshake, respawn (I §7.1, I §7.5, II §7, I §7.8)
+    podreport.py         a client's 'b' report: the pod's handshake and the player going live
     combat.py            shot log, attribution, hit set, damage byte (I §9.1, II §9.3)
-    hits.py              the shot relay and hit rules: what a shot or an 'I' does (I §8.25, I §9.1, II §9)
+    hits.py              the shot and hit rules: what a shot or an 'I' does (I §8.25, I §9.1, II §9)
+    relay.py             client messages passed on to the other players (I §8.24, I §8.25)
+    chat.py              chat and HUD text (I §8.23)
     death.py             a death: payout, 'E'-'K' notices, 'J', bounty zero (I §9.2.9, II §11.2)
     player.py            Player: identity, slot and every per-player record (I §6.3)
     grace.py             the spawn-grace mirror of the client's rule (I §9.1.5)
@@ -110,33 +118,52 @@ src/opencs/
     progress.py          a player's persistent record and the rules for saving it (II §11.3)
     attacks.py           when a pod was last under attack: the /RESUME fight test (II §13 item 3)
     resume.py            a line drop: death in a fight, the ResumeRecord, the slots held (II §13)
-    territory.py         block classes (I §8.22, S4)
+    territory.py         block classes (I §8.22)
     weather.py           a city's weather condition, program and transitions (I §8.20)
     logistics.py         guppies and orders (I §9.4, I §9.4.3)
-    orders.py            tower orders, guppy actions to events, towers placed and destroyed (I §9.4, S3)
+    orders.py            tower orders, guppy actions to events, towers placed and destroyed (I §9.4)
     modules.py           what a city stocks, drops, pickup, rest, eject (I §9.3.1, I §9.3.3)
     loadout.py           the installed-module ledger of one pod (I §9.3.4, II §13)
     dispatch.py          the message-type -> handler entries for orders, drops, effects, score
     host.py              WorldHost: what the rule modules ask of the city
     effects.py           effect-module requests (I §9.3.5, II §16.1)
-    structures.py        towers and their durability (S3)
-    npcs/sentinels.py    resident Sentinels (S6)
+    structures.py        towers and their durability
+    npcs/sentinels.py    resident Sentinels
     npcs/munchers.py     Munchers (I §9.5.2)
+  lobby/
+    lobby.py             Lobby: members, locations, city choice, teams
+    commands.py          parsing /PLAY, /CITY, … (pure)
+    identity.py          accounts vs JOINGENIE, callsigns
+    replies.py           the text the Chamber shows in answer to lobby commands
   routing.py             Audience → sessions
-  store/
-    base.py              AccountStore, ProgressStore protocols (resume records are in memory, M10b)
-    sqlite.py            SQLite implementation, versioned forward-only migrations
-    memory.py            in-memory implementation (tests)
+  session/
+    session.py           one connection's session: the phase machine's driver
+    phases.py            the Phase interface, the text-phase base and shared services (I §7.8)
+    login.py             GEnie logon (I §5.1)
+    chamber.py           lobby text session (I §5.2-§5.5, II §4)
+    ingame.py            binary session: decode → city calls; quit handshake (I §5.5)
+    io.py                SessionIO: what a session may do to its connection
+    persistence.py       loads a record before a join, writes what a city reports changed (II §11.3)
+    held.py              the games held for dropped players: windows, reserved slots (II §13)
+    registry.py          every live session, for the operator
+    cityhealth.py        which cities have failed or been slow, and so need rebuilding when empty
+    budgets.py           a connection's rate limits, which outlive its phases (ADR 9)
+    badinput.py          counting bad input over a sliding window
+    loginlimits.py       server-wide limits on logins and guests
 config/
   server.toml            port, data directory, limits, logging
   cities/A.toml B.toml C.toml
 tests/
   unit/                  one test module per source module
   replay/                real captures as fixtures, replayed through the world
+  fuzz/                  random and hostile input against the net and session layers
+  longrun/               a simulated 48-hour city
   e2e/                   the black-box judge against a running server
 tools/
   fake_client.py         the scripted client (built on `opencs.wire`)
-  judge.py               the 19-check black-box test
+  judge.py               the black-box conformance check, 19 checks
+  smoke.sh               start a throwaway server and run the judge
+  make_fixture.py        turn a capture log into a replay fixture
 ```
 
 ### 3.2 How a message flows
@@ -235,22 +262,30 @@ without it; a new rule comes with its test in the same commit.
 
 - Type hints everywhere; `mypy --strict` clean. Dataclasses (`frozen=True, slots=True`) for messages,
   events and config.
-- One concept per module; a module over ~400 lines is a prompt to split.
+- One concept per module. Past the two deliberate catalogues, `policy.py` (one named constant per
+  server choice) and `messages/server.py` (one class per server message), which run long, no module
+  passes 600 lines; one that nears it is a prompt to split.
 - Docstrings say *what and why* and cite the spec as `I §n`, `II §n` or `III §n`; they do not narrate history (git does that).
 - No binary addresses in the code (the spec carries provenance).
 - Names follow the spec's vocabulary: pod, tower, guppy, Muncher, Sentinel, bay, bounty, multiplier,
   territory, city, map.
 
-## 9. Decisions to record as ADRs (`docs/decisions/`)
+## 9. Decision records (`docs/decisions/`)
 
-1. Standard library at runtime, except password hashing (amended by 13: Argon2id for passwords).
-2. The world returns events and never performs I/O.
-3. One event loop; cities are never awaited inside; no locks.
-4. Audiences as data, resolved by a router.
-5. Tags assigned at the send boundary.
-6. Policy values centralized in `policy.py` and config, each citing the spec.
-7. SQLite for persistence, behind store protocols.
-8. Written from the spec.
+One file each; [the index](decisions/README.md) has the same list.
+
+1. [Standard library at runtime, except password hashing](decisions/0001-stdlib-only-at-runtime.md) (amended by 13).
+2. [The world returns events and never performs I/O](decisions/0002-world-returns-events.md).
+3. [One event loop; cities never await; no locks](decisions/0003-single-loop-no-locks.md).
+4. [Audiences as data, resolved by a router](decisions/0004-audiences-as-data.md).
+5. [Tags assigned at the send boundary](decisions/0005-tags-at-send-boundary.md).
+6. [Policy values centralized in `policy.py` and config, each citing the spec](decisions/0006-policy-centralized.md).
+7. [SQLite for persistence, behind store protocols](decisions/0007-sqlite-behind-protocols.md).
+8. [Written from the spec](decisions/0008-written-from-spec.md).
+9. [Rate limits belong to the connection, not the phase](decisions/0009-limits-per-connection.md).
+10. [Every way to make an account goes through `Identity`](decisions/0010-registration-behind-identity.md).
+11. [Writes keep to what the client can read](decisions/0011-pace-writes-to-the-client.md).
+13. [Argon2id for passwords](decisions/0013-argon2id-for-passwords.md).
 
 ## 10. Naming and trademarks
 

@@ -85,10 +85,11 @@ connection and account limits and each city's capacity and teams, can be changed
 or a city's file; the rest are fixed.
 
 [`docs/DESIGN.md`](docs/DESIGN.md) has the layers, the package layout and the conventions. The reasoning
-behind the main choices is in [`docs/decisions/`](docs/decisions/README.md), one record each: the
-standard library at runtime except for password hashing, the world returns events, one loop and no
+behind the main choices is in [`docs/decisions/`](docs/decisions/README.md), one record each:
+the standard library at runtime except for password hashing, the world returns events, one loop and no
 locks, audiences as data, tags at the send boundary, centralized policy, SQLite behind protocols,
-written from the spec, and Argon2id for passwords.
+written from the spec, rate limits that belong to the connection, every account made through
+`Identity`, writes paced to what the client can read, and Argon2id for passwords.
 [`docs/robustness.md`](docs/robustness.md) lists every input path and the limit that bounds it.
 
 ## Testing
