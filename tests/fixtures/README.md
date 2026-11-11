@@ -23,7 +23,7 @@ whole sessions' worth of chunks are reassembled with the production `FrameReader
 logged only the client's bytes, so their files have no `S` lines.
 
 Regenerate a file with `uv run python tools/make_fixture.py <log> -o <file>`; add `--info-frames` for a log without `game tx` lines (the server frames are then lifted from the INFO lines); add `--chamber`
-to keep the ASCII phase for M3's session tests.
+to keep the ASCII phase for the session tests.
 
 ### What the curated set covers
 
@@ -47,7 +47,7 @@ so `tests/replay/test_muncher_replay.py` drives a modeled client instead (no cap
 | `2026-07-29-025542_001-module-order`, `2026-07-28-203429_001-bay-upgrade` | module orders and `'Q'` subs; bay upgrades, `'D'`-`'B'` |
 | `2026-07-29-030741_002-city-name` | July build: client `'b'` frames with a trailing NUL inside LEN (I §4.1) |
 
-### Fixtures added for M6 (deaths and attribution)
+### Fixtures for the death and attribution replays
 
 Every capture with a server-annotated `DEATH of` and a size under about 100 KB of fixture, plus the
 contested attribution run, so the death and attribution replays run on real streams:
@@ -57,7 +57,7 @@ contested attribution run: 15 own shots, 46 Sentinel shots), `2026-09-03-104918_
 deaths). The runs `2026-07-30-213906_001/002` are left out: they hold the short client `'b'` frames that do
 not decode (I §4.1).
 
-### Fixtures added for M8 (the loadout ledger replay)
+### Fixtures for the loadout ledger replay
 
 | file | what it is for |
 |---|---|
@@ -71,22 +71,22 @@ not decode (I §4.1).
 The kill and payout runs `2026-10-01-170222` and `2026-10-01-172859` are not in the capture corpus, and no other run of 2026-10-01 stands in. Kills (server `'J'`) are carried by
 `2026-10-16-113841_002-play-p1`, `2026-10-16-142644_002-sentinel-down-p1` and the two
 `2026-10-16-154139` grenade-relay fixtures. Payouts (`'D'`-`'S'`) appear in `2026-10-16-113841_002-play-p1`
-(3 frames) and in the resume and high-id fixtures; M6-M7 should replay those.
+(3 frames) and in the resume and high-id fixtures; the death and payout replays should use those.
 
 The "never captured" list above was checked against the whole corpus (363 logs), not only the chosen runs.
 
-### Fixtures added for M10a (the persistence replay)
+### Fixtures for the persistence replay
 
 | file | what it is for |
 |---|---|
 | `2026-10-15-140934_002-persist-p1` | the run the third persistence check was written for: 986 saved with a newly bought bay while the client had 286 |
 
-### Used by M10b (the fight replay)
+### Used by the fight replay
 
 `tests/replay/test_fight_replay.py` replays every fixture that has a server side (the pod's `'B'` and the
 `'I'`, `'c'`, `'E'`-`'G'` it was sent): 18 of the 53; the others are client-only logs and are skipped.
 
-### Captures the server writes itself (M12)
+### Captures the server writes itself
 
 With `[capture] enabled = true` in `server.toml` the server writes one file per connection in exactly
 the format above (`c`/`s` Chamber text and `C`/`S` frames; the client's GEnie logon is never recorded,

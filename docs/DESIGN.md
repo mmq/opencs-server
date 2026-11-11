@@ -243,7 +243,7 @@ in `world/view.py` as one `ClientView` per player, owned by the city. Sessions d
 - `logging` with one logger per layer and a per-connection adapter (connection id, callsign).
 - **Optional wire capture** per connection, in the replay format the tests read, so a bug a player hits
   becomes a test fixture.
-- An admin channel (M12): status, announce, kick, graceful shutdown that saves every player's progress.
+- An admin channel: status, announce, kick, graceful shutdown that saves every player's progress.
 - Graceful shutdown on SIGINT/SIGTERM: stop accepting, save progress, close connections.
 
 ## 7. Testing
