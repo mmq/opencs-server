@@ -54,7 +54,7 @@ def test_a_chat_flood_spread_over_trips_through_the_star_prompt_is_closed() -> N
     async def scenario() -> None:
         clock = ManualClock(1000.0)
         stop, task, port = await start(local_config(), clock=clock, tick_sleep=TickGate().sleep)
-        c = await chamber(port, "FLOODER,secret")
+        c = await chamber(port, "FLOODER,sesame")
         cycle = "x\r" * (policy.CHAMBER_BURST_LINES - 1) + "/QUIT\rM 1380;3\r\r"
         await c.send(cycle * 30)  # the clock never moves: no budget comes back
         await until_closed(c)
@@ -84,9 +84,9 @@ def test_chat_never_overflows_a_player_who_reads_slowly() -> None:
         stop, task, port = await start(
             config, clock=clock, services=services, tick_sleep=TickGate().sleep
         )
-        victim = await chamber(port, "VICTIM,secret", await tiny_window(port))  # reads no more
-        sender = await chamber(port, "SENDER,secret")
-        watcher = await chamber(port, "WATCHER,secret")
+        victim = await chamber(port, "VICTIM,sesame", await tiny_window(port))  # reads no more
+        sender = await chamber(port, "SENDER,sesame")
+        watcher = await chamber(port, "WATCHER,sesame")
         with LogWatch("opencs.net", "outbox over") as cut:
             batch = 0
             while services.lobby.chat_dropped < policy.OUTBOX_LIMIT and batch < 5000:
@@ -195,7 +195,7 @@ def test_guests_from_one_address_are_capped_and_an_account_still_gets_in() -> No
         stop, task, port = await start(local_config(), clock=ManualClock(1000.0))
         guests = [await chamber(port, "JOINGENIE") for _ in range(policy.MAX_GUESTS_PER_ADDRESS)]
         extra = await logon(port, "JOINGENIE")
-        member = await logon(port, "MEMBER,secret")
+        member = await logon(port, "MEMBER,sesame")
         for g in guests:
             g.writer.close()
         stop.set()

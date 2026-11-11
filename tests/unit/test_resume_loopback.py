@@ -53,7 +53,7 @@ async def play_and_report(c: Client) -> server.Session:
 
 
 async def resume(port: int, team: int) -> None:
-    c = await login(port, "ALICE,secret")
+    c = await login(port, "ALICE,sesame")
     await c.expect(b"WAS INTERRUPTED.\r")
     await c.expect(b"TYPE /RESUME WITHIN 3:00 TO RETURN TO IT.\r\x05D0\r")
     await c.send("/RESUME\r")
@@ -76,7 +76,7 @@ def test_a_closed_socket_is_a_line_drop_that_can_be_resumed() -> None:
         stop, task, port = await start(local_config(), clock=clock, tick_sleep=gate.sleep)
         try:
             with LogWatch("opencs.session", "held for /RESUME") as dropped:
-                c = await login(port, "ALICE,secret")
+                c = await login(port, "ALICE,sesame")
                 hello = await play_and_report(c)
                 await c.send(frame(client.Status(260, 3, 710)))  # the last the server hears
                 c.writer.close()
@@ -96,7 +96,7 @@ def test_a_silent_line_is_a_line_drop_that_can_be_resumed() -> None:
         stop, task, port = await start(local_config(), clock=clock, tick_sleep=gate.sleep)
         try:
             with LogWatch("opencs.session", "held for /RESUME") as dropped:
-                c = await login(port, "ALICE,secret")
+                c = await login(port, "ALICE,sesame")
                 hello = await play_and_report(c)
                 await c.send(frame(client.Status(260, 3, 710)))
                 await c.send(frame(client.Ping()))  # answered only after the frames before it

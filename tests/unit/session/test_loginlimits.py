@@ -22,7 +22,7 @@ def attempt(world: World, line: str, address: str) -> bytes:
 def register(world: World, *names: str) -> None:
     """Accounts that exist already, made without the gate."""
     for name in names:
-        pilot = world.identity.login(f"{name},secret")
+        pilot = world.identity.login(f"{name},sesame")
         assert isinstance(pilot, Pilot)
         world.identity.release(pilot)
 
@@ -63,7 +63,7 @@ def test_another_address_is_not_affected() -> None:
     register(world, "ACCT", "OTHER")
     for n in range(policy.LOGIN_ATTEMPTS_PER_ADDRESS[0] + 1):
         attempt(world, f"ACCT,wrong{n}", "1.1.1.1")
-    assert not refused(attempt(world, "OTHER,secret", "2.2.2.2"), b"TOO MANY")
+    assert not refused(attempt(world, "OTHER,sesame", "2.2.2.2"), b"TOO MANY")
 
 
 def test_addresses_in_one_ipv6_slash_64_share_one_allowance_of_password_checks() -> None:
@@ -73,7 +73,7 @@ def test_addresses_in_one_ipv6_slash_64_share_one_allowance_of_password_checks()
     outs = [attempt(world, f"ACCT{n},wrong", f"2001:db8:0:1::{n + 1:x}") for n in range(burst + 1)]
     assert not any(refused(o, b"TOO MANY") for o in outs[:burst])
     assert refused(outs[burst], b"TOO MANY LOGIN ATTEMPTS")
-    assert not refused(attempt(world, "ACCT0,secret", "2001:db8:0:2::1"), b"TOO MANY")
+    assert not refused(attempt(world, "ACCT0,sesame", "2001:db8:0:2::1"), b"TOO MANY")
 
 
 def test_guests_cost_nothing() -> None:
@@ -85,17 +85,17 @@ def test_guests_cost_nothing() -> None:
 def test_new_accounts_are_limited_per_address() -> None:
     world = make_world()
     burst = policy.NEW_ACCOUNTS_PER_ADDRESS[0]
-    outs = [attempt(world, f"NEW{n},secret", "1.1.1.1") for n in range(burst + 1)]
+    outs = [attempt(world, f"NEW{n},sesame", "1.1.1.1") for n in range(burst + 1)]
     assert not any(refused(o, b"TOO MANY") for o in outs[:burst])
     assert refused(outs[burst], b"TOO MANY NEW ACCOUNTS")
     # An existing account still logs in from that address: only registration is refused.
-    assert refused(attempt(world, "NEW0,secret", "1.1.1.1"), b"PASSWORD: ")
+    assert refused(attempt(world, "NEW0,sesame", "1.1.1.1"), b"PASSWORD: ")
 
 
 def test_new_accounts_are_limited_for_the_whole_server() -> None:
     world = make_world()
     burst = policy.NEW_ACCOUNTS_GLOBAL[0]
-    outs = [attempt(world, f"NEW{n},secret", f"10.0.0.{n}") for n in range(burst + 1)]
+    outs = [attempt(world, f"NEW{n},sesame", f"10.0.0.{n}") for n in range(burst + 1)]
     assert not any(refused(o, b"TOO MANY") for o in outs[:burst])
     assert refused(outs[burst], b"TOO MANY NEW ACCOUNTS")
 
@@ -147,8 +147,8 @@ def test_wrong_passwords_for_one_account_are_limited_whatever_the_address() -> N
     outs = [attempt(world, "VICTIM,guess", f"10.1.{n}.1") for n in range(burst + 1)]
     assert all(told_wrong(o) for o in outs[:burst])
     assert refused(outs[burst], b"TOO MANY WRONG PASSWORDS FOR THAT ACCOUNT")
-    assert refused(attempt(world, "VICTIM,secret", "10.2.0.1"), b"TOO MANY WRONG")  # even the owner
-    assert refused(attempt(world, "OTHER,secret", "10.2.0.2"), b"PASSWORD: ")  # others unaffected
+    assert refused(attempt(world, "VICTIM,sesame", "10.2.0.1"), b"TOO MANY WRONG")  # even the owner
+    assert refused(attempt(world, "OTHER,sesame", "10.2.0.2"), b"PASSWORD: ")  # others unaffected
 
 
 def test_a_locked_account_opens_again_in_minutes() -> None:
@@ -158,35 +158,35 @@ def test_a_locked_account_opens_again_in_minutes() -> None:
     for n in range(burst):
         attempt(world, "VICTIM,guess", f"10.1.{n}.1")
     world.clock.advance(1 / rate)
-    assert refused(attempt(world, "VICTIM,secret", "10.2.0.1"), b"PASSWORD: ")
+    assert refused(attempt(world, "VICTIM,sesame", "10.2.0.1"), b"PASSWORD: ")
 
 
 def test_a_guesser_cannot_lock_the_owner_out_where_the_owner_has_logged_in() -> None:
     world = make_world()
     register(world, "VICTIM")
-    assert refused(attempt(world, "VICTIM,secret", "10.9.0.1"), b"PASSWORD: ")
+    assert refused(attempt(world, "VICTIM,sesame", "10.9.0.1"), b"PASSWORD: ")
     burst = policy.FAILED_LOGINS_PER_ACCOUNT[0]
     outs = [attempt(world, "VICTIM,guess", f"10.1.{n}.1") for n in range(burst * 2)]
     assert refused(outs[-1], b"TOO MANY WRONG PASSWORDS")  # the guessers are stopped
     assert refused(attempt(world, "VICTIM,guess", "10.1.0.1"), b"TOO MANY WRONG PASSWORDS")
-    assert refused(attempt(world, "VICTIM,secret", "10.9.0.1"), b"PASSWORD: ")  # the owner is not
+    assert refused(attempt(world, "VICTIM,sesame", "10.9.0.1"), b"PASSWORD: ")  # the owner is not
 
 
 def test_the_owner_s_known_source_is_its_ipv6_slash_64_not_one_address() -> None:
     world = make_world()
     register(world, "VICTIM")
-    assert refused(attempt(world, "VICTIM,secret", "2001:db8:9::1"), b"PASSWORD: ")
+    assert refused(attempt(world, "VICTIM,sesame", "2001:db8:9::1"), b"PASSWORD: ")
     burst = policy.FAILED_LOGINS_PER_ACCOUNT[0]
     for n in range(burst * 2):
         attempt(world, "VICTIM,guess", f"10.1.{n}.1")
     # The owner's host picked a new address in the same /64: still the source it logged in from.
-    assert refused(attempt(world, "VICTIM,secret", "2001:db8:9::2"), b"PASSWORD: ")
+    assert refused(attempt(world, "VICTIM,sesame", "2001:db8:9::2"), b"PASSWORD: ")
 
 
 def test_wrong_passwords_from_a_source_the_owner_uses_are_still_limited() -> None:
     world = make_world()
     register(world, "VICTIM")
-    attempt(world, "VICTIM,secret", "10.9.0.1")
+    attempt(world, "VICTIM,sesame", "10.9.0.1")
     burst = policy.FAILED_LOGINS_PER_ACCOUNT_AND_SOURCE[0]
     outs = [attempt(world, "VICTIM,guess", "10.9.0.1") for _ in range(burst + 1)]
     assert all(told_wrong(o) for o in outs[:burst])
@@ -196,11 +196,11 @@ def test_wrong_passwords_from_a_source_the_owner_uses_are_still_limited() -> Non
 def test_one_source_s_wrong_passwords_spend_nothing_of_another_known_source() -> None:
     world = make_world()
     register(world, "VICTIM")
-    attempt(world, "VICTIM,secret", "10.8.0.1")  # a housemate, say
-    attempt(world, "VICTIM,secret", "10.9.0.1")
+    attempt(world, "VICTIM,sesame", "10.8.0.1")  # a housemate, say
+    attempt(world, "VICTIM,sesame", "10.9.0.1")
     for _ in range(policy.FAILED_LOGINS_PER_ACCOUNT_AND_SOURCE[0]):
         attempt(world, "VICTIM,guess", "10.8.0.1")
-    assert refused(attempt(world, "VICTIM,secret", "10.9.0.1"), b"PASSWORD: ")
+    assert refused(attempt(world, "VICTIM,sesame", "10.9.0.1"), b"PASSWORD: ")
 
 
 def test_an_account_remembers_only_its_latest_sources() -> None:
@@ -241,7 +241,7 @@ def test_a_refused_check_spends_nothing_from_the_account() -> None:
     for n in range(policy.FAILED_LOGINS_PER_ACCOUNT[0] * 3):
         attempt(world, "VICTIM,guess", f"10.1.{n}.1")
     world.clock.advance(1 / policy.FAILED_LOGINS_PER_ACCOUNT[1])  # one failure's worth
-    assert refused(attempt(world, "VICTIM,secret", "10.2.0.1"), b"PASSWORD: ")
+    assert refused(attempt(world, "VICTIM,sesame", "10.2.0.1"), b"PASSWORD: ")
 
 
 # --- guesses at once ---------------------------------------------------------------------------
@@ -268,7 +268,7 @@ def test_a_right_password_gives_its_charge_back() -> None:
     burst = policy.FAILED_LOGINS_PER_ACCOUNT[0]
     for n in range(burst - 1):
         attempt(world, "VICTIM,guess", f"10.1.{n}.1")
-    assert refused(attempt(world, "VICTIM,secret", "10.2.0.1"), b"PASSWORD: ")
+    assert refused(attempt(world, "VICTIM,sesame", "10.2.0.1"), b"PASSWORD: ")
     assert told_wrong(attempt(world, "VICTIM,guess", "10.3.0.1"))  # the last one
     assert refused(attempt(world, "VICTIM,guess", "10.3.1.1"), b"TOO MANY WRONG PASSWORDS")
 

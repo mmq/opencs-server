@@ -19,7 +19,7 @@ from opencs.messages import ClientMessage, WirePos, client, client_payload, serv
 from opencs.store.base import ProgressRecord
 from opencs.wire.frame import build_frame
 
-ALICE = "ALICE,SECRET"
+ALICE = "ALICE,SESAME"
 
 
 def frame(msg: ClientMessage) -> bytes:
@@ -50,8 +50,8 @@ def test_status_counts_connections_players_by_team_and_held_games() -> None:
     world = make_world()
     ctl, _ = control(world)
     flying(world, ALICE, 1)
-    flying(world, "BOB,SECRET", 0)
-    enter_lobby(world, "CAROL,SECRET")
+    flying(world, "BOB,SESAME", 0)
+    enter_lobby(world, "CAROL,SESAME")
     world.clock.advance(125)
     lines = ctl.status()
     assert lines[0] == "uptime: 125 s"
@@ -123,9 +123,9 @@ def test_announce_reaches_players_in_game_and_the_chamber_and_no_one_else() -> N
     world = make_world()
     ctl, _ = control(world)
     flyer = flying(world, ALICE, 1)
-    loading = play(world, "A", 0, "BOB,SECRET")  # seated but has not sent its first report
+    loading = play(world, "A", 0, "BOB,SESAME")  # seated but has not sent its first report
     loading.io.messages.clear()
-    chamber = enter_lobby(world, "CAROL,SECRET")
+    chamber = enter_lobby(world, "CAROL,SESAME")
     assert ctl.execute("announce Server restarts at 9") == ["announced to 2"]
     assert flyer.io.messages == [server.Chat(100, 0, b"Server restarts at 9")]  # sender 100
     # still loading: its ring would drop it (our audience rule (clients that have reported))
@@ -138,7 +138,7 @@ def test_announce_text_is_made_printable_and_cut_to_what_the_client_takes() -> N
     world = make_world()
     ctl, _ = control(world)
     flyer = flying(world, ALICE, 1)
-    chamber = enter_lobby(world, "CAROL,SECRET")
+    chamber = enter_lobby(world, "CAROL,SESAME")
     ctl.announce("a\x05b\x01 ü" + "x" * 400)
     (sent,) = flyer.io.messages
     assert isinstance(sent, server.Chat) and sent.sender == 100
@@ -182,7 +182,7 @@ def test_kick_leaves_other_pilots_alone() -> None:
     world = make_world()
     ctl, _ = control(world)
     a = enter_lobby(world, ALICE)
-    b = enter_lobby(world, "BOB,SECRET")
+    b = enter_lobby(world, "BOB,SESAME")
     ctl.execute("kick bob")
     assert b.io.closed and not a.io.closed
 
@@ -406,7 +406,7 @@ def test_a_reset_password_opens_an_account_the_guessers_locked() -> None:
 def test_progress_and_accounts_are_wiped_only_while_the_player_is_offline() -> None:
     world = make_world()
     ctl, _ = control(world)
-    h = enter_lobby(world, "ALICE,secret")
+    h = enter_lobby(world, "ALICE,sesame")
     world.progress.save("acct:ALICE", ProgressRecord((1,) * 9, 0, 5, 6, 7))
     assert ctl.execute("reset-progress ALICE") == ["refused: ALICE is online; kick it first"]
     assert ctl.execute("delete-account ALICE") == ["refused: ALICE is online; kick it first"]

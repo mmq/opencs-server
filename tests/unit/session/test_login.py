@@ -40,7 +40,7 @@ def test_the_bare_cr_is_skipped_and_the_first_non_empty_line_is_the_account() ->
     h.take()
     h.feed("\r\r\r")
     assert h.take() == b""
-    h.feed("ALPHA,secret\r")
+    h.feed("ALPHA,sesame\r")
     assert h.take() == b"PASSWORD: "
     assert h.session.pilot is not None
     assert h.session.pilot.callsign == "ALPHA"
@@ -49,7 +49,7 @@ def test_the_bare_cr_is_skipped_and_the_first_non_empty_line_is_the_account() ->
 
 def test_name_and_password_all_in_one_feed() -> None:
     h = connect(make_world())
-    h.feed("HHH\rBRAVO,secret\r<Not Telling!>\r")
+    h.feed("HHH\rBRAVO,sesame\r<Not Telling!>\r")
     assert h.take() == b"CONNECT\r\nU#=PASSWORD: \r\n*"
     assert h.session.pilot is not None
     assert h.session.pilot.callsign == "BRAVO"
@@ -132,9 +132,9 @@ def test_bye_says_goodbye_and_closes() -> None:
 def test_the_account_is_refused_with_a_line_then_the_connection_closes() -> None:
     world = make_world()
     first = connect(world)
-    first.feed("HHH\rALPHA,secret\r")
+    first.feed("HHH\rALPHA,sesame\r")
     second = connect(world)
-    second.feed("HHH\rALPHA,secret\r")
+    second.feed("HHH\rALPHA,sesame\r")
     assert second.take().endswith(b"THAT ACCOUNT IS ALREADY LOGGED IN\r")
     assert second.io.closed_with == ["login refused"]
     assert second.session.pilot is None
@@ -146,7 +146,7 @@ def test_the_account_is_refused_with_a_line_then_the_connection_closes() -> None
 def test_wrong_password_is_refused() -> None:
     world = make_world()
     a = connect(world)
-    a.feed("HHH\rALPHA,secret\r")
+    a.feed("HHH\rALPHA,sesame\r")
     a.session.closed()
     b = connect(world)
     b.feed("HHH\rALPHA,wrong\r")
@@ -242,7 +242,7 @@ def test_an_address_may_have_only_so_many_guests_online() -> None:
     extra = login(world, address="10.9.9.9")
     assert extra.io.closed_with == ["login refused"]
     assert b"TOO MANY GUESTS" in extra.take()
-    assert not login(world, "PILOT,secret", address="10.9.9.9").io.closed  # an account is fine
+    assert not login(world, "PILOT,sesame", address="10.9.9.9").io.closed  # an account is fine
     guests[0].session.closed()  # one leaves: room again
     assert not login(world, address="10.9.9.9").io.closed
 
@@ -273,7 +273,7 @@ def test_lines_sent_during_the_password_check_are_read_once_it_is_done() -> None
     world = make_world(hasher=hasher)
     h = connect(world)
     # The real client does not wait for the prompts.
-    h.feed("HHH\rPILOT,secret\r<Not Telling!>\rM 1380;3\rCSTTBT 105 150\r")
+    h.feed("HHH\rPILOT,sesame\r<Not Telling!>\rM 1380;3\rCSTTBT 105 150\r")
     assert isinstance(h.session.phase, LoginPhase)
     assert b"PASSWORD" not in h.take()
     hasher.run()
@@ -287,7 +287,7 @@ def test_a_check_that_finishes_after_the_player_hung_up_does_nothing() -> None:
     hasher = DeferredHasher()
     world = make_world(hasher=hasher)
     h = connect(world)
-    h.feed("HHH\rPILOT,secret\r")
+    h.feed("HHH\rPILOT,sesame\r")
     h.session.closed()
     hasher.run()
     assert h.session.pilot is None
@@ -298,7 +298,7 @@ def test_a_registration_whose_player_hung_up_stores_nothing() -> None:
     hasher = DeferredHasher()
     world = make_world(hasher=hasher)
     h = connect(world)
-    h.feed("HHH\rNEWBIE,secret\r")
+    h.feed("HHH\rNEWBIE,sesame\r")
     h.session.closed()
     hasher.run()
     assert isinstance(world.identity.login("NEWBIE,different"), Pilot)  # the name was still free
@@ -307,7 +307,7 @@ def test_a_registration_whose_player_hung_up_stores_nothing() -> None:
 def test_a_flood_during_the_password_check_closes() -> None:
     world = make_world(hasher=DeferredHasher())
     h = connect(world)
-    h.feed("HHH\rPILOT,secret\r")
+    h.feed("HHH\rPILOT,sesame\r")
     h.feed(b"x" * (policy.LOGIN_PREAMBLE_LIMIT + 1))
     assert h.io.closed_with == ["too much input during the password check"]
 
@@ -315,10 +315,10 @@ def test_a_flood_during_the_password_check_closes() -> None:
 def test_two_logins_of_one_account_racing_through_the_check_admit_one() -> None:
     hasher = DeferredHasher()
     world = make_world(hasher=hasher)
-    world.identity.release(world.identity.login("PILOT,secret"))  # type: ignore[arg-type]
+    world.identity.release(world.identity.login("PILOT,sesame"))  # type: ignore[arg-type]
     first, second = connect(world), connect(world)
-    first.feed("HHH\rPILOT,secret\r")
-    second.feed("HHH\rPILOT,secret\r")
+    first.feed("HHH\rPILOT,sesame\r")
+    second.feed("HHH\rPILOT,sesame\r")
     hasher.run()
     assert not first.io.closed
     assert second.io.closed_with == ["login refused"]
@@ -330,7 +330,7 @@ def test_two_logins_of_one_account_racing_through_the_check_admit_one() -> None:
 OLD_KDF = Kdf.pbkdf2(1000)
 
 
-def pbkdf2_accounts(password: str = "secret") -> MemoryAccountStore:
+def pbkdf2_accounts(password: str = "sesame") -> MemoryAccountStore:
     """A store holding PILOT as an account made before Argon2id."""
     store = MemoryAccountStore()
     salt = b"0" * 16
@@ -341,13 +341,13 @@ def pbkdf2_accounts(password: str = "secret") -> MemoryAccountStore:
 def test_a_pbkdf2_account_is_rehashed_with_argon2id_when_its_owner_logs_in() -> None:
     accounts = pbkdf2_accounts()
     world = make_world(accounts=accounts)
-    h = login(world, "PILOT,secret")
+    h = login(world, "PILOT,sesame")
     assert h.session.pilot is not None and not h.io.closed
     upgraded = accounts.get("PILOT")
     assert upgraded is not None and upgraded.kdf == FAST_KDF
-    assert upgraded.password_hash == hash_password("secret", upgraded.salt, FAST_KDF)
+    assert upgraded.password_hash == hash_password("sesame", upgraded.salt, FAST_KDF)
     h.session.closed()
-    again = login(world, "PILOT,secret")  # the new hash lets its owner in
+    again = login(world, "PILOT,sesame")  # the new hash lets its owner in
     assert again.session.pilot is not None and not again.io.closed
 
 
@@ -362,7 +362,7 @@ def test_a_wrong_password_does_not_rehash() -> None:
 def test_the_rehash_is_not_a_guess() -> None:
     hasher = DeferredHasher()
     world = make_world(accounts=pbkdf2_accounts(), hasher=hasher)
-    h = login(world, "PILOT,secret", address="10.9.9.9")
+    h = login(world, "PILOT,sesame", address="10.9.9.9")
     hasher.run()
     assert len(hasher.waiting) == 1  # the rehash, which needs no allowance
     hasher.run()
@@ -380,7 +380,7 @@ def test_a_rehash_that_ends_after_a_reset_keeps_the_reset() -> None:
     hasher = DeferredHasher()
     accounts = pbkdf2_accounts()
     world = make_world(accounts=accounts, hasher=hasher)
-    login(world, "PILOT,secret")
+    login(world, "PILOT,sesame")
     hasher.run()
     reset = world.identity.reset_password("PILOT")
     assert isinstance(reset, str)
@@ -398,8 +398,8 @@ def test_a_rehash_that_cannot_be_stored_is_logged_and_the_login_stands(
 
     accounts = Failing()
     salt = b"0" * 16
-    accounts.create(Account("PILOT", salt, hash_password("secret", salt, OLD_KDF), OLD_KDF))
-    h = login(make_world(accounts=accounts), "PILOT,secret")
+    accounts.create(Account("PILOT", salt, hash_password("sesame", salt, OLD_KDF), OLD_KDF))
+    h = login(make_world(accounts=accounts), "PILOT,sesame")
     assert h.session.pilot is not None and not h.io.closed
     assert b"PASSWORD: " in h.take()
     assert "could not store the rehashed password of PILOT" in caplog.text

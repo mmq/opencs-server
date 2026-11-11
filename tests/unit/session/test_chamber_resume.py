@@ -16,7 +16,7 @@ from opencs.session.ingame import InGamePhase
 from opencs.wire.frame import build_frame
 from opencs.world.seating import JoinRefused
 
-ALICE = "ALICE,SECRET"
+ALICE = "ALICE,SESAME"
 KEY = "acct:ALICE"
 CSTTBT = "CSTTBT 105 150\r"
 
@@ -97,7 +97,7 @@ def test_a_guest_is_told_nothing() -> None:
 def test_another_account_is_told_nothing() -> None:
     world = make_world()
     drop_alice(world)
-    _, out = back(world, "BOB,SECRET")
+    _, out = back(world, "BOB,SESAME")
     assert b"INTERRUPTED" not in out
 
 

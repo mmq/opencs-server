@@ -189,7 +189,7 @@ class FakeClient:
         await term.send(b"HHH")
         await term.expect(b"U#")
         await term.send(b"\r")
-        await term.send(self.name.encode("ascii") + b",PASSWORD\r")
+        await term.send(self.name.encode("ascii") + b",FAKECLIENT\r")
         await asyncio.sleep(0.3)
         await term.send(b"<Not Telling!>\r")
         await term.expect(b"*")

@@ -23,7 +23,7 @@ from opencs.world.progress import SavedProgress
 
 BAYS = (3, 2, 1, 1, 5, 4, 0, 1, 2)
 STORED = ProgressRecord(bays=BAYS, marker=-2, bay_points=957, score=1670, career=500)
-ACCOUNT = "ALICE,secret"
+ACCOUNT = "ALICE,sesame"
 KEY = "acct:ALICE"
 
 

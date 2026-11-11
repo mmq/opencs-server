@@ -285,7 +285,7 @@ def test_the_configured_rate_reaches_a_real_servers_connections() -> None:
         services = build_services(config, clock=clock)
         stop, task, port = await start(config, clock=clock, services=services)
         watcher: Client
-        watcher, _ = await enter(port, "RED", "WATCHER,secret")
+        watcher, _ = await enter(port, "RED", "WATCHER,sesame")
         real = MonotonicClock()
         begun = real.now()
         size = 0

@@ -447,7 +447,7 @@ def test_password_hashes_run_on_a_thread_and_report_back_on_the_loop() -> None:
 def test_unplayed_accounts_are_pruned_at_the_interval_and_played_ones_kept() -> None:
     services = build_services(local_config())
     for name in ("IDLER", "PLAYER"):
-        pilot = services.identity.login(f"{name},secret")
+        pilot = services.identity.login(f"{name},sesame")
         services.identity.release(pilot)  # type: ignore[arg-type]
     services.persistence._store.save("acct:PLAYER", ProgressRecord((1,) * 9, 0, 0, 0, 0))
     soon = time.time() + 60

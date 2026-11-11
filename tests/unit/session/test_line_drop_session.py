@@ -12,7 +12,7 @@ from opencs.wire.frame import build_frame
 from opencs.world.resume import ResumeRecord
 
 PING = bytes.fromhex("454e")
-ALICE = "ALICE,SECRET"
+ALICE = "ALICE,SESAME"
 KEY = "acct:ALICE"
 
 
@@ -280,7 +280,7 @@ def test_a_guests_drop_resets_the_emptied_city() -> None:
 def three_from_one_address(world: World, address: str = "9.9.9.9") -> list[Harness]:
     hs = []
     for name, team in (("ALICE", 0), ("BOB", 1), ("CAROL", 2)):
-        h = play(world, "A", team, f"{name},SECRET", address=address)
+        h = play(world, "A", team, f"{name},SESAME", address=address)
         fly(h)
         hs.append(h)
     return hs
@@ -301,7 +301,7 @@ def test_a_third_drop_from_one_address_holds_no_slot() -> None:
 def test_the_limit_is_per_address() -> None:
     world = make_world()
     alice_, bob, _ = three_from_one_address(world)
-    other = play(world, "A", 3, "DAVE,SECRET", address="8.8.8.8")
+    other = play(world, "A", 3, "DAVE,SESAME", address="8.8.8.8")
     fly(other)
     alice_.session.closed()
     bob.session.closed()
@@ -313,7 +313,7 @@ def test_drops_from_one_ipv6_slash_64_hold_as_from_one_address() -> None:
     world = make_world()
     hs = []
     for n, (name, team) in enumerate((("ALICE", 0), ("BOB", 1), ("CAROL", 2))):
-        h = play(world, "A", team, f"{name},SECRET", address=f"2001:db8:0:1::{n + 1:x}")
+        h = play(world, "A", team, f"{name},SESAME", address=f"2001:db8:0:1::{n + 1:x}")
         fly(h)
         hs.append(h)
     for h in hs:

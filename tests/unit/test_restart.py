@@ -97,7 +97,7 @@ async def run_server(data_dir: Path, session: Scenario) -> None:
 
 def test_bays_and_bay_points_survive_a_server_restart(tmp_path: Path) -> None:
     async def first(port: int, clock: ManualClock, gate: TickGate) -> None:
-        c = await login(port, "ALICE,secret")
+        c = await login(port, "ALICE,sesame")
         assert b"NO RECORD YET" in await ask(c, "/SCORE")
         await play(c)
         bays, status = await restored(c)
@@ -112,7 +112,7 @@ def test_bays_and_bay_points_survive_a_server_restart(tmp_path: Path) -> None:
         c.writer.close()
 
     async def second(port: int, clock: ManualClock, gate: TickGate) -> None:
-        c = await login(port, "ALICE,secret")  # the password survived too
+        c = await login(port, "ALICE,sesame")  # the password survived too
         record = await ask(c, "/SCORE")
         for line in (
             b"LAST GAME SCORE: 260",

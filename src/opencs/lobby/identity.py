@@ -269,7 +269,7 @@ class Identity:
         every rule a registration must pass, wherever it comes from (a first login now; a
         registration command or page later). It does not look at the limits on how often."""
         if (
-            reason := self._new_name_problem(name) or self._new_password_problem(password)
+            reason := self._new_name_problem(name) or self._new_password_problem(name, password)
         ) is not None:
             return Refused(reason)
         if self._store.count() >= self._max_accounts:
@@ -301,13 +301,18 @@ class Identity:
                     return True
         return False
 
-    def _new_password_problem(self, password: str) -> str | None:
+    def _new_password_problem(self, name: str, password: str) -> str | None:
         if len(password) < self._min_password_length:
             return (
                 f"A NEW ACCOUNT NEEDS A PASSWORD OF {self._min_password_length} CHARACTERS OR MORE"
             )
         if len(password) > policy.MAX_PASSWORD_LENGTH:
             return "PASSWORD TOO LONG"
+        shouted = password.upper()  # the client capitalises what it sends
+        if shouted == name:
+            return "A PASSWORD MUST NOT BE THE ACCOUNT NAME"
+        if shouted in policy.COMMON_PASSWORDS:
+            return "THAT PASSWORD IS TOO COMMON: CHOOSE ANOTHER"
         return None
 
     def register(self, name: str, password: str | None = None) -> tuple[Account, str] | Refused:
