@@ -5,10 +5,12 @@ own SQLite database. It talks to the game server only over the service channel (
 game recorder's segments (ADR 14); it never opens the server's `opencs.db`. Its dependencies are its
 own: the server still needs only `argon2-cffi`.
 
-So far this is a skeleton: settings, a `/healthz` page and the `opencs-web` command, and the start of
-the recording archiver: `opencs_web.recordings` cuts segments into one-minute chunks and transforms
-them losslessly before compression (ADR 15). The archiver itself, the public pages, registration and
-administration come next.
+So far: settings, a `/healthz` page, the `opencs-web` command, and the recording archiver
+(`opencs_web.recordings`): `opencs-web archive` stores the recorder's finished segments in an archive
+of compressed one-minute chunks (ADR 15) with tables of games, pilots and battle events, deletes them,
+and applies the archive's retention; `opencs-web forget_callsign` takes a deleted account's callsign
+out of it. `docs/OPERATING.md` ("The archiver") has the details and `deploy/` its systemd units. The
+public pages, registration and administration come next.
 
 ## Settings
 
@@ -20,6 +22,10 @@ Read from the environment (in production, a systemd `EnvironmentFile`):
 | `OPENCS_WEB_ALLOWED_HOSTS` | host names, comma-separated | none, so every request is refused |
 | `OPENCS_WEB_DEBUG` | `true` for development only | `false` |
 | `OPENCS_WEB_DATABASE` | the web's SQLite file | `opencs-web.db` in `$STATE_DIRECTORY`, else the working directory |
+| `OPENCS_WEB_RECORDINGS` | the game recorder's directory, for `archive` | none |
+| `OPENCS_WEB_ARCHIVE` | the recording archive's SQLite file | `opencs-archive.db`, placed as the database |
+| `OPENCS_WEB_ARCHIVE_MAX_DAYS` | the archive keeps games this many days | 365 |
+| `OPENCS_WEB_ARCHIVE_MAX_BYTES` | and removes the oldest past this size | 10000000000 |
 
 ## Running
 

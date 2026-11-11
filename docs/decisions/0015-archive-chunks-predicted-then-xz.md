@@ -66,4 +66,7 @@ while the transform dominates the time; xz needs none.
 - Seeking to a point costs one chunk: about 20 ms to decompress and undo the transform for a busy minute,
   plus decoding the messages up to the point (about 12 ms for a whole minute).
 - Segments run a little over five minutes, so the last few records of each would make a tiny sixth
-  chunk; the archiver should fold such a tail into the chunk before it.
+  chunk; the archiver folds a last chunk that lies within the first 10 seconds of its minute into the
+  chunk before it.
+- In the archive (`opencs_web.recordings.archive`) this choice is codec 1 in each chunk's row, beside
+  the transform's mode.

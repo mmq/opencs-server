@@ -58,8 +58,10 @@ and stops at the first incomplete one or at a zero byte where a kind should be (
 power cut). A segment is complete if it has an END.
 
 **Files.** A segment is `<letter>-<UTC time>.ocsrec.part` while open and `.ocsrec` once finished; a
-`.part` left by a crash is renamed at the next start. The archiver deletes a segment it has stored, or
-renames it `.ocsrec.done`. The directory has a size cap and the filesystem a free-space floor; to make room
+`.part` left by a crash is renamed at the next start. A segment is made mode 0640 whatever the umask,
+so the archiver, which runs as another user in the server's group, can read it; the directory's mode
+(2770 for that) decides whether the group reaches it. The archiver deletes a segment once it has stored
+it (it may instead rename it `.ocsrec.done`). The directory has a size cap and the filesystem a free-space floor; to make room
 the server removes only the oldest `.done` files, so a recording not yet archived is never deleted. With
 no room a city's next segment is skipped, and recording carries on when there is room again.
 
@@ -79,10 +81,12 @@ kept. Recorded chat is for administrators only; a public replay shows none.
 - The recorder is a second reader of the world's events. A new server message needs no recorder change;
   a new relayed copy must be marked `relayed`, or it is recorded twice.
 - A format change gets a new version number, and readers refuse a version they do not know.
-- Segments wait for an archiver, which does not exist yet: until it does, the operator moves or deletes
-  them by hand, since the server never deletes an unmarked one.
+- The archiver (`opencs-web archive`, ADR 15) deletes each segment once its archive transaction has
+  committed, rather than marking it `.done`: the archive holds it byte for byte, and a raw copy would
+  keep callsigns out of reach of an account's deletion. Without the archiver, the operator moves or
+  deletes segments by hand, since the server never deletes an unmarked one.
 - Callsigns are in the header, in PLAYER records and in payloads (`'G'` and others). Deleting an account
-  is the archiver's job: raw segments are short-lived, and rewriting them on the server would mean
-  decoding every payload.
+  is the archiver's job (`opencs-web forget_callsign`): raw segments are short-lived, and rewriting them
+  on the server would mean decoding every payload.
 - Recordings hold chat, team chat included by default. Whether and how to tell players is the
   operator's decision.

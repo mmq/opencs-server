@@ -1,0 +1,14 @@
+# /etc/systemd/system/opencs-web-archive.path
+# Runs the recording archiver when the recordings directory changes: a segment is begun, or
+# finished (renamed from .ocsrec.part to .ocsrec), about every five minutes per recorded city.
+# Nothing changes while every city is empty, so nothing runs.
+[Unit]
+Description=Archive OpenCS game recordings when a segment finishes
+RequiresMountsFor=/var/lib/opencs-recordings
+
+[Path]
+PathChanged=/var/lib/opencs-recordings
+Unit=opencs-web-archive.service
+
+[Install]
+WantedBy=multi-user.target

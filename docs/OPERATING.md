@@ -57,12 +57,14 @@ below). Do that once it has finished.
 | `/var/log/opencs` | the log file, if `[logging] file` is set |
 | `/var/lib/opencs-captures` | session captures, if `[capture]` is enabled |
 | `/var/lib/opencs-recordings` | game recordings, if `[recording] dir` is set; better on a filesystem of its own ("Recording games") |
+| `/var/lib/opencs-web` | the web's state: the recording archive, `opencs-archive.db` (systemd makes it) |
 | `/run/opencs` | the service socket, if `[service]` is set (systemd makes the directory) |
 
 ```bash
 sudo useradd --system --home /var/lib/opencs --shell /usr/sbin/nologin opencs
-sudo install -d -o opencs -g opencs /var/lib/opencs /var/log/opencs /var/lib/opencs-captures \
-    /var/lib/opencs-recordings
+sudo install -d -o opencs -g opencs /var/lib/opencs /var/log/opencs /var/lib/opencs-captures
+# the server's group (the web's archiver) may read the recordings and delete them once archived
+sudo install -d -m 2770 -o opencs -g opencs /var/lib/opencs-recordings
 sudo install -d /etc/opencs
 sudo cp -r /opt/opencs/config/. /etc/opencs/
 ```
@@ -127,8 +129,8 @@ or exFAT):
 
 ```bash
 sudo install -d -m 0750 -o opencs -g opencs /srv/disk/opencs
-sudo install -d -m 0700 -o opencs -g opencs /srv/disk/opencs/data /srv/disk/opencs/log /srv/disk/opencs/captures \
-    /srv/disk/opencs/recordings
+sudo install -d -m 0700 -o opencs -g opencs /srv/disk/opencs/data /srv/disk/opencs/log /srv/disk/opencs/captures
+sudo install -d -m 2770 -o opencs -g opencs /srv/disk/opencs/recordings
 ```
 
 Then use those paths in `server.toml` (`data_dir`, `[logging] file`, `[capture] dir`, `[recording] dir`) and in the unit
@@ -175,8 +177,10 @@ Its settings:
 The paths in `server.toml` are relative to the file, and `/etc` is read-only under `ProtectSystem=strict`.
 `ProtectHome=true` hides `/home` and `/root`, so the `.venv` must use a Python outside them (the install
 above uses `/usr/bin/python3.12`). `UMask=0077` keeps every file the server makes (the database and its
-WAL files, logs, captures, recordings) readable by the `opencs` user only; the server also makes the database file
-mode 0600 itself. `LimitNOFILE=1024` is well above `[limits] max_connections` plus the files it keeps
+WAL files, logs, captures) readable by the `opencs` user only; the server also makes the database file
+mode 0600 itself. Recording segments are the exception: the server makes them 0640 whatever the umask,
+so that the archiver, in the server's group, can read them; the recordings directory's mode decides
+whether it can reach them (2770 above, 0700 to keep them the server's alone). `LimitNOFILE=1024` is well above `[limits] max_connections` plus the files it keeps
 open; raise both together.
 `--data-dir` puts the database in a writable place; the log file, capture and recordings directories take absolute paths
 that match `ReadWritePaths` (as in the configuration above).
@@ -357,8 +361,8 @@ capture of the server's own, committed as the example. Remove anything you do no
 
 Set `[recording] dir` and restart. While a city has a pilot to record in it (`when`), the server writes
 what happens there to segment files in that directory, one per city at a time, a new one about every 5
-minutes (`RECORDING_ROTATE_SECONDS`). The format is ADR 14. They are for the web front end's archiver,
-which will store them compressed and show replays. An empty city writes nothing.
+minutes (`RECORDING_ROTATE_SECONDS`). The format is ADR 14. The archiver ("The archiver" below)
+stores them compressed, for the web front end's replays to come. An empty city writes nothing.
 
 ```toml
 [recording]
@@ -374,17 +378,19 @@ be in `guest_names` too). A segment is `<letter>-<UTC time>.ocsrec.part` while i
 `<letter>-<UTC time>.ocsrec` once finished; a `.part` left by a crash is finished at the next start and
 reads up to its last whole record.
 
-**The archiver is not built yet.** The server never deletes a segment the archiver has not marked: only
-files renamed to `.ocsrec.done` are removed, oldest first, to keep the directory under `max_bytes`. Until
-there is an archiver, nothing is ever removed: move the finished `.ocsrec` files elsewhere, or delete them,
-by hand or from cron (never a `.part`). Once the directory reaches `max_bytes`, or the filesystem has less
-than `min_free_bytes` free, recording pauses until there is room again; the games go on. Renaming the
-ones you are done with to `.ocsrec.done` lets the server remove them itself when it needs the room.
+The server never deletes a segment the archiver has not finished with: to keep the directory under
+`max_bytes` it removes only files renamed to `.ocsrec.done`, oldest first. The archiver (below) deletes
+each segment as soon as it is stored, so normally there are none. Without the archiver nothing is ever
+removed: move the finished `.ocsrec` files elsewhere, or delete them, by hand or from cron (never a
+`.part`); renaming them `.ocsrec.done` lets the server remove them when it needs the room. Once the
+directory reaches `max_bytes`, or the filesystem has less than `min_free_bytes` free, recording pauses
+until there is room again; the games go on.
 
-Disk: a busy city records about 600 bytes a second, some 2 MB an hour. Put the directory on a filesystem
-of its own (a partition, or a small LVM volume), so recordings can never fill the disk the database and
-logs are on; `min_free_bytes` guards that only if they share one. Under the shipped unit the files are
-the `opencs` user's alone (`UMask=0077`).
+Disk: a busy city records about 600 bytes a second, some 2 MB an hour, and archives to about 0.5 MB an
+hour. Put the directory on a filesystem of its own (a partition, or a small LVM volume), so recordings
+can never fill the disk the database and logs are on; `min_free_bytes` guards that only if they share
+one. The server makes each segment mode 0640, so the files are its own and its group's; the directory's
+mode decides who reaches them (2770, as above, for the archiver).
 
 Recording never holds up a game: the game only queues what to write, and a thread writes it. If the
 queue fills because the disk cannot keep up, or a write fails, recording stops for the rest of the run;
@@ -402,6 +408,76 @@ restart the server to start it again. Log lines (logger `opencs.recording`):
 Recordings hold callsigns and chat, team chat included unless `chat` says otherwise: treat them as
 private. Recorded chat is meant for administrators only. Whether to tell players their games and chat are
 recorded is your decision.
+
+### The archiver
+
+`opencs-web archive` (the web package, `web/`) stores the finished segments in the recording archive, a
+SQLite file of its own (`opencs-archive.db` in the web's state directory, or `OPENCS_WEB_ARCHIVE`), as
+one-minute chunks compressed with xz after a lossless transform (ADR 15), with an index by city, time
+and game, and tables of each game's pilots (callsign, team, when they joined and left) and battle events
+(deaths, kills, towers destroyed). A *game* is the run of a city's segments recorded without a break:
+from the first pilot to record joining to the last leaving (or a shutdown, a full disk or a crash).
+
+Each segment is stored in one transaction, oldest first, and then **deleted**: the archive holds it
+byte for byte, so a raw copy would only take room under `max_bytes` and keep callsigns that deleting an
+account must reach. A crash between the commit and the delete is safe: the next run finds the name in
+the archive and only deletes the file. A segment still being written (`.part`) or marked `.done` is
+never touched. A file that is not a segment it can read is left where it is, logged, and the run exits
+with status 1 (`systemctl status opencs-web-archive` shows it failed); move it away.
+
+It runs as its own user, `opencs-web` (the web front end's), in the server's group, from two units in
+`deploy/`: `opencs-web-archive.path` watches the recordings directory and starts
+`opencs-web-archive.service`, a sandboxed one-shot run, whenever a segment begins or finishes. With every
+city empty nothing changes and nothing runs. The web package and its settings:
+
+```bash
+sudo useradd --system --shell /usr/sbin/nologin opencs-web     # if the web front end has not made it
+sudo usermod -aG opencs opencs-web
+cd /opt/opencs && sudo uv sync --no-dev --all-packages         # adds opencs-web (Django) to the .venv
+sudo install -d -m 0700 /etc/opencs-web
+sudo sh -c 'umask 077; echo "OPENCS_WEB_SECRET_KEY=$(head -c 32 /dev/urandom | base64 | tr -d "=+/")" \
+    > /etc/opencs-web/environment'
+sudo install -m 644 deploy/opencs-web-archive.path deploy/opencs-web-archive.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now opencs-web-archive.path
+sudo systemctl start opencs-web-archive          # once, for the segments already there
+journalctl -u opencs-web-archive                 # "archived B-20261111T194024Z.ocsrec", ...
+```
+
+The recordings directory must be mode 2770 (as in "Layout"); one made 0700 by an older install needs
+`sudo chmod 2770 /var/lib/opencs-recordings`, and segments made before this version need
+`sudo chmod 0640 /var/lib/opencs-recordings/*.ocsrec`. Settings, in `/etc/opencs-web/environment`:
+
+| variable | meaning | default |
+|---|---|---|
+| `OPENCS_WEB_RECORDINGS` | the recordings directory (the unit sets it) | none |
+| `OPENCS_WEB_ARCHIVE` | the archive's SQLite file | `opencs-archive.db` in the state directory |
+| `OPENCS_WEB_ARCHIVE_MAX_DAYS` | games that ended longer ago are removed | 365 |
+| `OPENCS_WEB_ARCHIVE_MAX_BYTES` | past this, the oldest games are removed | 10000000000 (10 GB) |
+
+Retention removes whole games, oldest first, after each run. At about 0.5 MB an hour for a busy city, a
+city busy all day reaches 10 GB in about two years, so the age limit is the one that normally applies.
+
+**Deleting an account's recordings.** After `delete-account`, take the account's callsign (each one it
+has used) out of the archive:
+
+```bash
+sudo -u opencs-web env $(sudo cat /etc/opencs-web/environment) OPENCS_WEB_RECORDINGS=/var/lib/opencs-recordings \
+    STATE_DIRECTORY=/var/lib/opencs-web /opt/opencs/.venv/bin/opencs-web forget_callsign CALLSIGN
+```
+
+It archives the finished segments first. Then, in every game the callsign flew in, it becomes as many
+`#` as it has letters in the pilot and event tables, in the segment headers' player tables, in the
+recorded player rows and in the `'G'` introductions; the pilot's own chat lines are emptied, and the
+callsign as a word in anyone's chat (and system lines) is blanked. The chunks are rewritten and the
+freed pages zeroed (SQLite `secure_delete`). Segments still being written are cleaned when they are
+archived: the callsign is kept in the archive's `forgotten` table until none older is left.
+
+What remains: the pilot's movements, shots and scores under its player id, which are no longer tied to
+a name; a mention of the callsign in the chat of games it did not fly in (add `--everywhere` to search
+the whole archive); a misspelt mention; other callsigns the account used, unless each is given; and
+copies outside the archive: backups of `opencs-archive.db`, `.done` files you kept, and the server's
+log files.
 
 ## The admin channel
 

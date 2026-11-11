@@ -1,0 +1,54 @@
+# /etc/systemd/system/opencs-web-archive.service
+# The recording archiver: one run stores every finished segment in the archive, deletes it, and
+# applies the archive's retention, then exits. Started by opencs-web-archive.path; to catch up by
+# hand, `sudo systemctl start opencs-web-archive`.
+[Unit]
+Description=OpenCS recording archiver
+RequiresMountsFor=/var/lib/opencs-recordings
+
+[Service]
+Type=oneshot
+User=opencs-web
+Group=opencs-web
+# The server's group: it reads the segments (the server makes them 0640) and, in the recordings
+# directory (mode 2770), deletes the ones it has archived. It cannot reach the server's data
+# directory (0700) or database (0600).
+SupplementaryGroups=opencs
+WorkingDirectory=/opt/opencs
+# OPENCS_WEB_SECRET_KEY and the web's other settings (web/README.md).
+EnvironmentFile=/etc/opencs-web/environment
+Environment=OPENCS_WEB_RECORDINGS=/var/lib/opencs-recordings
+ExecStart=/opt/opencs/.venv/bin/opencs-web archive
+# /var/lib/opencs-web: the archive, opencs-archive.db (and later the web's own database).
+StateDirectory=opencs-web
+StateDirectoryMode=0700
+ProtectSystem=strict
+ReadWritePaths=/var/lib/opencs-recordings
+# Behind the game: it waits for the CPU and the disk.
+Nice=10
+IOSchedulingClass=idle
+CPUWeight=20
+IOWeight=20
+# Sandboxing: the archiver needs the two directories and nothing else, not even the network.
+UMask=0077
+NoNewPrivileges=true
+PrivateNetwork=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+MemoryMax=256M
+TasksMax=16
