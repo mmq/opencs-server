@@ -172,6 +172,33 @@ def test_a_version_1_file_gains_the_kdf_column_and_its_accounts_read_as_pbkdf2(
     db.close()
 
 
+def test_a_version_1_file_runs_every_migration_in_order(tmp_path: Path) -> None:
+    # 1 the tables, 2 the kdf column, 3 the callsign and prune indexes, 4 chosen callsigns.
+    assert len(MIGRATIONS) == 4
+    path = tmp_path / "v1.db"
+    SqliteStore(path, migrations=MIGRATIONS[:1]).close()
+    v1 = sqlite3.connect(path)
+    with v1:
+        v1.execute(
+            "INSERT INTO accounts (name, salt, password_hash, iterations, created, last_login) "
+            "VALUES ('ALPHABRAVOCHARLIE', x'00', x'00', 1000, 1.0, NULL), "
+            "('ACE', x'00', x'00', 1000, 2.0, 5.0)"
+        )
+    v1.close()
+    db = SqliteStore(path)
+    assert db.schema_version == 4
+    assert db.get("ACE") == Account("ACE", b"\x00", b"\x00", Kdf.pbkdf2(1000))  # 2
+    indexes = {
+        row[0] for row in db._db.execute("SELECT name FROM sqlite_master WHERE type='index'")
+    }
+    assert {"accounts_seen", "accounts_callsign_folded"} <= indexes  # 3, then 4's
+    assert "accounts_callsign" not in indexes  # 3's cut-name index, which 4 replaces
+    assert db.callsign("ALPHABRAVOCHARLIE") == Callsign("ALPHABRAVOCH", None)  # 4
+    assert db.callsign_owner("ace") == "ACE"
+    assert [name for _, name in db.stale(10.0)] == ["ALPHABRAVOCHARLIE", "ACE"]
+    db.close()
+
+
 def test_a_pbkdf2_row_is_written_as_a_version_1_server_wrote_it(tmp_path: Path) -> None:
     db = SqliteStore(tmp_path / "t.db")
     db.create(Account("ALICE", b"s", b"h", Kdf.pbkdf2(1000)))
