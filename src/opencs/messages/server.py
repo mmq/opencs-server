@@ -47,7 +47,7 @@ def sanitize_chat(raw: bytes) -> bytes:
 
 @message
 class ReleaseDrop(ServerMessage):
-    """``'A'`` ``id:b10``: release that pod from drop state (I §8.3, I §8.3)."""
+    """``'A'`` ``id:b10``: release that pod from drop state (I §8.3)."""
 
     TYPE: ClassVar[str] = "A"
     id: int
@@ -69,8 +69,8 @@ class ReleaseDrop(ServerMessage):
 @message
 class Session(ServerMessage):
     """``'B'`` ``self_id:b10, slot:b10, callsign:str, network:str, city:str, max_mult:b10,
-    tower_output:b10, max_module_level:b10, n4:b10, n5:b10``: establish the session (I §8.4,
-    I §8.4). ``slot`` is ``(index << 3) | team``; ``n4`` is unread, ``n5`` bounds an unseen list."""
+    tower_output:b10, max_module_level:b10, n4:b10, n5:b10``: establish the session (I §8.4).
+    ``slot`` is ``(index << 3) | team``; ``n4`` is unread, ``n5`` bounds an unseen list."""
 
     TYPE: ClassVar[str] = "B"
     self_id: int
@@ -495,7 +495,7 @@ class Destroy(ServerMessage):
 @message
 class MobileCreate(ServerMessage):
     """``'K'`` ``id:num, grid, Xoff, Zoff``: a new id creates a guppy (id < 260) or a Muncher
-    there; a known id sends it there (I §8.13, I §8.13)."""
+    there; a known id sends it there (I §8.13)."""
 
     TYPE: ClassVar[str] = "K"
     id: int

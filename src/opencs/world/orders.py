@@ -85,7 +85,7 @@ class Orders:
     # --- orders ------------------------------------------------------------------------------
 
     def tower_order(self, player: Player, order: client.TowerOrder, now: float) -> list[Event]:
-        """A tower order (I §9.4.3, I §9.4.3): refused with ``'O'`` 1 inside the 3x3 tiles around an
+        """A tower order (I §9.4.3): refused with ``'O'`` 1 inside the 3x3 tiles around an
         enemy home corner and 2 when the team's queue is full (the client refunds its point on
         either); otherwise ``'O'`` 0 to the orderer alone (I App. B) and a job for the team's
         guppy."""

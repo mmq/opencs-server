@@ -1,6 +1,6 @@
 """Who a login line is: real accounts and ``JOINGENIE`` guests, and their callsigns.
 
-II §3, II §3, I §5.1, II §3. ``Identity`` knows nothing of sockets or sessions: it
+II §3, I §5.1. ``Identity`` knows nothing of sockets or sessions: it
 takes the account line and answers with a ``Pilot`` or a reason to refuse. It tracks who is online
 so a second login is refused and callsigns stay unique server-wide.
 """

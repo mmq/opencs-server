@@ -1,5 +1,5 @@
 """Free Munchers: one every ``muncher_every`` seconds from the nearest city edge at a tower of the
-team controlling most blocks (I §9.5.2, II §16.2, II §16.2)."""
+team controlling most blocks (I §9.5.2, II §16.2)."""
 
 from __future__ import annotations
 

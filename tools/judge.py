@@ -6,7 +6,7 @@
 §8/B) and grades what comes back. It knows nothing of the server under test beyond its port, so it
 judges every implementation by the same rules.
 
-    uv run python tools/judge.py --server                   # start OpenCS, grade all 11 core checks
+    uv run python tools/judge.py --server                   # start OpenCS, the 11 stage-1 checks
     uv run python tools/judge.py --server --checks 1,2      # only login and city selection
     uv run python tools/judge.py --server --stage 2 --checks 1-14,17-19   # ranges are allowed
     uv run python tools/judge.py --port 2399 --stage 2      # an already running server, 19 checks

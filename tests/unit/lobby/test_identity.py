@@ -1,4 +1,4 @@
-"""Identity: real accounts, JOINGENIE guests, callsigns (II §3, II §3)."""
+"""Identity: real accounts, JOINGENIE guests, callsigns (II §3)."""
 
 from __future__ import annotations
 

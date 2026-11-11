@@ -90,7 +90,7 @@ class City:
         self.orders = Orders(self, self._territory, rules, self.drops)
         #: Resident and called Sentinels (II §16.3).
         self.sentinels = Sentinels(self, config.sentinels, config.sentinel_respawn, self._rng)
-        #: Munchers, called and free (I §9.5.2, II §16.2, II §16.2).
+        #: Munchers, called and free (I §9.5.2, II §16.2).
         self.munchers = Munchers(
             self, self.orders, self._territory, config.muncher_every, self._rng
         )
@@ -138,7 +138,7 @@ class City:
         return self._live
 
     # The shot and hit counters live in ``Hits``; the city exposes them for the tests and the admin
-    # channel (M12).
+    # channel.
     @property
     def unsafe_shots(self) -> int:
         return self.hits.unsafe_shots

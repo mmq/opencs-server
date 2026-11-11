@@ -1,8 +1,10 @@
 """What the world's rule modules need of the city that owns them (DESIGN §3.1).
 
-``Orders``, ``Drops`` and ``Effects`` each hold one city's state but cannot create an entity, reach
-the roster or hand out an id themselves: only the city can. They ask through this protocol, so none
-of them imports the city.
+``Orders``, ``Drops``, ``Effects``, ``Hits``, the Sentinels and Munchers and the ``death`` functions
+cannot create an entity, reach the roster or hand out an id themselves: only the city can. They ask
+through this protocol, so none of them imports the city. ``podreport`` and ``resume`` are the
+exceptions: they take the concrete ``City``, named only under ``TYPE_CHECKING``, so the import
+cycle exists for the type checker alone.
 """
 
 from __future__ import annotations

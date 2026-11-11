@@ -195,7 +195,7 @@ restart loses every held game.
 | The server says `THAT ACCOUNT IS ALREADY LOGGED IN` | The account has a live connection (perhaps your old dropped one, until the server notices it is gone, which takes about 15 seconds in a game and up to 2 minutes in the Chamber); wait and retry |
 | `TOO MANY LOGIN ATTEMPTS` or `TOO MANY NEW ACCOUNTS` | The server limits how fast logins and sign-ups can come from one address; wait a minute |
 | `/RESUME` says nothing is held | You are a guest, the 10 or 3 minutes passed, you used `/PLAY` in between, the drop counted as a death, or the server restarted |
-| The server is full: the connection closes at once | A limit of 8 connections per address and 64 in all applies; tell the operator if you share an address with others |
+| The server is full: the connection closes at once | A limit of 4 connections per address and 128 in all applies; tell the operator if you share an address with others |
 
 The text of the game and its manual are not repeated here; the manual that came with your copy is the
 reference for flying, weapons and modules.

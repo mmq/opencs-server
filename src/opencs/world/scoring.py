@@ -1,4 +1,4 @@
-"""Bounty, the client's score mirror and the death payout (I §9.2, II §11.1, II §11.1).
+"""Bounty, the client's score mirror and the death payout (I §9.2, II §11.1).
 
 The client runs most of the manual's scoring for its own player (I §9.2.1): it steps the
 multiplier, accrues SCORE and bay points, upgrades bays and counts its battle marker, and reports

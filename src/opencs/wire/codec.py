@@ -10,7 +10,7 @@ from opencs.wire.errors import WireError
 from opencs.wire.frame import TERMINATORS
 
 #: Offset added to every bias10 and enc_num byte; keeps them above every terminator
-#: (I §4.3, I §4.3).
+#: (I §4.3).
 BIAS10 = 0x10
 
 #: Offset added to a bias88 byte (I §4.3).

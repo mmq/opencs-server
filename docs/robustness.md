@@ -144,7 +144,7 @@ refusal log is kept per full address. Log lines show the full address. Tests:
 | delivery to a sink | `Router.deliver` | `test_routing`, `test_containment::test_a_sink_that_raises_does_not_stop_delivery_to_the_rest` |
 | server messages | constructors refuse crash-prone values (`'c'` KIND, `'R'` ranges, `'T'` classes, chat bytes) | `messages/test_server`; every message the 48-hour run emits is encoded into a frame (`longrun/test_city_48h`) |
 
-## Operations (M12)
+## Operations
 
 | input / event | bound | on violation | test |
 |---|---|---|---|
@@ -155,7 +155,8 @@ refusal log is kept per full address. Log lines show the full address. Tests:
 | a local user exhausting the admin channel | accepted trade-off: one shared token-attempt bucket and four slots taken before authentication; see OPERATING.md "The admin channel" | the operator is refused for a while; the game is unaffected | none (a decision, not a bound) |
 | admin line length, rate, silence | `ADMIN_MAX_LINE`, `ADMIN_COMMAND_LIMIT`, `ADMIN_IDLE_TIMEOUT` | closed | `test_admin::test_an_overlong_line_closes_before_and_after_the_token`, `test_commands_over_the_rate_close_the_connection`, `test_a_silent_operator_is_dropped_after_the_idle_timeout` |
 | operator input | every command answers in text and never raises | an error line | `test_control::test_no_operator_input_raises` |
-| a password the operator makes (`create-account`, `reset-password`) | shown once in the reply, never logged; account changes refused while the player is online or held | refused with a line | `test_control::test_the_operator_creates_an_account_and_its_password_is_shown_once_never_logged`, `test_the_operator_resets_a_password`, `test_progress_and_accounts_are_wiped_only_while_the_player_is_offline` |
+| a password the operator makes (`create-account`, `reset-password`) | shown once in the reply, never logged; `reset-password` is allowed while the player is online and does not end that session (kick the player if the old password may be known) | none: the new password is shown | `test_control::test_the_operator_creates_an_account_and_its_password_is_shown_once_never_logged`, `test_the_operator_resets_a_password` |
+| an account's progress or the account wiped (`reset-progress`, `delete-account`) | refused while the player is online or has a game held for `/RESUME` | refused with a line | `test_control::test_progress_and_accounts_are_wiped_only_while_the_player_is_offline` |
 | a callsign or text in an admin reply | printable ASCII only | other bytes shown as `?` | `test_admin::test_replies_cannot_carry_control_characters` |
 | announce text | printable ASCII, `MAX_CHAT_BYTES` | made printable and cut | `test_control::test_announce_text_is_made_printable_and_cut_to_what_the_client_takes` |
 | shutdown | `SHUTDOWN_DEADLINE`, then connections are aborted | aborted | `net/test_listener::test_stop_aborts_what_outlasts_the_deadline_and_returns`, `test_shutdown::test_a_player_who_never_reads_cannot_hold_the_shutdown_and_is_still_saved` |

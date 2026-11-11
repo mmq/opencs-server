@@ -425,7 +425,7 @@ CHAMBER_REENTRY_LIMIT = (3, 1 / 60)
 #: the hint line (II §4.2: "within 2 min"), in seconds.
 CITY_HINT_WINDOW = 120.0
 
-# --- Identity (II §3, II §3; DESIGN §5) ------------------------------------
+# --- Identity (II §3; DESIGN §5) ------------------------------------
 
 #: The login name of a stock install, compared case-insensitively: no password, assigned callsign.
 #: I §5.1, II §3.
@@ -664,7 +664,7 @@ CALLSIGN_LAST_SUFFIX = 999
 #: (DESIGN §5 "line length in the Chamber").
 MAX_LINE_BYTES = 512
 
-# --- Messages (I §8, I §8, I §8.20) ----------------------------------------------------
+# --- Messages (I §8, I §8.20) ----------------------------------------------------
 
 #: Longest callsign the server sends in ``'B'``/``'G'``: the client's roster shows 12 characters
 #: (I §8.4, II §3).
@@ -784,7 +784,7 @@ RELAY_LIMIT_GRENADE = (8, 4.0)
 RELAY_LIMIT_DEATH = (3, 0.5)
 RELAY_LIMIT_DROP_REQUEST = (4, 1.0)
 
-# --- Combat and scoring (I §9.1, I §9.2, I §9.2, II §9; DESIGN §3.1 ``combat``/``scoring``) ------
+# --- Combat and scoring (I §9.1, I §9.2, II §9; DESIGN §3.1 ``combat``/``scoring``) ------
 
 #: Seconds from a client's ``'c'`` to the ``'I'`` its simulation reports for that shot. II §9.3:
 #: "~1.0 s earlier" (observed: own-shot delays span 0.75 to 1.14 s). Derived, not a choice.
@@ -969,7 +969,7 @@ AIR_SUPPORT_ACKNOWLEDGED = 0
 #: Air Support strikes kept for M10's resume check (enemy strikes near a dropped pod). Ours.
 STRIKE_LOG_MAX = 64
 
-# --- The living city: weather, Sentinels, Munchers (I §8.20, I §9.5.2, II §16.2, II §16.2, II §5)
+# --- The living city: weather, Sentinels, Munchers (I §8.20, I §9.5.2, II §16.2, II §5)
 # ----------
 
 #: The client's palette crossfade takes about 50 s, and a crossfade started during another back to
@@ -1038,7 +1038,7 @@ MUNCHER_EDGE_INSET_FEET = 50
 #: is used up per request, so honest play never nears it, but each Muncher costs legs of traffic.
 MAX_MUNCHERS = 16
 
-# --- /RESUME (II §13, II §13) ---------------------------------
+# --- /RESUME (II §13) ---------------------------------
 
 #: Seconds of no bytes from a client that has already sent a frame before the line is taken as
 #: dropped (D8). Ours: across every capture a live client never went more than 1.0 s between

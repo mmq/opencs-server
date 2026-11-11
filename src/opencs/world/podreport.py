@@ -2,7 +2,8 @@
 
 Split from ``City`` because the first report carries the most (introductions, the territory, the
 restored status) and ``/RESUME``'s restore lands here too. Functions of a city, not part of it: they
-read what the city exposes and return events.
+read what the city exposes and return events. They take the concrete ``City`` (imported only under
+``TYPE_CHECKING``, so there is no import cycle when the program runs) and not ``WorldHost``.
 """
 
 from __future__ import annotations

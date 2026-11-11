@@ -5,7 +5,8 @@ other screens and leaves a record the player can come back to. One that is count
 was running from: the payouts and ``'E'``-``'K'`` to the hitters, ``'J'`` to every other client, the
 bounty zero, the battle marker down by one and the modules gone, then the delete. The record is
 data; holding it, the windows and the slot reservation are the session layer's, and this module
-never reads a clock (the times come in).
+never reads a clock (the times come in). ``drop_player`` takes the concrete ``City`` (imported only
+under ``TYPE_CHECKING``, so there is no import cycle when the program runs) and not ``WorldHost``.
 """
 
 from __future__ import annotations

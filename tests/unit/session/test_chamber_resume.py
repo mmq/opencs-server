@@ -1,5 +1,5 @@
 """The Chamber's half of /RESUME: the notice on coming back, the typing window, the launch into
-the held city and team, the reserved slot and giving the game up (II §4.2, II §13, II §13 items 4
+the held city and team, the reserved slot and giving the game up (II §4.2, II §13 items 4
 and 5, D3, D8, D9)."""
 
 from __future__ import annotations
