@@ -33,7 +33,7 @@ level = "INFO"
 # format = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 
 # A different level for one layer: wire, messages, net, session, lobby, world, routing, store,
-# app, admin or capture.
+# app, admin, service or capture.
 # [logging.levels]
 # net = "WARNING"
 # world = "DEBUG"
