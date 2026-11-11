@@ -15,3 +15,4 @@
 | [0011](0011-pace-writes-to-the-client.md) | Writes keep to what the client can read |
 | [0012](0012-web-front-end-over-a-service-channel.md) | A web front end runs in its own process and reaches the server over a service channel |
 | [0013](0013-argon2id-for-passwords.md) | Argon2id for passwords |
+| [0014](0014-games-recorded-as-segments.md) | Games are recorded as append-only segments of wire payloads |

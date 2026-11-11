@@ -214,6 +214,30 @@ Some rules depend on what one client has been told: which entities it holds (lat
 pods it has been introduced to (I §7.2), a guppy's or Muncher's leg count as that client sees it. That lives
 in `world/view.py` as one `ClientView` per player, owned by the city. Sessions do not keep game state.
 
+### 3.6 Recording games
+
+The game recorder (ADR 14) is off unless `[recording] dir` is set. It has two halves:
+
+- `session/recorder.py` (`Recording`, `Services.recording`) knows the world. It decides when a city is
+  recorded (`[recording] when`), builds keyframes from what a late joiner is sent without touching any
+  view, and passes on what happens: each client message once, in `InGamePhase._to_city` after the relay
+  budgets, and each server event once, before the router fans it out. Joins and leaves, a `/RESUME` and
+  the kick or shutdown line are told from the session; rotation is checked after each tick.
+- `recording.py` (`Recorder`) knows files, not the world. Its methods for the loop only check and append
+  to a bounded queue; one writer thread encodes, writes and flushes about twice a second, and makes room
+  under the size cap.
+
+The router takes a `Tape` (`Router(tape=...)`), set only when there is a recorder, and hands it each
+`deliver` call's events before the per-recipient loop. The world marks a relayed copy of a client's
+message with `Event.relayed` (a pod's `'b'`, a shot, a grenade, player chat), and the tape leaves those
+out, since the client's message is the record; the same message sent to several single players in one
+call is folded into one record for everyone.
+
+A segment ends with an END record whose reason is `empty` (the last pilot to record left), `rotate` (a
+new segment replaced it), `full` (the size cap was reached) or `shutdown` (still open when the server
+stopped). A segment with no END was cut short by a crash or by recording stopping; it reads up to its
+last whole record.
+
 ## 4. Policy, configuration and the spec
 
 - **Every value the server chooses** (spec I §10) is a named constant in
@@ -245,12 +269,16 @@ in `world/view.py` as one `ClientView` per player, owned by the city. Sessions d
 - **Slow calls:** everything shares one loop (ADR 3), so a city call or tick, with the save that follows it,
   that takes over `policy.SLOW_CITY_CALL_SECONDS` holds up every player. `session.cityhealth` counts them, and
   warns at most once a minute per city.
+- **Recording never touches the game** (ADR 14): the loop only appends to a bounded queue
+  (`policy.RECORDING_BUFFER_ITEMS`). A full queue, a disk error or a bug in the hooks is logged once and
+  stops recording for the run; a full disk pauses it. Only segments the archiver has marked are deleted.
 
 ## 6. Observability and operations
 
 - `logging` with one logger per layer and a per-connection adapter (connection id, callsign).
 - **Optional wire capture** per connection, in the replay format the tests read, so a bug a player hits
   becomes a test fixture.
+- **Optional game recording** (§3.6, ADR 14) per city, in segments an archiver collects.
 - An admin channel: status, announce, kick, graceful shutdown that saves every player's progress.
 - A service channel (ADR 12) for the web front end: a snapshot of who plays where, registration, and the
   operator's commands, over a Unix socket only the server's group can reach.
@@ -297,6 +325,7 @@ One file each; [the index](decisions/README.md) has the same list.
 11. [Writes keep to what the client can read](decisions/0011-pace-writes-to-the-client.md).
 12. [A web front end runs in its own process and reaches the server over a service channel](decisions/0012-web-front-end-over-a-service-channel.md).
 13. [Argon2id for passwords](decisions/0013-argon2id-for-passwords.md).
+14. [Games are recorded as append-only segments of wire payloads](decisions/0014-games-recorded-as-segments.md).
 
 ## 10. Naming and trademarks
 
