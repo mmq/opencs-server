@@ -26,6 +26,17 @@ jobs:
       - run: uv run ruff format --check .
       - run: uv run mypy
       - run: uv run pytest
+      - name: Web checks (web/)
+        run: |
+          uv run mypy --config-file web/pyproject.toml
+          uv run pytest web
+      - name: The server alone installs only argon2-cffi
+        run: |
+          UV_PROJECT_ENVIRONMENT="$RUNNER_TEMP/server-only" uv sync --locked --no-dev
+          installed=$(uv pip list --python "$RUNNER_TEMP/server-only/bin/python" --format json \
+            | python3 -c 'import json, sys; print(" ".join(sorted(p["name"] for p in json.load(sys.stdin))))')
+          echo "$installed"
+          test "$installed" = "argon2-cffi argon2-cffi-bindings cffi opencs pycparser"
 
   smoke:
     name: Smoke test (the 19 judge checks)

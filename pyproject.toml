@@ -35,12 +35,20 @@ build-backend = "hatchling.build"
 packages = ["src/opencs"]
 
 [dependency-groups]
-dev = ["pytest", "ruff", "mypy"]
+# opencs-web (web/) is a workspace member in the dev group only, so `uv sync --no-dev` installs the
+# server and argon2-cffi alone (tests/unit/test_dependencies.py).
+dev = ["pytest", "ruff", "mypy", "opencs-web", "pytest-django>=4.9", "django-stubs>=5.2"]
+
+[tool.uv.workspace]
+members = ["web"]
+
+[tool.uv.sources]
+opencs-web = { workspace = true }
 
 [tool.ruff]
 target-version = "py312"
 line-length = 100
-src = ["src", "tests"]
+src = ["src", "tests", "web/src", "web/tests"]
 extend-exclude = ["docs"]  # prose with code samples, not code
 
 [tool.ruff.lint]
@@ -58,7 +66,8 @@ files = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["tests"]
-addopts = "-ra --strict-markers -m 'not judge'"
+# The web package's tests run on their own, with its settings: `uv run pytest web`.
+addopts = "-ra --strict-markers -m 'not judge' -p no:django"
 # A passing test's tmp_path is removed at the end of the run; a failing one's is kept to inspect.
 tmp_path_retention_policy = "failed"
 markers = [

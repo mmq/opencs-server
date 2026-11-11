@@ -172,6 +172,8 @@ tools/
   ci.yml                 lint, types and tests on 3.12 and 3.13, and the smoke test
 deploy/
   opencs.service         the systemd unit the operator guide installs
+web/                     opencs-web, the web site: a separate Django process and uv workspace member
+                         with its own dependencies, in the dev group only (web/README.md, ADR 12)
 ```
 
 ### 3.2 How a message flows

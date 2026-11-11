@@ -18,6 +18,8 @@ upgrading.
   free-space floor. A slow or failing disk stops the recording, never the game. Recordings hold chat;
   the server deletes only segments the archiver has marked done (ADR 14).
 - `create-account` and `reset-password` hash their password off the game's loop.
+- The start of the web site, `web/` (`opencs-web`): a Django skeleton with its own dependencies; the
+  server still installs only `argon2-cffi`.
 - The daily removal of unplayed accounts goes in small batches, and guest callsign checks use an index,
   so neither slows the games as the account table grows.
 
