@@ -41,6 +41,8 @@ ALLOWED: dict[str, set[str]] = {
     "ratelimit": {"policy"},
     "config": {"messages", "policy"},
     "logsetup": {"config"},
+    # The game recorder: a leaf the sessions and the router may call into (its writer is a thread).
+    "recording": {"__version__", "config", "messages", "policy", "wire"},
     # The root modules above the sessions: the city tickers, the operator's commands, the admin
     # channel and the web's service channel, then the app that builds everything.
     "cities": {"clock", "config", "policy", "routing", "session", "tasks", "world"},
@@ -79,6 +81,7 @@ ALLOWED: dict[str, set[str]] = {
         "logsetup",
         "net",
         "policy",
+        "recording",
         "routing",
         "service",
         "session",

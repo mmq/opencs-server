@@ -70,6 +70,7 @@ src/opencs/
   admin.py               the loopback admin channel: token, bounds, carries Control
   service.py             the web front end's channel: JSON lines on a Unix socket, carries Control
   tasks.py               long-lived background tasks: a failure is logged, not silent
+  recording.py           the game recorder: segment format, bounded queue, writer thread, pruning
   logsetup.py            [logging] applied to the opencs logger tree
   connlog.py             the per-connection log context: connection id and callsign on every record
   config.py              typed config: ServerConfig, CityConfig (validated from TOML)
