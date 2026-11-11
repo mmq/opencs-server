@@ -415,7 +415,7 @@ port) or restart the server, which resets the limits.
 | `reload` | re-read the city files (below) |
 | `accounts` | how many accounts there are, the cap (`MAX_ACCOUNTS`) and whether registration is open |
 | `create-account <name>` | make an account with a new random password, shown once in the reply and never logged. The name follows the rules for new accounts. The way to give players accounts when `registration = "closed"` |
-| `reset-password <name>` | give an account a new random password, shown once and never logged; a player logged in stays logged in |
+| `reset-password <name>` | give an account a new random password, shown once and never logged. It does not end a session that is already open: a player logged in stays logged in, so `kick` them if the old password may be known |
 | `reset-progress <name>` | erase an account's saved progress (bays, points, score). Refused while it is online or has a game held for `/RESUME` |
 | `delete-account <name>` | remove an account and its progress, freeing the name. Refused while it is online or held |
 | `help`, `quit` | |
@@ -619,7 +619,9 @@ Anyone can connect any program to the game port, so before opening it to the int
    server-wide, and hashes on its own threads, so a login flood cannot stall the games.
    Guesses at an account from elsewhere do not lock its owner out of an address they have logged in from
    since the server started; from a new address, or just after a restart, the owner may be refused until
-   the guessing stops. `reset-password` clears an account's limits.
+   the guessing stops. `reset-password` clears an account's limits. Players cannot change their own
+   password: the game has no command for it, so a player who wants a new one asks the operator, who runs
+   `reset-password` (a front end for it is the web service's job, not this server's).
 7. **Backups** (above), and an upgrade path you have tried (`tools/smoke.sh` after each one).
 
 What the server cannot defend against alone is in `docs/robustness.md`, "Threat model".
