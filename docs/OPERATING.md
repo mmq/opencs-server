@@ -120,7 +120,7 @@ sudo install -d -m 0700 -o opencs -g opencs /srv/disk/opencs/data /srv/disk/open
 ```
 
 Then use those paths in `server.toml` (`data_dir`, `[logging] file`, `[capture] dir`) and in the unit
-below: `--data-dir /srv/disk/opencs/data` in `ExecStart`, `ReadWritePaths=/srv/disk/opencs`, and
+(`deploy/opencs.service`, copied to `/etc/systemd/system`): `--data-dir /srv/disk/opencs/data` in `ExecStart`, `ReadWritePaths=/srv/disk/opencs`, and
 `RequiresMountsFor=/srv/disk` under `[Unit]`, so the service waits for the disk to be mounted instead of
 starting without it. The systemd journal, which also receives every log line, stays on the system disk.
 
@@ -141,56 +141,21 @@ token.
 
 ### As a service (systemd)
 
-```ini
-# /etc/systemd/system/opencs.service
-[Unit]
-Description=OpenCS game server
-After=network.target
+The unit is [`deploy/opencs.service`](../deploy/opencs.service). From `/opt/opencs`, install it, and change its paths
+if yours differ from the layout above:
 
-[Service]
-User=opencs
-WorkingDirectory=/opt/opencs
-# The admin token is a secret: keep it out of server.toml and out of the process list.
-# The file holds OPENCS_ADMIN_TOKEN=<at least 16 characters>.
-EnvironmentFile=-/etc/opencs/environment
-ExecStart=/opt/opencs/.venv/bin/python -m opencs --config /etc/opencs/server.toml --data-dir /var/lib/opencs
-# Re-read the city files.
-ExecReload=/bin/kill -HUP $MAINPID
-# A graceful stop: players are saved. The timeout is more than the 10 s shutdown deadline.
-KillSignal=SIGTERM
-TimeoutStopSec=30
-Restart=on-failure
-ProtectSystem=strict
-ReadWritePaths=/var/lib/opencs /var/log/opencs /var/lib/opencs-captures
-NoNewPrivileges=true
-# Sandboxing: the server needs its port, its data and log directories and nothing else.
-# `systemd-analyze security opencs` scores what is left.
-UMask=0077
-PrivateTmp=true
-PrivateDevices=true
-ProtectHome=true
-ProtectKernelTunables=true
-ProtectKernelModules=true
-ProtectKernelLogs=true
-ProtectControlGroups=true
-ProtectClock=true
-ProtectHostname=true
-RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
-RestrictNamespaces=true
-RestrictRealtime=true
-RestrictSUIDSGID=true
-LockPersonality=true
-CapabilityBoundingSet=
-SystemCallArchitectures=native
-SystemCallFilter=@system-service
-# Resource ceilings: a bug or a flood cannot take the machine with it.
-MemoryMax=512M
-TasksMax=64
-LimitNOFILE=1024
-
-[Install]
-WantedBy=multi-user.target
+```bash
+sudo install -m 644 deploy/opencs.service /etc/systemd/system/opencs.service
 ```
+
+Its settings:
+
+- `User=opencs`, `WorkingDirectory=/opt/opencs` and an optional `EnvironmentFile` for the admin token.
+- `ExecStart` runs the server from the `.venv` with `/etc/opencs/server.toml` and `/var/lib/opencs`;
+  `ExecReload` re-reads the city files; `KillSignal=SIGTERM` with `TimeoutStopSec=30` is a graceful stop
+  in which players are saved (the server's shutdown deadline is 10 s).
+- `ProtectSystem=strict` with `ReadWritePaths` for the data, log and capture directories, and the other
+  sandboxing and resource settings below them. `systemd-analyze security opencs` scores what is left.
 
 The paths in `server.toml` are relative to the file, and `/etc` is read-only under `ProtectSystem=strict`.
 `ProtectHome=true` hides `/home` and `/root`, so the `.venv` must use a Python outside them (the install

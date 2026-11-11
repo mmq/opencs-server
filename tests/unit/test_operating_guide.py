@@ -12,10 +12,15 @@ from opencs.config import load_config
 
 ROOT = Path(__file__).resolve().parents[2]
 GUIDE = (ROOT / "docs" / "OPERATING.md").read_text()
+SERVICE = (ROOT / "deploy" / "opencs.service").read_text()
 
 
 def fenced(text: str, language: str) -> list[str]:
     return re.findall(rf"```{language}\n(.*?)```", text, re.DOTALL)
+
+
+# Every systemd unit the operator installs: the service file and the template unit in the guide.
+UNITS = [SERVICE, *fenced(GUIDE, "ini")]
 
 
 def test_every_policy_constant_the_guides_name_exists() -> None:
@@ -26,7 +31,7 @@ def test_every_policy_constant_the_guides_name_exists() -> None:
 
 
 def test_the_command_line_options_the_unit_uses_are_accepted() -> None:
-    for unit in fenced(GUIDE, "ini"):
+    for unit in UNITS:
         for line in unit.splitlines():
             if line.startswith("ExecStart="):
                 args = re.sub(r"%i", "one", line.split("-m opencs", 1)[1]).split()
@@ -40,10 +45,7 @@ def test_every_environment_file_in_a_unit_is_optional() -> None:
     """systemd refuses a unit whose EnvironmentFile is missing unless the path starts with ``-``;
     the token file exists only when the admin channel is used."""
     lines = [
-        line
-        for unit in fenced(GUIDE, "ini")
-        for line in unit.splitlines()
-        if line.startswith("EnvironmentFile=")
+        line for unit in UNITS for line in unit.splitlines() if line.startswith("EnvironmentFile=")
     ]
     assert len(lines) >= 2
     assert [x for x in lines if not x.startswith("EnvironmentFile=-")] == []
@@ -71,7 +73,12 @@ def test_the_guide_uses_the_default_game_port() -> None:
 
 def test_systemd_units_keep_comments_on_their_own_lines() -> None:
     """systemd takes a trailing ``# ...`` as part of the value."""
-    for unit in fenced(GUIDE, "ini"):
+    for unit in UNITS:
         for line in unit.splitlines():
             if "=" in line and not line.lstrip().startswith("#"):
                 assert " #" not in line, line
+
+
+def test_the_guide_installs_the_service_file_it_ships() -> None:
+    assert "install -m 644 deploy/opencs.service /etc/systemd/system/" in GUIDE
+    assert not [u for u in fenced(GUIDE, "ini") if "Description=OpenCS game server\n" in u]

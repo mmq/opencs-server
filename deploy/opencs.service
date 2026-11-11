@@ -1,0 +1,48 @@
+# /etc/systemd/system/opencs.service
+[Unit]
+Description=OpenCS game server
+After=network.target
+
+[Service]
+User=opencs
+WorkingDirectory=/opt/opencs
+# The admin token is a secret: keep it out of server.toml and out of the process list.
+# The file holds OPENCS_ADMIN_TOKEN=<at least 16 characters>.
+EnvironmentFile=-/etc/opencs/environment
+ExecStart=/opt/opencs/.venv/bin/python -m opencs --config /etc/opencs/server.toml --data-dir /var/lib/opencs
+# Re-read the city files.
+ExecReload=/bin/kill -HUP $MAINPID
+# A graceful stop: players are saved. The timeout is more than the 10 s shutdown deadline.
+KillSignal=SIGTERM
+TimeoutStopSec=30
+Restart=on-failure
+ProtectSystem=strict
+ReadWritePaths=/var/lib/opencs /var/log/opencs /var/lib/opencs-captures
+NoNewPrivileges=true
+# Sandboxing: the server needs its port, its data and log directories and nothing else.
+# `systemd-analyze security opencs` scores what is left.
+UMask=0077
+PrivateTmp=true
+PrivateDevices=true
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+# Resource ceilings: a bug or a flood cannot take the machine with it.
+MemoryMax=512M
+TasksMax=64
+LimitNOFILE=1024
+
+[Install]
+WantedBy=multi-user.target

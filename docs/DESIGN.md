@@ -166,6 +166,8 @@ tools/
   make_fixture.py        turn a capture log into a replay fixture
 .github/workflows/
   ci.yml                 lint, types and tests on 3.12 and 3.13, and the smoke test
+deploy/
+  opencs.service         the systemd unit the operator guide installs
 ```
 
 ### 3.2 How a message flows
