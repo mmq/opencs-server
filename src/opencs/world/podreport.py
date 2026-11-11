@@ -46,7 +46,11 @@ def pod_state(city: City, player: Player, report: client.PodState, now: float) -
         events += restore_modules(player)  # the pod has landed (II §13)
     if player.pod.phase is not PodPhase.DEAD:  # a fly-over's 'b' is not the pod's place
         events.append(
-            Event(relay.pod_state(player.id, report), city.holders(player.id, but=player.id))
+            Event(
+                relay.pod_state(player.id, report),
+                city.holders(player.id, but=player.id),
+                relayed=True,
+            )
         )
     return events
 

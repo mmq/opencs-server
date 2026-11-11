@@ -107,7 +107,7 @@ class Hits:
             for p in self._host.players():
                 if p.id in audience.player_ids:
                     p.view.ever_held.add(fired.shooter)
-        return [Event(shot, audience, shot_from=fired.pos)]
+        return [Event(shot, audience, shot_from=fired.pos, relayed=True)]
 
     def note_fire(self, shooter_id: int, origin: WirePos, now: float, why: str) -> None:
         """A shot or grenade left ``origin``: every pod that is not the shooter's own and not on its

@@ -61,9 +61,12 @@ class Event:
     """A server message and its audience. A ``droppable`` one (a player's chat) is not sent to a
     player whose connection is already far behind: losing it costs nothing, while queueing it could
     overflow the outbox and cut that player off (DESIGN §5). ``shot_from`` marks a player's relayed
-    shot, which is shed sooner, the farther from the player it started (``routing``, ADR 11)."""
+    shot, which is shed sooner, the farther from the player it started (``routing``, ADR 11).
+    ``relayed`` marks the copy of a player's message passed on to the others (a pod's ``'b'``, a
+    shot, a Grenade, a chat line): the game recorder keeps the client's message instead."""
 
     message: ServerMessage
     audience: Audience
     droppable: bool = False
     shot_from: WirePos | None = None
+    relayed: bool = False
