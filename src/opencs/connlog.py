@@ -46,5 +46,16 @@ class ConnectionLog(logging.LoggerAdapter[logging.Logger]):
     def callsign(self, value: str) -> None:
         self.context.callsign = value
 
+    def _prefix(self) -> str:
+        return f"[conn={self.context.conn_id} {self.context.callsign}] "
+
     def process(self, msg: Any, kwargs: Any) -> tuple[Any, Any]:
-        return f"[conn={self.context.conn_id} {self.context.callsign}] {msg}", kwargs
+        return f"{self._prefix()}{msg}", kwargs
+
+    def log(self, level: int, msg: Any, *args: Any, **kwargs: Any) -> None:
+        """A record with arguments is %-formatted, prefix and all, so a ``%`` in the callsign is
+        escaped: it could otherwise take an argument, or fail to format and lose the line."""
+        if not self.isEnabledFor(level):
+            return
+        prefix = self._prefix().replace("%", "%%") if args else self._prefix()
+        self.logger.log(level, f"{prefix}{msg}", *args, **kwargs)
