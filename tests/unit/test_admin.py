@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import random
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -15,11 +17,18 @@ from fixtures.loopback import TIMEOUT, TickGate, connect, enter, frame, local_co
 from fixtures.pods import report
 from fixtures.sessions import World, make_world
 from opencs import policy
-from opencs.admin import GREETING, AdminServer, _is_loopback, _printable, resolve_token
+from opencs.admin import (
+    GREETING,
+    AdminServer,
+    _is_loopback,
+    _printable,
+    resolve_token,
+    token_file_warning,
+)
 from opencs.app import Seams, serve
 from opencs.cities import CityManager
 from opencs.clock import ManualClock
-from opencs.config import AdminConfig, ConfigError
+from opencs.config import AdminConfig, ConfigError, ConfigFile
 from opencs.control import COMMAND_NAMES, Control
 from opencs.messages import server
 from opencs.store.memory import memory_stores
@@ -289,6 +298,55 @@ def test_no_usable_token_means_the_channel_does_not_start(
 def test_a_token_of_exactly_the_minimum_length_is_accepted() -> None:
     token = "x" * policy.ADMIN_TOKEN_MIN_LENGTH
     assert resolve_token(AdminConfig(1), {"OPENCS_ADMIN_TOKEN": token}) == token
+
+
+@pytest.mark.skipif(os.name != "posix", reason="needs POSIX file modes")
+@pytest.mark.parametrize(
+    ("mode", "warned"),
+    [(0o600, False), (0o400, False), (0o640, True), (0o604, True), (0o644, True)],
+)
+def test_a_readable_file_holding_the_token_is_warned_about(
+    tmp_path: Path, mode: int, warned: bool
+) -> None:
+    path = tmp_path / "server.toml"
+    path.write_text("# a config\n")
+    path.chmod(mode)
+    warning = token_file_warning(AdminConfig(1, "x" * 16), path)
+    assert (warning is not None) is warned
+    if warning:
+        assert str(path) in warning and f"{mode:04o}" in warning and "chmod 600" in warning
+        assert "x" * 16 not in warning
+
+
+@pytest.mark.skipif(os.name != "posix", reason="needs POSIX file modes")
+def test_a_readable_file_without_a_literal_token_is_not_warned_about(tmp_path: Path) -> None:
+    path = tmp_path / "server.toml"
+    path.write_text("# a config\n")
+    path.chmod(0o644)
+    assert token_file_warning(AdminConfig(1), path) is None  # the token comes from the environment
+    assert token_file_warning(AdminConfig(1, "x" * 16), tmp_path / "missing.toml") is None
+
+
+@pytest.mark.skipif(os.name != "posix", reason="needs POSIX file modes")
+@pytest.mark.parametrize(("mode", "warned"), [(0o600, False), (0o644, True)])
+def test_the_server_warns_at_start_about_a_readable_file_with_the_token(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, mode: int, warned: bool
+) -> None:
+    path = tmp_path / "server.toml"
+    path.write_text("# a config\n")
+    path.chmod(mode)
+
+    async def scenario() -> None:
+        base = local_config()
+        config = replace(base, server=replace(base.server, admin=AdminConfig(0, TOKEN)))
+        stop, task, _ = await start(config, config_file=ConfigFile(path, config.server))
+        stop.set()
+        await asyncio.wait_for(task, TIMEOUT)
+
+    with caplog.at_level(logging.WARNING, logger="opencs.app"):
+        asyncio.run(asyncio.wait_for(scenario(), 4 * TIMEOUT))
+    assert ("holds the admin token" in caplog.text) is warned
+    assert TOKEN not in caplog.text
 
 
 def test_the_token_never_reaches_a_log_record() -> None:

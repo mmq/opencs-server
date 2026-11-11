@@ -286,7 +286,7 @@ start; **only the city files are re-read by `reload`** (below).
 | `[capture] callsigns` | `[]` (everyone) | upper-case callsigns | capture only these pilots |
 | `[capture] max_bytes` | `4000000` | 1000 to 1e9 | a capture stops at this size |
 | `[admin] port` | none (off) | 0-65535, not the game port | the admin channel's port |
-| `[admin] token` | none | at least 16 characters | the admin token, in the file |
+| `[admin] token` | none | at least 16 characters | the admin token, in the file. Prefer the environment variable: with a token here, the server logs a warning at start if `server.toml` is readable by group or others (`chmod 600` it) |
 | `[admin] token_env` | `"OPENCS_ADMIN_TOKEN"` | an environment variable name | where the token is read when `token` is absent |
 
 Layers for `[logging.levels]`: `wire`, `messages`, `net`, `session`, `lobby`, `world`, `routing`, `store`,
@@ -369,7 +369,9 @@ capture of the server's own, committed as the example. Remove anything you do no
 
 Off unless `[admin] port` is set. It needs a token: `[admin] token` in the file, or (better) the
 environment variable `OPENCS_ADMIN_TOKEN` (or the name in `token_env`). A token shorter than 16
-characters, or none, stops the server at start. It listens on **127.0.0.1 only** and refuses any peer that
+characters, or none, stops the server at start. A token in the file is in clear: if the file is also
+readable by its group or by others, the server logs a warning at start naming the file and its mode
+(it never prints the token). It listens on **127.0.0.1 only** and refuses any peer that
 is not loopback; reach it over SSH (`ssh -L 2400:127.0.0.1:2400 host`) if you are not on the machine.
 
 ```bash

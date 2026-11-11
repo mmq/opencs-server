@@ -59,6 +59,7 @@ play testing.
 - Optional per-connection wire capture, in the format the tests replay.
 - Each connection logs at close what it sent: bytes and frames, the average rate and the busiest
   1 s and 10 s.
+- A warning at start when `server.toml` holds the admin token and is readable by its group or by others.
 - A token-guarded admin channel on 127.0.0.1: `status`, `announce`, `kick`, `shutdown`, `reload`, and a
   failsafe for a stranded guppy.
 - Graceful shutdown on SIGINT and SIGTERM that saves every player; `SIGHUP` or `reload` re-reads the city

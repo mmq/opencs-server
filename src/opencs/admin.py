@@ -18,7 +18,10 @@ import hashlib
 import hmac
 import ipaddress
 import logging
+import os
+import stat
 from collections.abc import Mapping
+from pathlib import Path
 
 from opencs import policy
 from opencs.clock import Clock
@@ -46,6 +49,25 @@ def resolve_token(admin: AdminConfig, environ: Mapping[str, str]) -> str:
             f"the admin token must be at least {policy.ADMIN_TOKEN_MIN_LENGTH} characters"
         )
     return token
+
+
+def token_file_warning(admin: AdminConfig, path: Path) -> str | None:
+    """A warning for the log if ``path`` holds the admin token in clear and other users can read
+    it, else None. The token is a secret that belongs in an environment file only its owner can
+    read; the mode is the only thing checked, and on a system without POSIX modes nothing is."""
+    if admin.token is None or os.name != "posix":
+        return None
+    try:
+        mode = stat.S_IMODE(path.stat().st_mode)
+    except OSError:
+        return None
+    if not mode & (stat.S_IRGRP | stat.S_IROTH):
+        return None
+    return (
+        f"{path} holds the admin token and is readable by other users (mode {mode:04o}): "
+        f"run `chmod 600 {path}`, or move the token to the environment variable "
+        f"{admin.token_env}"
+    )
 
 
 def _digest(text: bytes) -> bytes:

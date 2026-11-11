@@ -38,6 +38,9 @@ threat model, [`docs/robustness.md`](docs/robustness.md#threat-model)):
 - account names can be probed at logon;
 - someone guessing an account's password can keep its owner out until the guessing stops, from an address
   the owner has not logged in from since the server started;
+- an admin token written in `server.toml` is readable by whoever can read that file; the server warns at
+  start if the file is readable by group or others, and the operator guide keeps the token in a
+  mode-0600 environment file instead;
 - floods large enough to saturate the network, which only the host's provider and firewall can stop.
 
 If you find a way to make one of these worse than the threat model says, that is in scope.

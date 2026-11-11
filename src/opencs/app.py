@@ -18,7 +18,7 @@ from datetime import datetime
 from pathlib import Path
 
 from opencs import __version__, policy
-from opencs.admin import AdminServer, resolve_token
+from opencs.admin import AdminServer, resolve_token, token_file_warning
 from opencs.cities import CityManager
 from opencs.clock import Clock, MonotonicClock
 from opencs.config import AppConfig, ConfigError, ConfigFile, load_config
@@ -282,6 +282,10 @@ async def _listen(
             config.server.admin, os.environ if seams.environ is None else seams.environ
         )
     )  # before anything starts: a channel without a token must stop the server, not run open
+    if config_file is not None and (
+        warning := token_file_warning(config.server.admin, config_file.path)
+    ):
+        log.warning("%s", warning)
     limits = config.server.limits
     listener = Listener(
         build_session_factory(services),
