@@ -243,12 +243,12 @@ KEEPALIVE_INTERVAL = 15
 KEEPALIVE_PROBES = 4
 
 #: Limits on password checks and on new accounts across connections (DESIGN §5 "login attempts"):
-#: each PBKDF2 run (~30 ms) takes a ``HASH_WORKERS`` thread, so every check is metered. Each is a
-#: token bucket
-#: ``(burst, per second)``, per source address and for the whole server. A player mistypes a
-#: password a few times at most; a household behind one address may log several people in at once
-#: (``MAX_CONNECTIONS_PER_ADDRESS``). A first login registers an account (II §3), so
-#: registrations are limited harder: they cost a stored row each. Ours (the spec sets none).
+#: each hash (``ARGON2_*``) takes a ``HASH_WORKERS`` thread and its memory, so every check is
+#: metered. Each is a token bucket ``(burst, per second)``, per source address and for the whole
+#: server. A player mistypes a password a few times at most; a household behind one address may
+#: log several people in at once (``MAX_CONNECTIONS_PER_ADDRESS``). A first login registers an
+#: account (II §3), so registrations are limited harder: they cost a stored row each. Ours (the
+#: spec sets none).
 LOGIN_ATTEMPTS_PER_ADDRESS = (8, 1 / 20)
 LOGIN_ATTEMPTS_GLOBAL = (60, 10.0)
 NEW_ACCOUNTS_PER_ADDRESS = (3, 1 / 300)
@@ -274,8 +274,8 @@ FAILED_LOGINS_PER_ACCOUNT = (5, 1 / 60)
 #: remembered, the oldest forgotten first. Ours (DESIGN §5).
 KNOWN_SOURCES_PER_ACCOUNT = 4
 
-#: Threads that hash passwords (``PBKDF2_ITERATIONS``), so a login never stalls the event loop. A
-#: login waits for one of them; ``LOGIN_ATTEMPTS_GLOBAL`` bounds the queue. Ours (DESIGN §3.3).
+#: Threads that hash passwords (``ARGON2_*``), so a login never stalls the event loop. A login
+#: waits for one of them; ``LOGIN_ATTEMPTS_GLOBAL`` bounds the queue. Ours (DESIGN §3.3).
 HASH_WORKERS = 2
 
 #: Most source addresses a limiter tracks; past it the oldest are forgotten. Ours (DESIGN §5).
@@ -490,10 +490,15 @@ DEFAULT_REGISTRATION = "open"
 GENERATED_PASSWORD_LENGTH = 10
 GENERATED_PASSWORD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789"
 
-#: PBKDF2-HMAC-SHA256 work factor. Ours (DESIGN §5 "salted PBKDF2"). 100 000 rounds is about
-#: 30 ms on a hashing thread (``HASH_WORKERS``), never on the event loop. An account keeps the
-#: count it was registered with, so raising this changes new accounts only.
-PBKDF2_ITERATIONS = 100_000
+#: Argon2id cost for new password hashes (ADR 13): 19 MiB of memory, 2 passes, 1 lane, a 32-byte
+#: hash. OWASP's minimum Argon2id setting; the memory is what makes a guessing rig pay per guess.
+#: One hash takes about 15 ms on an Apple M3 Pro, on a hashing thread (``HASH_WORKERS``), never
+#: on the event loop; the two workers hold about 38 MiB while both run. An account keeps the cost
+#: its hash was made with until its next login rehashes it. Ours (DESIGN §5).
+ARGON2_MEMORY_KIB = 19_456
+ARGON2_TIME_COST = 2
+ARGON2_PARALLELISM = 1
+ARGON2_HASH_BYTES = 32
 
 #: Bytes of random salt in each new password hash. Ours (DESIGN §5).
 PASSWORD_SALT_BYTES = 16

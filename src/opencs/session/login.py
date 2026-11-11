@@ -133,10 +133,35 @@ class LoginPhase(TextPhase):
         """The password check is done: answer, then read what arrived meanwhile."""
         if self.host.phase is not self or self._stage is not Stage.CHECKING:
             return
-        self._answer(self.host.services.identity.complete(check, digest, gate))
+        result = self.host.services.identity.complete(check, digest, gate)
+        if isinstance(result, Pilot):
+            self._rehash(check)
+        self._answer(result)
         held, self._held = self._held, b""
         if held:
             self.feed(held)
+
+    def _rehash(self, check: PasswordCheck) -> None:
+        """The password was right: if the account's hash is not made the current way, hash it
+        again on a hashing thread and store that (ADR 13). It is not a guess, so the login gate
+        is not asked. A failure is logged and the login stands; the next login tries again."""
+        identity = self.host.services.identity
+        log = self.host.log
+        rehash = identity.rehash(check)
+        if rehash is None:
+            return
+
+        def done(digest: bytes) -> None:  # also after this session has closed
+            try:
+                if identity.store_rehash(rehash, digest):
+                    log.info("rehashed the password of %s", check.name)
+            except Exception:
+                log.exception("could not store the rehashed password of %s", check.name)
+
+        try:
+            self.host.services.hasher.submit(rehash.hash, done)
+        except Exception:
+            log.exception("could not rehash the password of %s", check.name)
 
     def _answer(self, result: Pilot | Refused) -> None:
         if isinstance(result, Refused):

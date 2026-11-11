@@ -2,7 +2,7 @@
 
 | # | decision |
 |---|---|
-| [0001](0001-stdlib-only-at-runtime.md) | Standard library only at runtime |
+| [0001](0001-stdlib-only-at-runtime.md) | Standard library at runtime, except password hashing (amended by 0013) |
 | [0002](0002-world-returns-events.md) | The world returns events and never performs I/O |
 | [0003](0003-single-loop-no-locks.md) | One event loop; cities never await; no locks |
 | [0004](0004-audiences-as-data.md) | Audiences as data, resolved by a router |
@@ -13,3 +13,4 @@
 | [0009](0009-limits-per-connection.md) | Rate limits belong to the connection, not the phase |
 | [0010](0010-registration-behind-identity.md) | Every way to make an account goes through `Identity` |
 | [0011](0011-pace-writes-to-the-client.md) | Writes keep to what the client can read |
+| [0013](0013-argon2id-for-passwords.md) | Argon2id for passwords |

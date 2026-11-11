@@ -9,14 +9,19 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import logging
 import os
 import secrets
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Protocol
 
+from argon2.low_level import Type, hash_secret_raw
+
 from opencs import policy
-from opencs.store.base import PBKDF2_SHA256, Account, AccountStore, Kdf
+from opencs.store.base import ARGON2ID, PBKDF2_SHA256, Account, AccountStore, Kdf
+
+log = logging.getLogger("opencs.lobby")
 
 
 def identity_key(callsign: str, account: str | None) -> str:
@@ -30,7 +35,7 @@ class LoginGate(Protocol):
     supplies one per attempt, knowing the source address; ``Identity`` knows only the two steps."""
 
     def may_check_password(self) -> bool:
-        """Whether a password check (a PBKDF2 run) may be made now."""
+        """Whether a password check (a hash) may be made now."""
         ...
 
     def may_register(self) -> bool:
@@ -100,13 +105,30 @@ class PasswordCheck:
         return hash_password(self.password, self.salt, self.kdf)
 
 
-#: How new password hashes are made (DESIGN §5).
-CURRENT_KDF = Kdf.pbkdf2(policy.PBKDF2_ITERATIONS)
+#: How new password hashes are made (DESIGN §5, ADR 13).
+CURRENT_KDF = Kdf.argon2id(
+    memory_kib=policy.ARGON2_MEMORY_KIB,
+    time_cost=policy.ARGON2_TIME_COST,
+    parallelism=policy.ARGON2_PARALLELISM,
+    hash_bytes=policy.ARGON2_HASH_BYTES,
+)
 
 
 def hash_password(password: str, salt: bytes, kdf: Kdf) -> bytes:
-    """The salted hash of ``password`` made the way ``kdf`` says (DESIGN §5)."""
+    """The salted hash of ``password`` made the way ``kdf`` says (DESIGN §5): Argon2id, or
+    PBKDF2-HMAC-SHA256 for an account made before Argon2id. Both release the GIL while they run,
+    so the hashing threads work side by side."""
     secret = password.encode("utf-8")
+    if kdf.algorithm == ARGON2ID:
+        return hash_secret_raw(
+            secret,
+            salt,
+            time_cost=kdf.time_cost,
+            memory_cost=kdf.memory_kib,
+            parallelism=kdf.parallelism,
+            hash_len=kdf.hash_bytes,
+            type=Type.ID,
+        )
     if kdf.algorithm == PBKDF2_SHA256:
         return hashlib.pbkdf2_hmac("sha256", secret, salt, kdf.time_cost, kdf.hash_bytes)
     raise ValueError(f"unknown password hash algorithm {kdf.algorithm!r}")
@@ -146,9 +168,15 @@ class Identity:
         """``begin`` and, for an account, ``complete`` with the hash made here and now. The
         session runs the hash off the event loop instead; this is for callers that may block."""
         result = self.begin(line, gate)
-        if isinstance(result, PasswordCheck):
-            return self.complete(result, result.hash(), gate)
-        return result
+        if not isinstance(result, PasswordCheck):
+            return result
+        pilot = self.complete(result, result.hash(), gate)
+        if isinstance(pilot, Pilot) and (rehash := self.rehash(result)) is not None:
+            try:
+                self.store_rehash(rehash, rehash.hash())
+            except Exception:
+                log.exception("could not rehash the password of %s", result.name)
+        return pilot
 
     def begin(self, line: str, gate: LoginGate | None = None) -> Pilot | Refused | PasswordCheck:
         """Resolve an account line (I §5.1): ``NAME,PASSWORD`` or ``NAME``.
@@ -216,6 +244,23 @@ class Identity:
         if check.stored is not None:
             self._store.touch_login(check.name)
         return self._admit(check.name, check.name)
+
+    def rehash(self, check: PasswordCheck) -> PasswordCheck | None:
+        """After ``check`` let a player in: a hash of the same password made the current way, to
+        run off the event loop and hand to ``store_rehash``, if the account's hash was made some
+        other way (PBKDF2, or an older Argon2id cost; ADR 13). None if it is current. It costs a
+        hash but no guess: the password was right."""
+        if check.stored is None or check.stored.kdf == self._kdf:
+            return None
+        salt = os.urandom(policy.PASSWORD_SALT_BYTES)
+        return PasswordCheck(check.name, check.password, salt, self._kdf, check.stored)
+
+    def store_rehash(self, rehash: PasswordCheck, digest: bytes) -> bool:
+        """Replace the account's hash with ``rehash.hash()``, unless the account changed while it
+        ran (a reset, a delete): then the newer state stands. True if it was stored."""
+        if rehash.stored is None or self._store.get(rehash.name) != rehash.stored:
+            return False
+        return self._store.set_password(Account(rehash.name, rehash.salt, digest, rehash.kdf))
 
     # --- accounts, outside a login -----------------------------------------------------------
 

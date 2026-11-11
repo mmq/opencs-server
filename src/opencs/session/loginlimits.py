@@ -1,7 +1,7 @@
 """Server-wide limits on logins (DESIGN §5 "login attempts").
 
-A password check costs a PBKDF2 run on one of a few hashing threads, so a flood of logins, from one
-address or many, would hold every other login up. Each costly step spends a token from the
+A password check costs an Argon2id hash on one of a few hashing threads, so a flood of logins,
+from one address or many, would hold every other login up. Each costly step spends a token from the
 source's bucket and from a global one; and guests, who cost no check, are counted online. A source
 is an address, or an IPv6 /64 (``ConnectionContext.source``), since a host may use all of one.
 

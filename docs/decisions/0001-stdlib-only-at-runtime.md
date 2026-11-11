@@ -1,15 +1,17 @@
-# 1. Standard library only at runtime
+# 1. Standard library at runtime, except password hashing
+
+Amended by [ADR 13](0013-argon2id-for-passwords.md), which adds `argon2-cffi` for password hashes.
 
 ## Context
 
-The server must be trivial to deploy anywhere. Python ships asyncio, sqlite3, tomllib and hashlib, which cover transport, persistence, configuration and password hashing (DESIGN §2).
+The server must be trivial to deploy anywhere. Python ships asyncio, sqlite3 and tomllib, which cover transport, persistence and configuration (DESIGN §2). Its password hashes cost a guesser only CPU time, so password hashing is the one exception (ADR 13).
 
 ## Decision
 
-`pyproject.toml` declares no runtime dependencies. Development tools (pytest, ruff, mypy) live in the uv dev dependency group only.
+`pyproject.toml` declares one runtime dependency, `argon2-cffi`, for password hashing. Everything else the server does at runtime uses the standard library. Development tools (pytest, ruff, mypy) live in the uv dev dependency group only.
 
 ## Consequences
 
-- Deployment is a Python 3.12 interpreter and the source tree.
+- Deployment is a Python 3.12 interpreter, the source tree and `uv sync` (which fetches `argon2-cffi`).
 - We write small utilities ourselves instead of importing them.
-- Adding a runtime dependency needs a new ADR superseding this one.
+- Adding another runtime dependency needs a new ADR amending this one.

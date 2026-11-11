@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import pytest
 
-from fixtures.sessions import DeferredHasher, connect, login, make_world
+from fixtures.sessions import FAST_KDF, DeferredHasher, connect, login, make_world
 from opencs import policy
-from opencs.lobby.identity import Pilot
+from opencs.lobby.identity import Pilot, hash_password
 from opencs.session.chamber import ChamberPhase
 from opencs.session.login import LoginPhase
+from opencs.store.base import Account, Kdf
+from opencs.store.memory import MemoryAccountStore
 
 
 def phase_of(h: object) -> type:
@@ -321,3 +323,85 @@ def test_two_logins_of_one_account_racing_through_the_check_admit_one() -> None:
     assert not first.io.closed
     assert second.io.closed_with == ["login refused"]
     assert b"ALREADY LOGGED IN" in second.take()
+
+
+# --- an account hashed some other way is rehashed on login (ADR 13) ----------------------------
+
+OLD_KDF = Kdf.pbkdf2(1000)
+
+
+def pbkdf2_accounts(password: str = "secret") -> MemoryAccountStore:
+    """A store holding PILOT as an account made before Argon2id."""
+    store = MemoryAccountStore()
+    salt = b"0" * 16
+    store.create(Account("PILOT", salt, hash_password(password, salt, OLD_KDF), OLD_KDF))
+    return store
+
+
+def test_a_pbkdf2_account_is_rehashed_with_argon2id_when_its_owner_logs_in() -> None:
+    accounts = pbkdf2_accounts()
+    world = make_world(accounts=accounts)
+    h = login(world, "PILOT,secret")
+    assert h.session.pilot is not None and not h.io.closed
+    upgraded = accounts.get("PILOT")
+    assert upgraded is not None and upgraded.kdf == FAST_KDF
+    assert upgraded.password_hash == hash_password("secret", upgraded.salt, FAST_KDF)
+    h.session.closed()
+    again = login(world, "PILOT,secret")  # the new hash lets its owner in
+    assert again.session.pilot is not None and not again.io.closed
+
+
+def test_a_wrong_password_does_not_rehash() -> None:
+    accounts = pbkdf2_accounts()
+    before = accounts.get("PILOT")
+    h = login(make_world(accounts=accounts), "PILOT,wrong")
+    assert h.io.closed_with == ["login refused"]
+    assert accounts.get("PILOT") == before
+
+
+def test_the_rehash_is_not_a_guess() -> None:
+    hasher = DeferredHasher()
+    world = make_world(accounts=pbkdf2_accounts(), hasher=hasher)
+    h = login(world, "PILOT,secret", address="10.9.9.9")
+    hasher.run()
+    assert len(hasher.waiting) == 1  # the rehash, which needs no allowance
+    hasher.run()
+    h.session.closed()
+    # The source still has its whole allowance of wrong passwords for the account.
+    for _ in range(policy.FAILED_LOGINS_PER_ACCOUNT_AND_SOURCE[0]):
+        wrong = login(world, "PILOT,wrong", address="10.9.9.9")
+        hasher.run()
+        assert b"WRONG PASSWORD" in wrong.take()
+    locked = login(world, "PILOT,wrong", address="10.9.9.9")
+    assert b"TOO MANY WRONG PASSWORDS" in locked.take()
+
+
+def test_a_rehash_that_ends_after_a_reset_keeps_the_reset() -> None:
+    hasher = DeferredHasher()
+    accounts = pbkdf2_accounts()
+    world = make_world(accounts=accounts, hasher=hasher)
+    login(world, "PILOT,secret")
+    hasher.run()
+    reset = world.identity.reset_password("PILOT")
+    assert isinstance(reset, str)
+    after_reset = accounts.get("PILOT")
+    hasher.run()  # the rehash of the old password
+    assert accounts.get("PILOT") == after_reset
+
+
+def test_a_rehash_that_cannot_be_stored_is_logged_and_the_login_stands(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    class Failing(MemoryAccountStore):
+        def set_password(self, account: Account) -> bool:
+            raise OSError("disk full")
+
+    accounts = Failing()
+    salt = b"0" * 16
+    accounts.create(Account("PILOT", salt, hash_password("secret", salt, OLD_KDF), OLD_KDF))
+    h = login(make_world(accounts=accounts), "PILOT,secret")
+    assert h.session.pilot is not None and not h.io.closed
+    assert b"PASSWORD: " in h.take()
+    assert "could not store the rehashed password of PILOT" in caplog.text
+    stored = accounts.get("PILOT")
+    assert stored is not None and stored.kdf == OLD_KDF

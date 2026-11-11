@@ -27,7 +27,7 @@ client; distributing the game files (they are copyrighted and never enter the re
 | | choice | why |
 |---|---|---|
 | Language | Python ≥ 3.12, `asyncio` (3.12 is what Ubuntu 24.04 LTS ships) | the spec's examples and our tools are Python; 16 players a city is a light load |
-| Runtime dependencies | **none** (standard library only) | trivial to deploy anywhere; SQLite and TOML are in the standard library |
+| Runtime dependencies | `argon2-cffi` only, for password hashing (ADR 13); the rest is the standard library | trivial to deploy anywhere; SQLite and TOML are in the standard library, a memory-hard password hash is not |
 | Development tools | `pytest`, `ruff` (lint + format), `mypy --strict` on `src/`, managed with `uv` in `.venv` | type hints and a fixed style are what make the code legible to both humans and AI tools |
 | Packaging | `pyproject.toml`, `src/` layout, `python -m opencs` | the standard modern layout; tests run against the installed package |
 | Configuration | TOML files read with `tomllib`, validated into typed dataclasses at startup | readable, comments allowed, fails fast on a typo |
@@ -197,7 +197,7 @@ in `world/view.py` as one `ClientView` per player, owned by the city. Sessions d
 - **Never send what crashes the client** (spec II §8): message constructors validate their fields
   (`'c'` KIND, `'R'` ranges, `'T'` classes, chat bytes) and raise in our code rather than on a player's
   screen.
-- **Passwords:** salted PBKDF2 from `hashlib`, never stored or logged in clear, hashed on a small thread pool (`app.ThreadHasher`) so a login never stalls the loop; the session hands the work over through `Services.hasher` and stays sans-IO.
+- **Passwords:** salted Argon2id from `argon2-cffi` (ADR 13; an account made before it keeps its PBKDF2 hash until its next login rehashes it), never stored or logged in clear, hashed on a small thread pool (`app.ThreadHasher`) so a login never stalls the loop; the session hands the work over through `Services.hasher` and stays sans-IO.
 - **Bugs vs bad input:** an exception inside a `City` is a bug — logged with the triggering request, the
   request dropped, the city kept running. What the call changed before it raised stays changed, so the city
   is counted as failed (`session.cityhealth`, shown by `status`) and rebuilt from its configuration the next
@@ -239,7 +239,7 @@ without it; a new rule comes with its test in the same commit.
 
 ## 9. Decisions to record as ADRs (`docs/decisions/`)
 
-1. Standard library only at runtime.
+1. Standard library at runtime, except password hashing (amended by 13: Argon2id for passwords).
 2. The world returns events and never performs I/O.
 3. One event loop; cities are never awaited inside; no locks.
 4. Audiences as data, resolved by a router.

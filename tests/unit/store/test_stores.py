@@ -203,7 +203,7 @@ def test_passwords_are_never_in_the_file(tmp_path: Path) -> None:
     path = tmp_path / "t.db"
     db = SqliteStore(path)
     password = "Hunter2-Unmistakable"
-    identity = Identity(db, kdf=Kdf.pbkdf2(1000))
+    identity = Identity(db, kdf=Kdf.argon2id(8, 1, 1, 32))
     assert isinstance(identity.login(f"ALICE,{password}"), Pilot)
     db.close()
     raw = path.read_bytes()

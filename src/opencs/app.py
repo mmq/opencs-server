@@ -54,7 +54,8 @@ DEFAULT_CONFIG_PATH = Path("config") / "server.toml"
 
 class ThreadHasher:
     """Password hashes on ``HASH_WORKERS`` threads (``session.phases.Hasher``), so a login never
-    stalls the event loop. ``hashlib``'s PBKDF2 releases the GIL while it runs."""
+    stalls the event loop. Argon2id and PBKDF2 release the GIL while they run, so the threads
+    hash side by side."""
 
     def __init__(self, workers: int = policy.HASH_WORKERS) -> None:
         self._executor = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="opencs-hash")

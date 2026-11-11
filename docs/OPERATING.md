@@ -7,8 +7,9 @@ how the code is organized is in [`DESIGN.md`](DESIGN.md). Every limit named here
 
 ## Install
 
-OpenCS needs Python 3.12 or newer and, at run time, nothing but its standard library; `uv` creates the
-virtual environment. The commands in this guide are for `bash`, on Linux with systemd. They are shown
+OpenCS needs Python 3.12 or newer and, at run time, one package besides its standard library:
+`argon2-cffi`, for password hashes, which `uv sync` fetches. It has wheels for Linux on x86-64 and arm64;
+elsewhere it builds with a C compiler. `uv` creates the virtual environment. The commands in this guide are for `bash`, on Linux with systemd. They are shown
 for Ubuntu 24.04; on another distribution only the package manager differs.
 
 ```bash
@@ -120,7 +121,7 @@ starting without it. The systemd journal, which also receives every log line, st
 
 ## Running
 
-OpenCS needs Python 3.12 or newer and nothing else at run time (the standard library only).
+OpenCS needs Python 3.12 or newer and, at run time, `argon2-cffi` (which `uv sync` installs).
 
 ```bash
 uv sync                          # once: creates .venv
@@ -468,7 +469,7 @@ on `reload` alike (nothing changes), so the lobby always has a city to offer.
 
 ## Backups
 
-State is one SQLite file, `<data_dir>/opencs.db` (accounts with salted PBKDF2 hashes, and progress), in
+State is one SQLite file, `<data_dir>/opencs.db` (accounts with salted Argon2id password hashes, and progress), in
 write-ahead-log mode, so `opencs.db-wal` and `opencs.db-shm` sit beside it while the server runs. It is
 written after every progress change, so back it up while the server runs with SQLite's own tool, never by
 copying the files:
@@ -598,8 +599,9 @@ Anyone can connect any program to the game port, so before opening it to the int
 
    with a jail on `journalctl -u opencs` (`backend = systemd`, `journalmatch = _SYSTEMD_UNIT=opencs.service`).
 6. **Passwords.** The game sends them in plain text and nothing can change that, so tell players to use
-   one they use nowhere else. The server stores only salted PBKDF2 hashes, refuses guessing per address,
-   per account and server-wide, and hashes on its own threads, so a login flood cannot stall the games.
+   one they use nowhere else. The server stores only salted Argon2id hashes (an account made by an older
+   version moves from PBKDF2 at its next login), refuses guessing per address, per account and
+   server-wide, and hashes on its own threads, so a login flood cannot stall the games.
    Guesses at an account from elsewhere do not lock its owner out of an address they have logged in from
    since the server started; from a new address, or just after a restart, the owner may be refused until
    the guessing stops. `reset-password` clears an account's limits.

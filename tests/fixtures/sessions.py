@@ -22,12 +22,12 @@ from opencs.session.loginlimits import LoginLimits
 from opencs.session.persistence import Persistence
 from opencs.session.phases import Hasher, InlineHasher, Services
 from opencs.session.session import Session
-from opencs.store.base import Kdf, ProgressStore
+from opencs.store.base import AccountStore, Kdf, ProgressStore
 from opencs.store.memory import MemoryAccountStore, MemoryProgressStore
 from opencs.world.city import City
 from opencs.world.ids import IdRange
 
-FAST_KDF = Kdf.pbkdf2(1000)  # the algorithm is the point, not the cost
+FAST_KDF = Kdf.argon2id(memory_kib=8, time_cost=1, parallelism=1, hash_bytes=32)  # cheap
 
 
 class DeferredHasher:
@@ -135,9 +135,10 @@ def make_world(
     progress: ProgressStore | None = None,
     id_ranges: Mapping[IdRange, tuple[int, int]] | None = None,
     hasher: Hasher | None = None,
+    accounts: AccountStore | None = None,
 ) -> World:
     clock = ManualClock(start)
-    identity = Identity(MemoryAccountStore(), kdf=FAST_KDF)
+    identity = Identity(accounts or MemoryAccountStore(), kdf=FAST_KDF)
     configs = cities or (city("A"), city("B"), city("C"))
     held = HeldGames(clock)
     lobby = Lobby(configs, default, random.Random(seed), held)

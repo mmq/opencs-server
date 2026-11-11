@@ -35,7 +35,7 @@ CR = b"\r"
 
 
 class Hasher(Protocol):
-    """Runs password hashes (PBKDF2, DESIGN §5) away from the caller. The session layer is
+    """Runs password hashes (Argon2id, DESIGN §5) away from the caller. The session layer is
     sans-IO, so it only hands work over; the app supplies threads (``app.ThreadHasher``)."""
 
     def submit(self, work: Callable[[], bytes], done: Callable[[bytes], None]) -> None:

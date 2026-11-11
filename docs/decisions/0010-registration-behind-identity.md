@@ -12,4 +12,4 @@ A first login with an unknown name registers it (II §3), and on a public server
 
 - A rule added to `new_account_refusal` applies to every way of registering at once.
 - The rules apply to new accounts only. An account made before them keeps logging in.
-- A web front end in another process writes accounts with the same hash (`identity.hash_password`, the `iterations` it stores) and checks the same rules, by importing `opencs.lobby.identity` or by an admin command. The server sees the new row on the next login.
+- A web front end in another process writes accounts with the same hash (`identity.hash_password`, the `Kdf` it stores) and checks the same rules, by importing `opencs.lobby.identity` or by an admin command. The server sees the new row on the next login.

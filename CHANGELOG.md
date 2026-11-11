@@ -74,6 +74,10 @@ play testing.
 - Admin commands `accounts`, `create-account`, `reset-password`, `reset-progress` and
   `delete-account`; generated passwords are shown once and never logged.
 - The database uses WAL mode and is created private (directory 0700, file 0600).
+- Passwords are hashed with Argon2id (19 MiB, 2 passes), through `argon2-cffi`, the server's one
+  runtime dependency. An account made with an earlier PBKDF2 hash still logs in, and its hash is
+  replaced with Argon2id at that login. The database moves to schema version 2, which an older
+  server refuses.
 - A sandboxed systemd unit and a checklist for running a public server (firewall rate limits, fail2ban,
   backups).
 - `python -m opencs --version` and `tools/smoke.sh`, which starts a throwaway server, runs the judge's 19

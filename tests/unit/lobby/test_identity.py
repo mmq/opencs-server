@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import threading
+import time
+
 import pytest
 
 from opencs import policy
@@ -9,7 +12,7 @@ from opencs.lobby.identity import Identity, Pilot, Refused, hash_password, ident
 from opencs.store.base import PBKDF2_SHA256, Account, Kdf
 from opencs.store.memory import MemoryAccountStore
 
-FAST = Kdf.pbkdf2(1000)  # the algorithm is the point, not the cost
+FAST = Kdf.argon2id(memory_kib=8, time_cost=1, parallelism=1, hash_bytes=32)  # cheap, same kind
 
 
 def make(guests: tuple[str, ...] = ("JOINGENIE",)) -> tuple[Identity, MemoryAccountStore]:
@@ -174,7 +177,7 @@ def test_a_guest_passes_over_a_registered_accounts_callsign() -> None:
     assert pilot(identity.login("JOINGENIE2,secret")).callsign == "JOINGENIE2"
 
 
-def test_the_stored_hash_is_salted_pbkdf2_not_the_password() -> None:
+def test_the_stored_hash_is_salted_argon2id_not_the_password() -> None:
     identity, store = make()
     identity.login("ALICE,hunter2")
     identity.login("BOB,hunter2")
@@ -187,6 +190,49 @@ def test_the_stored_hash_is_salted_pbkdf2_not_the_password() -> None:
     assert alice.password_hash == hash_password("hunter2", alice.salt, FAST)
     assert alice.kdf == FAST
     assert len(alice.password_hash) == 32
+
+
+def test_new_hashes_are_made_with_the_policy_argon2id_cost() -> None:
+    assert Identity(MemoryAccountStore())._kdf == Kdf.argon2id(
+        memory_kib=policy.ARGON2_MEMORY_KIB,
+        time_cost=policy.ARGON2_TIME_COST,
+        parallelism=policy.ARGON2_PARALLELISM,
+        hash_bytes=policy.ARGON2_HASH_BYTES,
+    )
+
+
+def test_hash_password_matches_the_argon2id_reference_vector() -> None:
+    # The Argon2 reference implementation's test vector (argon2id, v=19, m=2^16, t=2, p=1,
+    # P="password", S="somesalt").
+    out = hash_password("password", b"somesalt", Kdf.argon2id(65536, 2, 1, 32))
+    assert out.hex() == "09316115d5cf24ed5a15a31a3ba326e5cf32edc24702987c02b6566f61913cf7"
+
+
+def test_an_unknown_algorithm_is_never_taken_for_another() -> None:
+    with pytest.raises(ValueError, match="scrypt"):
+        hash_password("pw", b"salt", Kdf("scrypt", 1))
+
+
+def test_two_argon2id_hashes_run_side_by_side() -> None:
+    # The hashing threads (app.ThreadHasher) work at once only if a hash releases the GIL. While
+    # two run, this thread keeps running Python: its longest stall stays far below one hash.
+    kdf = Kdf.argon2id(policy.ARGON2_MEMORY_KIB * 4, 4, 1, 32)  # long enough to measure
+    began = time.perf_counter()
+    hash_password("pw", b"0" * 16, kdf)
+    one = time.perf_counter() - began
+    workers = [
+        threading.Thread(target=hash_password, args=("pw", bytes([n]) * 16, kdf)) for n in (1, 2)
+    ]
+    last = time.perf_counter()
+    stall = 0.0
+    for worker in workers:
+        worker.start()
+    while any(worker.is_alive() for worker in workers):
+        now = time.perf_counter()
+        stall, last = max(stall, now - last), now
+    for worker in workers:
+        worker.join()
+    assert stall < one / 2
 
 
 def test_hash_password_matches_the_pbkdf2_hmac_sha256_reference_vector() -> None:
@@ -270,6 +316,34 @@ def test_names_with_digits_underscores_and_dashes_are_fine() -> None:
     identity, _ = make()
     for name in ("ACE_1", "RED-LEADER", "X99"):
         assert isinstance(identity.login(f"{name},secret"), Pilot)
+
+
+def test_a_pbkdf2_account_still_logs_in() -> None:
+    identity, store = make()
+    salt = b"0" * 16
+    old = Kdf.pbkdf2(1000)
+    store.create(Account("ALICE", salt, hash_password("hunter2", salt, old), old))
+    assert isinstance(identity.login("ALICE,wrong"), Refused)
+    assert pilot(identity.login("ALICE,hunter2")).account == "ALICE"
+
+
+def test_a_pbkdf2_account_is_rehashed_the_current_way_on_a_right_password() -> None:
+    identity, store = make()
+    salt = b"0" * 16
+    old = Kdf.pbkdf2(1000)
+    store.create(Account("ALICE", salt, hash_password("hunter2", salt, old), old))
+    identity.release(pilot(identity.login("ALICE,hunter2")))
+    upgraded = store.get("ALICE")
+    assert upgraded is not None and upgraded.kdf == FAST and upgraded.salt != salt
+    assert pilot(identity.login("ALICE,hunter2")).account == "ALICE"
+
+
+def test_a_current_hash_is_not_rehashed() -> None:
+    identity, store = make()
+    identity.release(pilot(identity.login("ALICE,hunter2")))
+    before = store.get("ALICE")
+    identity.release(pilot(identity.login("ALICE,hunter2")))
+    assert store.get("ALICE") == before
 
 
 def test_an_account_made_before_the_rules_still_logs_in() -> None:
