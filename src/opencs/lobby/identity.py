@@ -561,8 +561,15 @@ class Identity:
             return "A CALLSIGN NEEDS A LETTER OR A DIGIT"
         if not isinstance(commands.parse(callsign), _NOT_COMMANDS):
             return "THAT CALLSIGN READS AS A CHAMBER COMMAND"  # /PLAY, or a button's ACE/CITY
+        # Read as an account name is (``look_alikes``), with every mark of punctuation dropped,
+        # not only _ and -: a callsign may hold any, so AD.MIN would pass for ADMIN. Only this
+        # test folds: uniqueness is by case alone.
         folded = callsign.upper()
-        if folded in policy.RESERVED_ACCOUNT_NAMES or self._a_guest_could_be(folded):
+        bare = "".join(ch for ch in folded if ch.isalnum())
+        if any(
+            seen in policy.RESERVED_ACCOUNT_NAMES or self._a_guest_could_be(seen)
+            for seen in look_alikes(folded) | look_alikes(bare)
+        ):
             return "THAT CALLSIGN IS RESERVED"
         return None
 

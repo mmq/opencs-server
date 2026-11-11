@@ -599,6 +599,14 @@ def test_a_callsign_is_unique_ignoring_case_and_frees_the_old_one() -> None:
     assert identity.change_callsign("BOB", "Alice") == "Alice"  # ALICE's old one came free
 
 
+def test_look_alike_callsigns_are_not_taken_for_each_other() -> None:
+    identity, _ = clocked()
+    for name in ("ALICE", "BOB"):
+        identity.release(pilot(identity.login(f"{name},sesame")))
+    assert identity.change_callsign("ALICE", "Ace0") == "Ace0"
+    assert identity.change_callsign("BOB", "ACEO") == "ACEO"  # unique by case alone
+
+
 @pytest.mark.parametrize(
     ("callsign", "fragment"),
     [
@@ -611,6 +619,10 @@ def test_a_callsign_is_unique_ignoring_case_and_frees_the_old_one() -> None:
         ("admin", "RESERVED"),
         ("JoinGenie", "RESERVED"),
         ("joingenie42", "RESERVED"),
+        ("Adm1n", "RESERVED"),  # look-alike digits, as for an account name
+        ("S3rv-er", "RESERVED"),
+        ("Ad.min", "RESERVED"),  # any punctuation breaks a callsign up, not only _ and -
+        ("J0inGenie2", "RESERVED"),
         ("ALICE", "ALREADY"),
     ],
 )

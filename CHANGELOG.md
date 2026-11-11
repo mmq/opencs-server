@@ -21,8 +21,9 @@ upgrading.
 - Callsigns are separate from account names, as on GEnie. A new account is asked for one the first
   time it enters the Chamber (Return keeps its name when that is free), and `/CALLSIGN` changes it once
   a week: 3 to 12 letters in either case, digits and punctuation, no spaces and nothing that reads as a
-  Chamber command, shown as typed and unique ignoring case. Accounts made before keep their names. The
-  operator's `set-callsign` and the service channel's `register` and `set-callsign` set one too.
+  Chamber command nor a reserved name in a look-alike spelling (`Adm1n`, `Ad.min`), shown as typed and
+  unique ignoring case. Accounts made before keep their names. The operator's `set-callsign` and the
+  service channel's `register` and `set-callsign` set one too.
 - A new password is 6 to 12 printable characters without spaces, the most the client's password entry
   takes; the web may let a player choose it. Accounts made before keep their passwords.
 

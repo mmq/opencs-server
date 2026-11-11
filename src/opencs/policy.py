@@ -503,7 +503,8 @@ NEW_PASSWORD_CHARACTERS = frozenset(chr(c) for c in range(0x21, 0x7F))
 #: Names no new account may take: a player called ADMIN or SERVER could pass for the operator. Ours.
 #: A name is also refused when it reads as one of these, or as a guest name, once the digits that
 #: look like letters are folded to them (``ADM1N``, ``S3RVER``) and the ``_`` and ``-`` that
-#: break a name up are dropped (``AD_MIN``). A 1 is tried as both I and L. Ours.
+#: break a name up are dropped (``AD_MIN``). A 1 is tried as both I and L. A chosen callsign is
+#: read the same way with all its punctuation dropped (``Ad.min``). Ours.
 LOOK_ALIKE_LETTERS = {"0": "O", "1": "I", "3": "E", "4": "A", "5": "S", "7": "T"}
 LOOK_ALIKE_ONE_AS_L = {"1": "L"}
 LOOK_ALIKE_DROPPED = "_-"
