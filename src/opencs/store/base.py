@@ -11,20 +11,48 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
+PBKDF2_SHA256 = "pbkdf2-sha256"
+ARGON2ID = "argon2id"
+
+
+@dataclass(frozen=True, slots=True)
+class Kdf:
+    """How a password hash was made: the algorithm and its cost (DESIGN §5).
+
+    ``time_cost`` is PBKDF2's rounds or Argon2's passes; ``memory_kib`` and ``parallelism`` are
+    Argon2's and 0 for PBKDF2; ``hash_bytes`` is the length of the hash. An account keeps the
+    ``Kdf`` its hash was made with, so the algorithm or its cost can change without locking
+    anyone out.
+    """
+
+    algorithm: str
+    time_cost: int
+    memory_kib: int = 0
+    parallelism: int = 0
+    hash_bytes: int = 32
+
+    @classmethod
+    def pbkdf2(cls, iterations: int) -> Kdf:
+        """PBKDF2-HMAC-SHA256 with ``iterations`` rounds and a 32-byte hash."""
+        return cls(PBKDF2_SHA256, iterations)
+
+    @classmethod
+    def argon2id(cls, memory_kib: int, time_cost: int, parallelism: int, hash_bytes: int) -> Kdf:
+        return cls(ARGON2ID, time_cost, memory_kib, parallelism, hash_bytes)
+
 
 @dataclass(frozen=True, slots=True)
 class Account:
     """A real account (II §3): its name and the salted password hash.
 
     ``name`` is the upper-cased login name and the key. The password itself is never stored
-    (DESIGN §5); ``iterations`` is kept with the hash so the cost can be raised later without
-    locking anyone out.
+    (DESIGN §5); ``kdf`` says how the hash was made.
     """
 
     name: str
     salt: bytes
     password_hash: bytes
-    iterations: int
+    kdf: Kdf
 
 
 class AccountStore(Protocol):
@@ -56,7 +84,7 @@ class AccountStore(Protocol):
         ...
 
     def set_password(self, account: Account) -> bool:
-        """Replace the salt, hash and work factor of an existing account; False if there is none."""
+        """Replace the salt, hash and ``Kdf`` of an existing account; False if there is none."""
         ...
 
     def delete(self, name: str) -> bool:

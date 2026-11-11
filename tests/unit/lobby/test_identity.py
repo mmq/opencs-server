@@ -6,15 +6,15 @@ import pytest
 
 from opencs import policy
 from opencs.lobby.identity import Identity, Pilot, Refused, hash_password, identity_key
-from opencs.store.base import Account
+from opencs.store.base import PBKDF2_SHA256, Account, Kdf
 from opencs.store.memory import MemoryAccountStore
 
-FAST = 1000  # PBKDF2 rounds: the algorithm is the point, not the cost
+FAST = Kdf.pbkdf2(1000)  # the algorithm is the point, not the cost
 
 
 def make(guests: tuple[str, ...] = ("JOINGENIE",)) -> tuple[Identity, MemoryAccountStore]:
     store = MemoryAccountStore()
-    return Identity(store, guest_names=guests, iterations=FAST), store
+    return Identity(store, guest_names=guests, kdf=FAST), store
 
 
 def pilot(result: Pilot | Refused) -> Pilot:
@@ -137,7 +137,7 @@ def test_name_bounds() -> None:
 def test_a_guest_cannot_take_a_registered_accounts_name() -> None:
     identity, store = make()
     identity.release(pilot(identity.login("ALICE,secret")))
-    guests = Identity(store, guest_names=("ALICE", "ZED"), iterations=FAST)
+    guests = Identity(store, guest_names=("ALICE", "ZED"), kdf=FAST)
     refused = guests.login("alice")
     assert isinstance(refused, Refused)
     assert "REGISTERED" in refused.reason
@@ -148,9 +148,9 @@ def test_a_guest_cannot_take_a_registered_accounts_name() -> None:
 def test_a_guest_cannot_take_a_registered_accounts_callsign_by_truncation() -> None:
     # The account was registered before the guest name was configured (it would be refused now).
     store = MemoryAccountStore()
-    no_guests = Identity(store, guest_names=(), iterations=FAST)
+    no_guests = Identity(store, guest_names=(), kdf=FAST)
     no_guests.release(pilot(no_guests.login("ALPHABRAVOXY,secret")))
-    identity = Identity(store, guest_names=("ALPHABRAVOXYW",), iterations=FAST)
+    identity = Identity(store, guest_names=("ALPHABRAVOXYW",), kdf=FAST)
     refused = identity.login("ALPHABRAVOXYW")
     assert isinstance(refused, Refused) and "REGISTERED" in refused.reason
     assert pilot(identity.login("ALPHABRAVOXY,secret")).callsign == "ALPHABRAVOXY"
@@ -166,9 +166,9 @@ def test_joingenie_with_a_password_is_a_guest_and_registers_nothing() -> None:
 def test_a_guest_passes_over_a_registered_accounts_callsign() -> None:
     # JOINGENIE2 was registered while guests were off; turned back on, they must not take it.
     store = MemoryAccountStore()
-    no_guests = Identity(store, guest_names=(), iterations=FAST)
+    no_guests = Identity(store, guest_names=(), kdf=FAST)
     no_guests.release(pilot(no_guests.login("JOINGENIE2,secret")))
-    identity = Identity(store, guest_names=("JOINGENIE",), iterations=FAST)
+    identity = Identity(store, guest_names=("JOINGENIE",), kdf=FAST)
     guests = [pilot(identity.login("JOINGENIE")).callsign for _ in range(2)]
     assert guests == ["JOINGENIE", "JOINGENIE3"]
     assert pilot(identity.login("JOINGENIE2,secret")).callsign == "JOINGENIE2"
@@ -185,13 +185,13 @@ def test_the_stored_hash_is_salted_pbkdf2_not_the_password() -> None:
     assert alice.salt != bob.salt  # a fresh salt per account
     assert alice.password_hash != bob.password_hash  # so equal passwords hash differently
     assert alice.password_hash == hash_password("hunter2", alice.salt, FAST)
-    assert alice.iterations == FAST
+    assert alice.kdf == FAST
     assert len(alice.password_hash) == 32
 
 
 def test_hash_password_matches_the_pbkdf2_hmac_sha256_reference_vector() -> None:
     # RFC 7914 §11 test vector for PBKDF2-HMAC-SHA-256 (P="passwd", S="salt", c=1, dkLen=64).
-    out = hash_password("passwd", b"salt", 1)
+    out = hash_password("passwd", b"salt", Kdf(PBKDF2_SHA256, 1, hash_bytes=64))
     assert out.hex().startswith("55ac046e56e3089fec1691c22544b605f94185216dde0465e68b9d57c20dacbc")
 
 
@@ -281,7 +281,7 @@ def test_an_account_made_before_the_rules_still_logs_in() -> None:
 
 def test_past_the_cap_no_account_is_registered_but_existing_ones_log_in() -> None:
     store = MemoryAccountStore()
-    identity = Identity(store, iterations=FAST, max_accounts=2)
+    identity = Identity(store, kdf=FAST, max_accounts=2)
     identity.release(pilot(identity.login("FIRST,secret")))
     identity.release(pilot(identity.login("SECOND,secret")))
     refused = identity.login("THIRD,secret")
@@ -292,7 +292,7 @@ def test_past_the_cap_no_account_is_registered_but_existing_ones_log_in() -> Non
 
 def test_with_registration_closed_an_unknown_name_is_refused() -> None:
     store = MemoryAccountStore()
-    identity = Identity(store, iterations=FAST, registration="closed")
+    identity = Identity(store, kdf=FAST, registration="closed")
     refused = identity.login("STRANGER,secret")
     assert isinstance(refused, Refused)
     assert "NO SUCH ACCOUNT" in refused.reason
@@ -328,7 +328,7 @@ def test_a_reset_password_replaces_the_old_one() -> None:
 def test_unplayed_accounts_are_pruned_but_not_played_or_online_ones() -> None:
     now = [0.0]
     store = MemoryAccountStore(lambda: now[0])
-    identity = Identity(store, iterations=FAST)
+    identity = Identity(store, kdf=FAST)
     for name in ("IDLER", "PLAYER", "ONLINE", "RECENT"):
         identity.release(pilot(identity.login(f"{name},secret")))
     online = pilot(identity.login("ONLINE,secret"))  # logs in again at 0: still old enough

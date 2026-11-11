@@ -490,11 +490,13 @@ DEFAULT_REGISTRATION = "open"
 GENERATED_PASSWORD_LENGTH = 10
 GENERATED_PASSWORD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789"
 
-#: PBKDF2-HMAC-SHA256 work factor and salt size. Ours (DESIGN §5 "salted PBKDF2"). 100 000 rounds
-#: is about 30 ms on a hashing thread (``HASH_WORKERS``), never on the event loop. An account keeps
-#: the count it was registered with, so raising this changes new accounts only.
+#: PBKDF2-HMAC-SHA256 work factor. Ours (DESIGN §5 "salted PBKDF2"). 100 000 rounds is about
+#: 30 ms on a hashing thread (``HASH_WORKERS``), never on the event loop. An account keeps the
+#: count it was registered with, so raising this changes new accounts only.
 PBKDF2_ITERATIONS = 100_000
-PBKDF2_SALT_BYTES = 16
+
+#: Bytes of random salt in each new password hash. Ours (DESIGN §5).
+PASSWORD_SALT_BYTES = 16
 
 #: The SQLite file inside ``data_dir``. Ours (DESIGN §2 "Persistence"; one file, no server).
 DATABASE_FILE_NAME = "opencs.db"

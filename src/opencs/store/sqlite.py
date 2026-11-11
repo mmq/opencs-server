@@ -19,7 +19,7 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 
 from opencs import policy
-from opencs.store.base import Account, ProgressRecord, Stores
+from opencs.store.base import PBKDF2_SHA256, Account, Kdf, ProgressRecord, Stores
 
 log = logging.getLogger("opencs.store")
 
@@ -44,11 +44,47 @@ MIGRATIONS: tuple[tuple[str, ...], ...] = (
             updated REAL NOT NULL
         )""",
     ),
+    # 2: how each password hash was made. '' is PBKDF2-HMAC-SHA256 with the row's ``iterations``,
+    # which is every row made before this column; any other value is ``_kdf_columns``'s.
+    ("ALTER TABLE accounts ADD COLUMN kdf TEXT NOT NULL DEFAULT ''",),
 )
 
 
 class SchemaError(Exception):
     """The database cannot be used by this server."""
+
+
+_PBKDF2_HASH_BYTES = 32  # the length every PBKDF2 row was made with (``hashlib``'s SHA-256)
+
+
+def _kdf_columns(kdf: Kdf) -> tuple[str, int]:
+    """``kdf`` as the ``kdf`` and ``iterations`` columns. PBKDF2 keeps the form rows had before
+    the ``kdf`` column; anything else is ``ALGORITHM:m=..,t=..,p=..,l=..`` with no iterations."""
+    if kdf.algorithm == PBKDF2_SHA256 and kdf.hash_bytes == _PBKDF2_HASH_BYTES:
+        return "", kdf.time_cost
+    text = (
+        f"{kdf.algorithm}:m={kdf.memory_kib},t={kdf.time_cost},"
+        f"p={kdf.parallelism},l={kdf.hash_bytes}"
+    )
+    return text, 0
+
+
+def _kdf_from(text: str, iterations: int) -> Kdf:
+    """The ``Kdf`` of a row from its ``kdf`` and ``iterations`` columns (``_kdf_columns``)."""
+    if not text:
+        return Kdf.pbkdf2(iterations)
+    algorithm, _, params = text.partition(":")
+    try:
+        values = dict(item.split("=", 1) for item in params.split(","))
+        return Kdf(
+            algorithm,
+            time_cost=int(values["t"]),
+            memory_kib=int(values["m"]),
+            parallelism=int(values["p"]),
+            hash_bytes=int(values["l"]),
+        )
+    except (KeyError, ValueError) as exc:
+        raise SchemaError(f"an account's kdf {text!r} cannot be read") from exc
 
 
 class SqliteStore:
@@ -129,21 +165,19 @@ class SqliteStore:
 
     def get(self, name: str) -> Account | None:
         row = self._db.execute(
-            "SELECT name, salt, password_hash, iterations FROM accounts WHERE name = ?", (name,)
+            "SELECT name, salt, password_hash, iterations, kdf FROM accounts WHERE name = ?",
+            (name,),
         ).fetchone()
-        return None if row is None else Account(row[0], bytes(row[1]), bytes(row[2]), row[3])
+        if row is None:
+            return None
+        return Account(row[0], bytes(row[1]), bytes(row[2]), _kdf_from(row[4], row[3]))
 
     def create(self, account: Account) -> bool:
+        kdf, iterations = _kdf_columns(account.kdf)
         cursor = self._write(
-            "INSERT OR IGNORE INTO accounts (name, salt, password_hash, iterations, created) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (
-                account.name,
-                account.salt,
-                account.password_hash,
-                account.iterations,
-                self._now(),
-            ),
+            "INSERT OR IGNORE INTO accounts (name, salt, password_hash, iterations, kdf, created) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (account.name, account.salt, account.password_hash, iterations, kdf, self._now()),
         )
         return cursor.rowcount == 1
 
@@ -167,9 +201,11 @@ class SqliteStore:
         return [row[0] for row in rows]
 
     def set_password(self, account: Account) -> bool:
+        kdf, iterations = _kdf_columns(account.kdf)
         cursor = self._write(
-            "UPDATE accounts SET salt = ?, password_hash = ?, iterations = ? WHERE name = ?",
-            (account.salt, account.password_hash, account.iterations, account.name),
+            "UPDATE accounts SET salt = ?, password_hash = ?, iterations = ?, kdf = ? "
+            "WHERE name = ?",
+            (account.salt, account.password_hash, iterations, kdf, account.name),
         )
         return cursor.rowcount == 1
 

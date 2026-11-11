@@ -11,8 +11,8 @@ from pathlib import Path
 import pytest
 
 from opencs import policy
-from opencs.lobby.identity import Identity, Pilot
-from opencs.store.base import Account, ProgressRecord, Stores
+from opencs.lobby.identity import Identity, Pilot, hash_password
+from opencs.store.base import Account, Kdf, ProgressRecord, Stores
 from opencs.store.memory import MemoryAccountStore, MemoryProgressStore
 from opencs.store.sqlite import MIGRATIONS, SchemaError, SqliteStore, open_stores
 
@@ -44,16 +44,16 @@ RECORD = ProgressRecord(
 
 
 def test_an_account_is_created_once_and_read_back(stores: Stores) -> None:
-    account = Account("ALICE", b"\x00salt\xff", b"\x01hash\xfe", 1234)
+    account = Account("ALICE", b"\x00salt\xff", b"\x01hash\xfe", Kdf.pbkdf2(1234))
     assert stores.accounts.get("ALICE") is None
     assert stores.accounts.create(account)
     assert stores.accounts.get("ALICE") == account
-    assert not stores.accounts.create(Account("ALICE", b"other", b"other", 1))
+    assert not stores.accounts.create(Account("ALICE", b"other", b"other", Kdf.pbkdf2(1)))
     assert stores.accounts.get("ALICE") == account
 
 
 def test_callsign_registered_compares_the_cut_names(stores: Stores) -> None:
-    stores.accounts.create(Account("ALPHAXYZ", b"s", b"h", 1))
+    stores.accounts.create(Account("ALPHAXYZ", b"s", b"h", Kdf.pbkdf2(1)))
     assert stores.accounts.callsign_registered("ALPHAXYZ", 8)
     assert not stores.accounts.callsign_registered("ALPHAXY", 8)
     assert stores.accounts.callsign_registered("ALPHA", 5)
@@ -107,11 +107,11 @@ def test_negative_markers_and_large_scores_survive(stores: Stores) -> None:
 def test_a_reopened_file_still_holds_accounts_and_progress(tmp_path: Path) -> None:
     path = tmp_path / "t.db"
     first = SqliteStore(path)
-    first.create(Account("ALICE", b"salt", b"hash", 7))
+    first.create(Account("ALICE", b"salt", b"hash", Kdf.pbkdf2(7)))
     first.save("acct:ALICE", RECORD)
     first.close()
     second = SqliteStore(path)
-    assert second.get("ALICE") == Account("ALICE", b"salt", b"hash", 7)
+    assert second.get("ALICE") == Account("ALICE", b"salt", b"hash", Kdf.pbkdf2(7))
     loaded = second.load("acct:ALICE")
     assert loaded is not None and loaded.bays == RECORD.bays and loaded.career == RECORD.career
     second.close()
@@ -139,6 +139,46 @@ def test_a_new_migration_runs_once_on_an_old_file_and_keeps_its_data(tmp_path: P
     again.close()
 
 
+def test_a_version_1_file_gains_the_kdf_column_and_its_accounts_read_as_pbkdf2(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "v1.db"
+    SqliteStore(path, migrations=MIGRATIONS[:1]).close()
+    salt = b"0123456789abcdef"
+    digest = hash_password("hunter2", salt, Kdf.pbkdf2(1000))
+    v1 = sqlite3.connect(path)
+    with v1:  # a row as a version-1 server wrote it
+        v1.execute(
+            "INSERT INTO accounts (name, salt, password_hash, iterations, created) "
+            "VALUES ('ALICE', ?, ?, 1000, 1.0)",
+            (salt, digest),
+        )
+    v1.close()
+    db = SqliteStore(path)
+    assert db.schema_version == len(MIGRATIONS)
+    assert db.get("ALICE") == Account("ALICE", salt, digest, Kdf.pbkdf2(1000))
+    assert isinstance(Identity(db, kdf=Kdf.pbkdf2(1000)).login("ALICE,hunter2"), Pilot)
+    db.close()
+
+
+def test_a_pbkdf2_row_is_written_as_a_version_1_server_wrote_it(tmp_path: Path) -> None:
+    db = SqliteStore(tmp_path / "t.db")
+    db.create(Account("ALICE", b"s", b"h", Kdf.pbkdf2(1000)))
+    db.create(Account("BOB", b"s", b"h", Kdf.argon2id(8, 1, 1, 32)))
+    rows = db._db.execute("SELECT name, iterations, kdf FROM accounts ORDER BY name").fetchall()
+    assert rows == [("ALICE", 1000, ""), ("BOB", 0, "argon2id:m=8,t=1,p=1,l=32")]
+    db.close()
+
+
+def test_an_unreadable_kdf_is_a_schema_error(tmp_path: Path) -> None:
+    db = SqliteStore(tmp_path / "t.db")
+    db.create(Account("ALICE", b"s", b"h", Kdf.pbkdf2(1000)))
+    db._db.execute("UPDATE accounts SET kdf = 'argon2id:m=8' WHERE name = 'ALICE'")
+    with pytest.raises(SchemaError):
+        db.get("ALICE")
+    db.close()
+
+
 def test_a_failing_migration_leaves_the_old_version_intact(tmp_path: Path) -> None:
     path = tmp_path / "t.db"
     SqliteStore(path).close()
@@ -163,7 +203,7 @@ def test_passwords_are_never_in_the_file(tmp_path: Path) -> None:
     path = tmp_path / "t.db"
     db = SqliteStore(path)
     password = "Hunter2-Unmistakable"
-    identity = Identity(db, iterations=1000)
+    identity = Identity(db, kdf=Kdf.pbkdf2(1000))
     assert isinstance(identity.login(f"ALICE,{password}"), Pilot)
     db.close()
     raw = path.read_bytes()
@@ -202,10 +242,10 @@ def test_accounts_are_counted_touched_found_stale_and_deleted(tmp_path: Path) ->
         MemoryAccountStore(lambda: now[0]),
         SqliteStore(tmp_path / "upkeep.db", now=lambda: now[0]),
     ):
-        assert accounts.create(Account("OLD", b"s", b"h", 1))
-        assert accounts.create(Account("BACK", b"s", b"h", 1))
+        assert accounts.create(Account("OLD", b"s", b"h", Kdf.pbkdf2(1)))
+        assert accounts.create(Account("BACK", b"s", b"h", Kdf.pbkdf2(1)))
         now[0] = 2000.0
-        assert accounts.create(Account("NEW", b"s", b"h", 1))
+        assert accounts.create(Account("NEW", b"s", b"h", Kdf.pbkdf2(1)))
         accounts.touch_login("BACK")
         assert accounts.count() == 3
         assert accounts.stale(1500.0) == ["OLD"]
@@ -217,10 +257,20 @@ def test_accounts_are_counted_touched_found_stale_and_deleted(tmp_path: Path) ->
 
 
 def test_a_password_can_be_replaced_only_on_an_existing_account(stores: Stores) -> None:
-    stores.accounts.create(Account("ALICE", b"s1", b"h1", 1))
-    assert stores.accounts.set_password(Account("ALICE", b"s2", b"h2", 2))
-    assert stores.accounts.get("ALICE") == Account("ALICE", b"s2", b"h2", 2)
-    assert not stores.accounts.set_password(Account("NOBODY", b"s", b"h", 1))
+    stores.accounts.create(Account("ALICE", b"s1", b"h1", Kdf.pbkdf2(1)))
+    assert stores.accounts.set_password(Account("ALICE", b"s2", b"h2", Kdf.pbkdf2(2)))
+    assert stores.accounts.get("ALICE") == Account("ALICE", b"s2", b"h2", Kdf.pbkdf2(2))
+    assert not stores.accounts.set_password(Account("NOBODY", b"s", b"h", Kdf.pbkdf2(1)))
+
+
+def test_an_account_keeps_how_its_hash_was_made(stores: Stores) -> None:
+    argon = Kdf.argon2id(memory_kib=19456, time_cost=2, parallelism=1, hash_bytes=32)
+    stores.accounts.create(Account("ALICE", b"s1", b"h1", Kdf.pbkdf2(100_000)))
+    stores.accounts.create(Account("BOB", b"s2", b"h2", argon))
+    assert stores.accounts.get("ALICE") == Account("ALICE", b"s1", b"h1", Kdf.pbkdf2(100_000))
+    assert stores.accounts.get("BOB") == Account("BOB", b"s2", b"h2", argon)
+    assert stores.accounts.set_password(Account("ALICE", b"s3", b"h3", argon))
+    assert stores.accounts.get("ALICE") == Account("ALICE", b"s3", b"h3", argon)
 
 
 def test_a_progress_record_can_be_erased(stores: Stores) -> None:

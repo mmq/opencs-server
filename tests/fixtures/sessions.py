@@ -22,12 +22,12 @@ from opencs.session.loginlimits import LoginLimits
 from opencs.session.persistence import Persistence
 from opencs.session.phases import Hasher, InlineHasher, Services
 from opencs.session.session import Session
-from opencs.store.base import ProgressStore
+from opencs.store.base import Kdf, ProgressStore
 from opencs.store.memory import MemoryAccountStore, MemoryProgressStore
 from opencs.world.city import City
 from opencs.world.ids import IdRange
 
-FAST_ITERATIONS = 1000
+FAST_KDF = Kdf.pbkdf2(1000)  # the algorithm is the point, not the cost
 
 
 class DeferredHasher:
@@ -137,7 +137,7 @@ def make_world(
     hasher: Hasher | None = None,
 ) -> World:
     clock = ManualClock(start)
-    identity = Identity(MemoryAccountStore(), iterations=FAST_ITERATIONS)
+    identity = Identity(MemoryAccountStore(), kdf=FAST_KDF)
     configs = cities or (city("A"), city("B"), city("C"))
     held = HeldGames(clock)
     lobby = Lobby(configs, default, random.Random(seed), held)

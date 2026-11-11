@@ -15,7 +15,7 @@ from fixtures.loopback import TIMEOUT, Client, LogWatch, TickGate, connect, loca
 from opencs import policy
 from opencs.app import build_services
 from opencs.clock import ManualClock
-from opencs.lobby.identity import hash_password
+from opencs.lobby.identity import CURRENT_KDF, hash_password
 from opencs.store.memory import memory_stores
 
 
@@ -152,7 +152,7 @@ def test_a_guess_storm_on_one_account_locks_only_it_and_never_stalls_the_loop() 
     assert b"PASSWORD: " in outs[burst + 2]
     assert b"PASSWORD: " in outs[burst + 3]
     began = time.perf_counter()
-    hash_password("x", b"0" * 16, policy.PBKDF2_ITERATIONS)
+    hash_password("x", b"0" * 16, CURRENT_KDF)
     one_hash = time.perf_counter() - began
     assert worst_gap < one_hash  # the hashes ran beside the loop, not on it
 

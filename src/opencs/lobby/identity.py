@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 from opencs import policy
-from opencs.store.base import Account, AccountStore
+from opencs.store.base import PBKDF2_SHA256, Account, AccountStore, Kdf
 
 
 def identity_key(callsign: str, account: str | None) -> str:
@@ -93,16 +93,23 @@ class PasswordCheck:
     name: str
     password: str = field(repr=False)
     salt: bytes = field(repr=False)
-    iterations: int
+    kdf: Kdf
     stored: Account | None
 
     def hash(self) -> bytes:
-        return hash_password(self.password, self.salt, self.iterations)
+        return hash_password(self.password, self.salt, self.kdf)
 
 
-def hash_password(password: str, salt: bytes, iterations: int) -> bytes:
-    """Salted PBKDF2-HMAC-SHA256 of ``password`` (DESIGN §5)."""
-    return hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations)
+#: How new password hashes are made (DESIGN §5).
+CURRENT_KDF = Kdf.pbkdf2(policy.PBKDF2_ITERATIONS)
+
+
+def hash_password(password: str, salt: bytes, kdf: Kdf) -> bytes:
+    """The salted hash of ``password`` made the way ``kdf`` says (DESIGN §5)."""
+    secret = password.encode("utf-8")
+    if kdf.algorithm == PBKDF2_SHA256:
+        return hashlib.pbkdf2_hmac("sha256", secret, salt, kdf.time_cost, kdf.hash_bytes)
+    raise ValueError(f"unknown password hash algorithm {kdf.algorithm!r}")
 
 
 def make_password() -> str:
@@ -121,14 +128,14 @@ class Identity:
         store: AccountStore,
         *,
         guest_names: tuple[str, ...] = policy.DEFAULT_GUEST_NAMES,
-        iterations: int = policy.PBKDF2_ITERATIONS,
+        kdf: Kdf = CURRENT_KDF,
         registration: str = policy.DEFAULT_REGISTRATION,
         min_password_length: int = policy.MIN_PASSWORD_LENGTH,
         max_accounts: int = policy.MAX_ACCOUNTS,
     ) -> None:
         self._store = store
         self._guest_names = frozenset(name.upper() for name in guest_names)
-        self._iterations = iterations
+        self._kdf = kdf
         self._registration_open = registration == "open"
         self._min_password_length = min_password_length
         self._max_accounts = max_accounts
@@ -195,7 +202,7 @@ class Identity:
         """Finish an account login with ``check.hash()``. The world may have moved on while it
         ran: the account may have logged in elsewhere, or been registered by another login."""
         if check.stored is None:
-            account = Account(check.name, check.salt, digest, check.iterations)
+            account = Account(check.name, check.salt, digest, check.kdf)
             if not self._store.create(account):
                 if gate is not None:
                     gate.account_not_tried(check.name)  # a lost race to register, not a guess
@@ -268,10 +275,7 @@ class Identity:
             return Refused("THAT NAME IS TAKEN")
         if (refusal := self.new_account_refusal(name, password)) is not None:
             return refusal
-        salt = os.urandom(policy.PBKDF2_SALT_BYTES)
-        account = Account(
-            name, salt, hash_password(password, salt, self._iterations), self._iterations
-        )
+        account = self._new_hash(name, password)
         if not self._store.create(account):
             return Refused("THAT NAME IS TAKEN")
         return account, password
@@ -281,13 +285,14 @@ class Identity:
         logged). A player logged in stays logged in."""
         name = name.strip().upper()
         password = make_password()
-        salt = os.urandom(policy.PBKDF2_SALT_BYTES)
-        account = Account(
-            name, salt, hash_password(password, salt, self._iterations), self._iterations
-        )
-        if not self._store.set_password(account):
+        if not self._store.set_password(self._new_hash(name, password)):
             return Refused("NO SUCH ACCOUNT")
         return password
+
+    def _new_hash(self, name: str, password: str) -> Account:
+        """Account ``name`` with ``password`` hashed here and now, the current way."""
+        salt = os.urandom(policy.PASSWORD_SALT_BYTES)
+        return Account(name, salt, hash_password(password, salt, self._kdf), self._kdf)
 
     def account_online(self, name: str) -> bool:
         """True if account ``name`` (upper case) is logged in."""
@@ -337,15 +342,15 @@ class Identity:
     ) -> Refused | PasswordCheck:
         account = self._store.get(name)
         if account is not None:
-            return PasswordCheck(name, password, account.salt, account.iterations, account)
+            return PasswordCheck(name, password, account.salt, account.kdf, account)
         if not self._registration_open:
             return Refused("NO SUCH ACCOUNT: ASK THE OPERATOR FOR ONE")
         if (refusal := self.new_account_refusal(name, password)) is not None:
             return refusal
         if gate is not None and not gate.may_register():
             return Refused("TOO MANY NEW ACCOUNTS: TRY AGAIN LATER")
-        salt = os.urandom(policy.PBKDF2_SALT_BYTES)
-        return PasswordCheck(name, password, salt, self._iterations, None)
+        salt = os.urandom(policy.PASSWORD_SALT_BYTES)
+        return PasswordCheck(name, password, salt, self._kdf, None)
 
     def _refuse_account(self, name: str, password: str, gate: LoginGate | None) -> Refused | None:
         """The cheap reasons to turn an account login away, before any hashing; the gate last,
