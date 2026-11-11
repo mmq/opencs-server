@@ -115,10 +115,11 @@ class CityManager:
         )
 
     def _settle(self, letter: str, city: City) -> bool:
-        """After a tick of ``city``: apply what was waiting for its game to empty. True ends this
-        ticker (the city was replaced or removed)."""
+        """After a tick of ``city``: rotate its recording when due, and apply what was waiting for
+        its game to empty. True ends this ticker (the city was replaced or removed)."""
         if self._services.cities.get(letter) is not city:
             return True
+        self._services.recording.after_tick(city)
         if city.in_game:
             return False
         if letter in self._closing:

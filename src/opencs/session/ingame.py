@@ -160,6 +160,7 @@ class InGamePhase(Phase):
             joined.index,
             "; resuming" if resume is not None and key is not None else "",
         )
+        self.host.services.recording.joined(city, joined.player_id, resumed=resume is not None)
         self._hello = joined.hello
         self._hello_size = len(build_frame(server_payload(joined.hello, BYTE_MIN)))
         self._next_hello = now
@@ -196,6 +197,7 @@ class InGamePhase(Phase):
                 "city %s failed on leave of player %d", city.config.letter, self._player_id
             )
             self.host.services.city_health.failed(city.config.letter)
+        self.host.services.recording.left(city, self._player_id)
 
     def closed(self) -> None:
         """The socket ended. While playing, with the server not the one that closed it, that is a
@@ -250,6 +252,8 @@ class InGamePhase(Phase):
             services.city_health.failed(city.config.letter)
             self._leave_after_a_failed_drop(city)
             return
+        finally:
+            services.recording.left(city, self._player_id)
         record = dropped.record
         if by_server:
             self.host.log.info("closed by the server; the fight test ran, no game is held")
@@ -396,6 +400,7 @@ class InGamePhase(Phase):
         city = self._city
         assert city is not None
         started = self.host.now()
+        self.host.services.recording.client(city, self._player_id, message)
         try:
             events = city.client_message(self._player_id, message, started)
             self.host.services.router.deliver(city, events)
@@ -452,7 +457,10 @@ class InGamePhase(Phase):
         """The server ends the player's game: the reason on its screen as a system line, then the
         quit handshake as if the player had asked (I §5.5, I §8.5, an unprompted ``'C'``)."""
         text = server.sanitize_chat(notice.encode("ascii", "replace"))
-        self.host.io.send(server.Chat(SYSTEM_SENDER, CHAT_STYLE_OPEN, text))
+        line = server.Chat(SYSTEM_SENDER, CHAT_STYLE_OPEN, text)
+        if self._city is not None:
+            self.host.services.recording.to_player(self._city, self._player_id, line)
+        self.host.io.send(line)
         self._begin_quit(self.host.now())
 
     def _begin_quit(self, now: float) -> None:

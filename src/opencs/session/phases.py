@@ -24,6 +24,7 @@ from opencs.session.cityhealth import CityHealth
 from opencs.session.held import HeldGames
 from opencs.session.loginlimits import LoginLimits
 from opencs.session.persistence import Persistence
+from opencs.session.recorder import Recording
 from opencs.session.registry import SessionRegistry
 from opencs.wire.text import LineReader
 from opencs.world.city import City
@@ -73,6 +74,8 @@ class Services:
     )
     #: Where password hashes run.
     hasher: Hasher = field(default_factory=InlineHasher)
+    #: The game recorder's hooks; they do nothing unless ``[recording]`` is on.
+    recording: Recording = field(default_factory=Recording)
 
 
 class Phase(ABC):

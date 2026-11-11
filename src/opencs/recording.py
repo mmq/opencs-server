@@ -252,6 +252,7 @@ class _Begin:
     snapshot: tuple[Payload, ...]
     state: Mapping[str, Any]
     reason: str
+    wall: float  # when the loop began it, for the name and header
 
 
 @dataclass(frozen=True, slots=True)
@@ -285,7 +286,7 @@ def make_room(directory: Path, room: int, limit: int) -> bool:
     fit even so. Raises ``OSError`` if the directory cannot be read or a file not removed."""
     files = [f for f in directory.iterdir() if _OWN_FILE.fullmatch(f.name)]
     total = sum(f.stat().st_size for f in files)
-    done = sorted((f for f in files if f.name.endswith(DONE)), key=_age)
+    done = sorted((f for f in files if f.name.endswith(DONE)), key=segment_age)
     for old in done:
         if total + room <= limit:
             break
@@ -296,7 +297,7 @@ def make_room(directory: Path, room: int, limit: int) -> bool:
     return total + room <= limit
 
 
-def _age(path: Path) -> tuple[str, int]:
+def segment_age(path: Path) -> tuple[str, int]:
     """Oldest first: by the UTC start in the name, then its counter, whatever the city."""
     match = _OWN_FILE.fullmatch(path.name)
     assert match is not None
@@ -419,8 +420,8 @@ class Recorder:
         """Start a new segment for city ``letter`` (closing the one it has): a header with the city
         config and ``players``, then a keyframe of ``snapshot`` (the server payloads, or messages,
         a late joiner would be sent) and ``state`` (JSON: scores and the like). ``reason`` goes in
-        the keyframe: ``"start"``, ``"rotate"``."""
-        op = _Begin(config, tuple(players), tuple(snapshot), dict(state), reason)
+        the keyframe: ``"start"``, ``"rotate"``, ``"resume"``."""
+        op = _Begin(config, tuple(players), tuple(snapshot), dict(state), reason, self._wall())
         if self._put(letter, now, op):
             self._began[letter] = now
 
@@ -491,6 +492,11 @@ class Recorder:
             self._thread.join(timeout)
             if self._thread.is_alive():
                 log.warning("the recording writer did not finish within %.0f s", timeout)
+
+    def stop(self, why: str, exc: BaseException | None = None) -> None:
+        """Stop recording for the run (the caller hit a bug of its own): the open segments are
+        left readable, and every later call is a no-op."""
+        self._fail(why, exc)
 
     def _fail(self, why: str, exc: BaseException | None = None) -> None:
         """Stop recording for the run, saying why once."""
@@ -571,7 +577,7 @@ class Recorder:
         next ``begin``) if there is no room for it."""
         if not self._has_room():
             return False
-        wall = self._wall()
+        wall = begin.wall
         stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime(wall))
         path = self._directory / f"{letter}-{stamp}{SUFFIX}{PART}"
         counter = 1

@@ -30,12 +30,14 @@ from opencs.logsetup import configure_logging
 from opencs.net.capture import CaptureFactory
 from opencs.net.connection import ConnectionIO, SessionFactory
 from opencs.net.listener import ConnectionLimits, Listener
+from opencs.recording import Recorder
 from opencs.routing import Router
 from opencs.service import ServiceServer
 from opencs.session.held import HeldGames
 from opencs.session.loginlimits import LoginLimits
 from opencs.session.persistence import Persistence
 from opencs.session.phases import Services
+from opencs.session.recorder import Recording
 from opencs.session.session import Session
 from opencs.store.base import Stores
 from opencs.store.memory import memory_stores
@@ -85,10 +87,15 @@ def build_services(
     stores: Stores | None = None,
     clock: Clock | None = None,
     rng: random.Random | None = None,
+    recorder: Recorder | None = None,
 ) -> Services:
     """Build what every session shares: identity, the lobby, one ``City`` per enabled city and the
-    router. Without ``stores`` accounts and progress are kept in memory (tests)."""
+    router. Without ``stores`` accounts and progress are kept in memory (tests). The game recorder
+    is ``recorder``, else one built from ``[recording]`` if that is on; ``serve`` starts it."""
     clock = clock or MonotonicClock()
+    if recorder is None and config.server.recording.enabled:
+        recorder = Recorder(config.server.recording)
+    recording = Recording(recorder, clock)
     stores = stores or memory_stores()
     limits = config.server.limits
     identity = Identity(
@@ -108,7 +115,7 @@ def build_services(
         lobby,
         clock,
         cities,
-        Router(),
+        Router(recording if recorder is not None else None),
         Persistence(stores.progress, clock),
         held,
         LoginLimits(
@@ -117,6 +124,7 @@ def build_services(
             max_guests_per_address=limits.max_guests_per_address,
         ),
         hasher=ThreadHasher(),
+        recording=recording,
     )
 
 
@@ -182,12 +190,16 @@ async def serve(
                 ) from exc
             log.info("database %s", config.server.data_dir / policy.DATABASE_FILE_NAME)
         services = build_services(config, stores=stores, clock=clock, rng=seams.rng)
+    services.recording.start()
     try:
         await _listen(config, services, clock, stop, ready, config_file, seams)
     finally:
         # Connections are closed by now, and each saved its player as it left; this saves anyone
         # still seated, and whatever a failed save left waiting for a retry.
         services.persistence.save_all(services.cities.values())
+        # Each city's segment ended with its last leave; this finishes any still open and waits
+        # for the writer, off the loop.
+        await asyncio.to_thread(services.recording.close)
         if database is not None:
             database.close()
     log.info("stopped")

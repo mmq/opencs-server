@@ -27,6 +27,7 @@ ALLOWED: dict[str, set[str]] = {
         "clock",
         "connlog",
         "ratelimit",
+        "recording",
         "world",
         "routing",
     },
@@ -41,7 +42,8 @@ ALLOWED: dict[str, set[str]] = {
     "ratelimit": {"policy"},
     "config": {"messages", "policy"},
     "logsetup": {"config"},
-    # The game recorder: a leaf the sessions and the router may call into (its writer is a thread).
+    # The game recorder: a leaf the sessions call into (``session.recorder``; its writer is a
+    # thread, and the router hears of it only through its ``Tape`` protocol).
     "recording": {"__version__", "config", "messages", "policy", "wire"},
     # The root modules above the sessions: the city tickers, the operator's commands, the admin
     # channel and the web's service channel, then the app that builds everything.
