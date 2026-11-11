@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import math
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from typing import Protocol
 
 from opencs import policy
@@ -47,11 +47,20 @@ class Sink(Protocol):
         ...
 
 
-class Router:
-    """The directory of ``(city letter, player id) -> sink`` and the audience resolver."""
+class Tape(Protocol):
+    """Where the game recorder hears a city's events, once each, before they are fanned out
+    (``session.recorder.Recording``). It never raises."""
 
-    def __init__(self) -> None:
+    def deliver(self, city: City, events: Sequence[Event]) -> None: ...
+
+
+class Router:
+    """The directory of ``(city letter, player id) -> sink`` and the audience resolver. ``tape``
+    is told every event delivered (the game recorder), or None."""
+
+    def __init__(self, tape: Tape | None = None) -> None:
         self._sinks: dict[tuple[str, int], Sink] = {}
+        self._tape = tape
         #: Droppable events (chat) not sent to a congested player.
         self.dropped = 0
         #: Relayed shots not sent to a player who is behind (``_sheds``).
@@ -82,8 +91,12 @@ class Router:
     def deliver(self, city: City, events: Iterable[Event]) -> None:
         """Send each event to the sinks of its audience. A player with no sink (not yet seated in
         a session, or gone) is skipped, and so is a droppable event to a congested sink and a shot
-        to a sink that is behind; one sink failing never stops the others."""
+        to a sink that is behind; one sink failing never stops the others. The tape hears each
+        event first."""
         letter = city.config.letter
+        if self._tape is not None:
+            events = list(events)
+            self._tape.deliver(city, events)
         for event in events:
             for player_id in self.resolve(city, event.audience):
                 sink = self._sinks.get((letter, player_id))

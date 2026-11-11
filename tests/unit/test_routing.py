@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 
 from fixtures.lobbies import city
@@ -224,3 +225,21 @@ def test_only_a_shot_marked_as_a_players_is_shed() -> None:
     t.sinks[1].queued = ALL_BEHIND
     t.router.deliver(t.city, [Event(SHOT, ToPlayer(1)), Event(MSG, ToPlayer(1))])
     assert len(t.sinks[1].got) == 2
+
+
+def test_the_tape_hears_each_event_once_before_it_is_delivered() -> None:
+    t = table()
+    heard: list[list[Event]] = []
+
+    class Tape:
+        def deliver(self, city: City, events: Sequence[Event]) -> None:
+            assert not any(s.got for s in t.sinks.values())  # before the fan-out
+            heard.append(list(events))
+
+    router = Router(Tape())
+    for pid, sink in t.sinks.items():
+        router.register("A", pid, sink)
+    events = [Event(MSG, ToAll()), Event(server.QuitAck(), ToPlayer(9))]  # 9: nobody
+    router.deliver(t.city, iter(events))  # a one-pass iterable still reaches everyone
+    assert heard == [events]
+    assert [len(s.got) for s in t.sinks.values()] == [1, 1, 1, 1]
