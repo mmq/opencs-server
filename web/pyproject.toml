@@ -12,6 +12,11 @@ dependencies = ["opencs", "django>=5.2", "uvicorn>=0.30"]
 [project.scripts]
 opencs-web = "opencs_web.__main__:main"
 
+[dependency-groups]
+# Only for web/benchmarks/compression.py, which compares compressors for the recording archive:
+# `uv run --package opencs-web --group benchmark python web/benchmarks/compression.py ...`.
+benchmark = ["zstandard>=0.23", "lz4>=4.3", "brotli>=1.1"]
+
 [tool.uv.sources]
 opencs = { workspace = true }
 
@@ -28,9 +33,14 @@ packages = ["src/opencs_web"]
 [tool.mypy]
 strict = true
 python_version = "3.12"
-files = ["web/src", "web/tests"]
+files = ["web/src", "web/tests", "web/benchmarks"]
 mypy_path = ["web/tests"]
 plugins = ["mypy_django_plugin.main"]
+
+[[tool.mypy.overrides]]
+# The benchmark group's compressors: not installed by a plain `uv sync`, and lz4 and brotli are untyped.
+module = ["brotli", "lz4", "lz4.*", "zstandard"]
+ignore_missing_imports = true
 
 [tool.django-stubs]
 django_settings_module = "testsettings"
