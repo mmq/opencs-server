@@ -338,9 +338,9 @@ class Identity:
     def new_account_refusal(self, name: str, password: str | None) -> Refused | None:
         """Why ``name`` (upper case) with ``password`` cannot be a new account, None if it can:
         every rule a registration must pass, wherever it comes from (a first login, the
-        operator). It does not look at the limits on how often. A password the server made up
-        (None here) is not held to the rules for a chosen one: they guard against a player's poor
-        choice, and ``min_password_length`` may be above its length."""
+        operator, the service channel). It does not look at the limits on how often. A password
+        the server made up (None here) is not held to the rules for a chosen one: they guard
+        against a player's poor choice, and ``min_password_length`` may be above its length."""
         if (
             reason := self._new_name_problem(name)
             or (None if password is None else self._new_password_problem(name, password))

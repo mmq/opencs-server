@@ -243,7 +243,7 @@ start; **only the city files are re-read by `reload`** (below).
 | `[limits] max_guests` | `24` | 0 to the total | guests online at once |
 | `[limits] max_guests_per_address` | `2` | 0 to the address limit | guests online at once from one address |
 | `[limits] max_accounts` | `10000` | 1 to 1e7 | accounts in all; past it a first login is refused |
-| `[limits] min_password_length` | `6` | 1-12 | the shortest password a player chooses for a new account (existing ones are not checked). A chosen password may also not be the account name or one of about 110 common ones (`COMMON_PASSWORDS` in `policy.py`). These rules do not apply to the 10-character passwords `create-account` and `reset-password` make up |
+| `[limits] min_password_length` | `6` | 1-12 | the shortest password a player chooses for a new account (existing ones are not checked). A chosen password may also not be the account name or one of about 110 common ones (`COMMON_PASSWORDS` in `policy.py`). These rules do not apply to the 10-character passwords `create-account`, `reset-password` and the service channel make up |
 | `[limits] unplayed_account_days` | `30` | 1-36500 | an account with no saved progress and no login for this long is removed |
 | `[limits] client_bytes_per_second` | `960` | 0 to 1e8 | what is written to each connection, the rate of a 9600-baud modem; 0 does not pace. Any faster and a busy game's backlog moves to where the server cannot thin it |
 | `[limits] client_unacked_bytes` | `2048` | 0 to 1e8 | what a client in a game may have written to it and not acknowledged, which keeps its 4096-byte receive ring from overflowing and crashing it; 0 does not wait |
