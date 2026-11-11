@@ -55,8 +55,27 @@ uv run python -m opencs      # start the server (config in config/; port 2399)
 tools/smoke.sh               # start a throwaway server and run the 19 judge checks (about a minute)
 ```
 
-Installing on a server, running it as a service, configuring cities, the admin channel, backups and
-upgrades are in the operator guide, [`docs/OPERATING.md`](docs/OPERATING.md).
+By default the server listens on port 2399 on every IPv4 interface (`host = "0.0.0.0"` in
+`config/server.toml`); set `host` to `127.0.0.1` to keep it to your own machine. Installing on a
+server, running it as a service, configuring cities, the admin channel, backups and upgrades are in the
+operator guide, [`docs/OPERATING.md`](docs/OPERATING.md).
+
+## Status and limitations
+
+This is release candidate `1.0.0rc1`. The server is covered by its automated tests, including the 19
+black-box judge checks, a simulated 48-hour city and replays of real client traffic, and the DOS client
+has been played against it in live rounds during development. What it has not had is a long play test
+with many players at once: the numbers the server chooses (pacing, limits, how long a dropped game is
+held) are reasoned from the specification and the tests, and `1.0.0` waits for real play to confirm
+them. Expect rough edges.
+
+- **Not encrypted.** The game's own connection is plain text and nothing on the server can change that
+  (see the warning under "How to play").
+- **One server process.** Games in play, and the games held for `/RESUME`, live in memory, so a restart
+  ends them; accounts and progress are saved.
+- **No way to change a password in the game.** The operator can issue a new one.
+- **The emulator setup** in [`docs/PLAYING.md`](docs/PLAYING.md) is the documented one; a different
+  emulator or DOS setup may need its own settings.
 
 ## Architecture in brief
 
