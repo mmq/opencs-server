@@ -300,6 +300,15 @@ def test_a_guest_key_cannot_equal_an_account_key() -> None:
         ("GUPPY,sesame", "RESERVED"),
         ("JOINGENIE2,sesame", "RESERVED"),
         ("JOINGENIE100,sesame", "RESERVED"),
+        ("ADM1N,sesame", "RESERVED"),
+        ("4DMIN,sesame", "RESERVED"),
+        ("S3RV3R,sesame", "RESERVED"),
+        ("SENT1NEL,sesame", "RESERVED"),  # a 1 for the L as well as for the I
+        ("AD_MIN,sesame", "RESERVED"),
+        ("SYS-0P,sesame", "RESERVED"),
+        ("_G-UPPY_,sesame", "RESERVED"),
+        ("J01NGEN1E,sesame", "RESERVED"),  # the guest name
+        ("J01NGEN1E2,sesame", "RESERVED"),  # and a numbered guest
         ("ALICE,", "PASSWORD REQUIRED"),
         ("ALICE,short", "6 CHARACTERS OR MORE"),
     ],
@@ -338,7 +347,7 @@ def test_a_common_password_does_not_lock_out_an_account_made_before_the_rule() -
 
 def test_names_with_digits_underscores_and_dashes_are_fine() -> None:
     identity, _ = make()
-    for name in ("ACE_1", "RED-LEADER", "X99"):
+    for name in ("ACE_1", "RED-LEADER", "X99", "R00T3D", "ADMINS", "ADM1RAL"):
         assert isinstance(identity.login(f"{name},sesame"), Pilot)
 
 

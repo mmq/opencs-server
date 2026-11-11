@@ -453,6 +453,12 @@ MIN_ACCOUNT_NAME_LENGTH = 3
 MIN_PASSWORD_LENGTH = 6
 
 #: Names no new account may take: a player called ADMIN or SERVER could pass for the operator. Ours.
+#: A name is also refused when it reads as one of these, or as a guest name, once the digits that
+#: look like letters are folded to them (``ADM1N``, ``S3RVER``) and the ``_`` and ``-`` that
+#: break a name up are dropped (``AD_MIN``). A 1 is tried as both I and L. Ours.
+LOOK_ALIKE_LETTERS = {"0": "O", "1": "I", "3": "E", "4": "A", "5": "S", "7": "T"}
+LOOK_ALIKE_ONE_AS_L = {"1": "L"}
+LOOK_ALIKE_DROPPED = "_-"
 RESERVED_ACCOUNT_NAMES = frozenset(
     {
         "ADMIN",

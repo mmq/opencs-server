@@ -142,6 +142,17 @@ def make_password() -> str:
     )
 
 
+def look_alikes(name: str) -> set[str]:
+    """``name`` as it is, and as it reads with look-alike digits taken for their letters and the
+    separators dropped (``policy.LOOK_ALIKE_*``): the forms a reserved name is tested against, so
+    ``ADM1N`` and ``AD_MIN`` are as reserved as ``ADMIN``. A 1 is read as I in one form and L in
+    the other."""
+    bare = name.translate(str.maketrans("", "", policy.LOOK_ALIKE_DROPPED))
+    as_i = str.maketrans(policy.LOOK_ALIKE_LETTERS)
+    as_l = str.maketrans(policy.LOOK_ALIKE_LETTERS | policy.LOOK_ALIKE_ONE_AS_L)
+    return {name, bare.translate(as_i), bare.translate(as_l)}
+
+
 class Identity:
     """Logs players in and out and hands out callsigns."""
 
@@ -284,7 +295,10 @@ class Identity:
             )
         if any(ch not in policy.ACCOUNT_NAME_CHARACTERS for ch in name):
             return "A NEW NAME MAY HOLD ONLY LETTERS, DIGITS, _ AND -"
-        if name in policy.RESERVED_ACCOUNT_NAMES or self._a_guest_could_be(name):
+        if any(
+            seen in policy.RESERVED_ACCOUNT_NAMES or self._a_guest_could_be(seen)
+            for seen in look_alikes(name)
+        ):
             return "THAT NAME IS RESERVED"
         return None
 

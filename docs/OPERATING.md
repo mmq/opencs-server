@@ -257,7 +257,7 @@ start; **only the city files are re-read by `reload`** (below).
 | `cities_dir` | `"cities"` | a directory | one `*.toml` per city |
 | `default_city` | `"B"` | a loaded city | what a bare `/PLAY` picks when every city is empty |
 | `guest_names` | `["JOINGENIE"]` | names; `[]` turns guests off | the guest names (II §3): no password check, the only names several players may share, never saved |
-| `registration` | `"open"` | `"open"`, `"closed"` | open: a first login with an unknown name registers it (new names: 3-12 of `A-Z 0-9 _ -`, not reserved; passwords of 6 or more). Closed: it is refused, and the operator makes accounts with `create-account`. Either way at most `[limits] max_accounts`, and accounts never played are removed after `[limits] unplayed_account_days` |
+| `registration` | `"open"` | `"open"`, `"closed"` | open: a first login with an unknown name registers it (new names: 3-12 of `A-Z 0-9 _ -`, not reserved, which includes look-alikes such as `ADM1N` and `ADM-IN`; passwords of 6 or more). Closed: it is refused, and the operator makes accounts with `create-account`. Either way at most `[limits] max_accounts`, and accounts never played are removed after `[limits] unplayed_account_days` |
 | `[limits] max_connections` | `128` | 1-10000 | connections at once, in all |
 | `[limits] max_connections_per_address` | `4` | 3 to the subnet limit | connections at once from one IP address |
 | `[limits] max_connections_per_subnet` | `12` | the address limit to the total | connections at once from one /24 (IPv4) or /64 (IPv6) |
