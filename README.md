@@ -64,7 +64,7 @@ operator guide, [`docs/OPERATING.md`](docs/OPERATING.md).
 
 ## Status and limitations
 
-This is release candidate `1.0.0rc1`. The server is covered by its automated tests, including the 19
+This is release candidate `1.0.0rc2`. The server is covered by its automated tests, including the 19
 black-box judge checks, a simulated 48-hour city and replays of real client traffic, and the DOS client
 has been played against it in live rounds during development. What it has not had is a long play test
 with many players at once: the numbers the server chooses (pacing, limits, how long a dropped game is

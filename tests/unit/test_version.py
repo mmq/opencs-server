@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_version_is_the_release_candidate() -> None:
-    assert opencs.__version__ == "1.0.0rc1"
+    assert opencs.__version__ == "1.0.0rc2"
 
 
 def test_package_and_project_metadata_agree() -> None:

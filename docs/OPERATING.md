@@ -24,7 +24,7 @@ sudo git clone https://github.com/mmq/opencs-server.git /opt/opencs
 cd /opt/opencs
 python3 --version                                    # 3.12 or newer?
 sudo uv sync --no-dev --python /usr/bin/python3      # makes /opt/opencs/.venv
-/opt/opencs/.venv/bin/python -m opencs --version     # opencs 1.0.0rc1
+/opt/opencs/.venv/bin/python -m opencs --version     # opencs 1.0.0rc2
 ```
 
 If the system's Python is older than 3.12, let `uv`
