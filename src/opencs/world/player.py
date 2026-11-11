@@ -57,6 +57,8 @@ class Player:
     modules_to_restore: list[int] = field(default_factory=list)
     #: When and how this pod was last under attack (II §13 item 3).
     attacks: Attacks = field(init=False)
+    #: The kinds of odd hit report already warned about for this player, so each is logged once.
+    hit_warnings: set[str] = field(default_factory=set)
 
     def __post_init__(self) -> None:
         self.pod = Pod(self.id, self.holders)

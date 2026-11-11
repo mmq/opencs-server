@@ -85,6 +85,17 @@ def test_status_shows_a_city_with_slow_calls() -> None:
     assert "city A CITY A: 0 players [slow calls: 1, worst 34 ms]" in ctl.status()
 
 
+def test_status_shows_a_city_with_odd_hit_reports() -> None:
+    world = make_world()
+    ctl, _ = control(world)
+    assert "city A CITY A: 0 players" in ctl.status()
+    hits = world.services.cities["A"].hits
+    hits.hits_without_a_shot = 3
+    hits.distant_hits = 1
+    odd = "city A CITY A: 0 players [odd hit reports: 3 without a shot, 1 from far away]"
+    assert odd in ctl.status()
+
+
 def test_status_lists_a_held_game_with_its_time_left() -> None:
     world = make_world()
     ctl, _ = control(world)

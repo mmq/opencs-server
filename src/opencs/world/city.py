@@ -155,6 +155,14 @@ class City:
     def own_pod_hit_reports(self) -> int:
         return self.hits.own_pod_hit_reports
 
+    @property
+    def hits_without_a_shot(self) -> int:
+        return self.hits.hits_without_a_shot
+
+    @property
+    def distant_hits(self) -> int:
+        return self.hits.distant_hits
+
     def is_known_npc(self, entity_id: int) -> bool:
         """An entity the city has spawned that is not a player's pod (a Sentinel, say)."""
         return entity_id in self._live and entity_id not in self._players

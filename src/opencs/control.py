@@ -24,6 +24,7 @@ from opencs.routing import Router
 from opencs.session.phases import Services
 from opencs.tasks import watch
 from opencs.world import chat
+from opencs.world.city import City
 
 log = logging.getLogger("opencs.admin")
 
@@ -180,7 +181,7 @@ class Control:
                 f"city {letter} {city.config.name}: {services.lobby.count(letter)} players"
                 f"{f' ({teams})' if teams else ''}"
                 f"{'' if offered else ' [closing: no new players]'}"
-                f"{self._failures(letter)}{self._slow_calls(letter)}"
+                f"{self._failures(letter)}{self._slow_calls(letter)}{self._odd_hits(city)}"
             )
         held = services.held.live()
         lines.append(f"held games: {len(held)}")
@@ -199,6 +200,17 @@ class Control:
         waiting = ", rebuilds when empty" if health.tainted(letter) else ""
         return (
             f" [failures: {health.failures(letter)}, rebuilds: {health.rebuilds(letter)}{waiting}]"
+        )
+
+    @staticmethod
+    def _odd_hits(city: City) -> str:
+        """What ``status`` adds to a city that has had suspect hit reports, nothing to one that has
+        not. They are applied all the same; the counts are a detection signal."""
+        if not (city.hits_without_a_shot or city.distant_hits):
+            return ""
+        return (
+            f" [odd hit reports: {city.hits_without_a_shot} without a shot, "
+            f"{city.distant_hits} from far away]"
         )
 
     def _slow_calls(self, letter: str) -> str:

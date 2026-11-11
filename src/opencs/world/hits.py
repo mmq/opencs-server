@@ -11,9 +11,11 @@ through ``WorldHost``, for the roster and for which entities exist.
 from __future__ import annotations
 
 import logging
+import math
 from collections.abc import Sequence
 from typing import Protocol
 
+from opencs import policy
 from opencs.messages import WirePos, client
 from opencs.world import relay
 from opencs.world.attacks import in_fight_range
@@ -55,6 +57,12 @@ class Hits:
         #: report naming the reporter's own pod (I §9.1.4 corollary).
         self.unrelayable_damage = 0
         self.own_pod_hit_reports = 0
+        #: Hit reports applied all the same that look wrong, a detection signal only (I §9.1.2):
+        #: no Shot on the reporter's connection near the time that could have caused it (a spread
+        #: shot's second and third hits can honestly have none), and a victim pod farther from the
+        #: reporter's pod than ``HIT_PLAUSIBLE_RANGE``.
+        self.hits_without_a_shot = 0
+        self.distant_hits = 0
 
     def shot(self, player: Player, fired: client.Shot, now: float) -> list[Event]:
         """A shot (I §8.25, II §9.3, I §11, I App. B).
@@ -136,12 +144,16 @@ class Hits:
             log.log(level, "player %d reported a hit on its own pod; ignored", reporter.id)
             return []
         credit = reporter.shots.attribute(now)
+        if credit.consumed is None:
+            self.hits_without_a_shot += 1
+            self._warn_once(reporter, "no-shot", "reported a hit with no shot of its own before it")
         victim = self._host.player(hit.target)
         if victim is None:
             return self._hit_entity(reporter, hit, credit.credited, now)
         if victim.pod.phase is PodPhase.DEAD or not victim.pod.has_reported:
             log.debug("hit on player %d, which is not in play; ignored", victim.id)
             return []
+        self._check_distance(reporter, victim)
         if credit.credited:
             victim.hits.record(reporter.id, now)
         if reporter.team != victim.team:
@@ -154,6 +166,26 @@ class Hits:
             return []
         victim.attacks.mark(now, "DAMAGE")
         return [Event(damage, ToPlayer(victim.id))]
+
+    def _check_distance(self, reporter: Player, victim: Player) -> None:
+        """Count a report whose two pods were last reported farther apart than a shot could
+        plausibly reach. Nothing is dropped: the positions are a second or two old."""
+        a, b = reporter.pod.placed, victim.pod.placed
+        if a is None or b is None:
+            return
+        apart = math.hypot(a.pos.world_x - b.pos.world_x, a.pos.world_z - b.pos.world_z)
+        if apart > policy.HIT_PLAUSIBLE_RANGE:
+            self.distant_hits += 1
+            self._warn_once(
+                reporter, "distant", f"reported a hit on player {victim.id}, {apart:.0f} ft away"
+            )
+
+    def _warn_once(self, reporter: Player, kind: str, what: str) -> None:
+        """Warn the first time this player's report is of this kind, then log at DEBUG: a hostile
+        client could otherwise log at its message rate."""
+        first = kind not in reporter.hit_warnings
+        reporter.hit_warnings.add(kind)
+        log.log(logging.WARNING if first else logging.DEBUG, "player %d %s", reporter.id, what)
 
     def _hit_entity(
         self, reporter: Player, hit: client.HitReport, credited: bool, now: float

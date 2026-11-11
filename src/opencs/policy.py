@@ -946,6 +946,16 @@ ATTACK_HISTORY = BATTLE_WINDOW + SILENCE_SECONDS + 5.0
 #: (D4): the client's own NPC targeting range, so not a number of ours.
 FIGHT_RANGE = 600.0
 
+#: A Hit Report whose reporter and victim pods were last reported farther apart than this many
+#: feet, across the ground, is counted and warned about once per player; it is still applied.
+#: The spec gives no weapon range, so this is a margin, not a measurement: the longest distances
+#: it states are the grenade blast of 550 ft (I §9.3.6) and the 600 ft within which a Sentinel
+#: fires (I §9.5.1); a pod moves up to about 120 ft/s, and each position is up to a second or
+#: two old (I §8.24), so both pods can have moved a few hundred feet. Half the 4800 ft city
+#: (I §1.5, I §6.1) is four times the targeting range and well beyond all of that, so an
+#: honest report does not reach it. Ours.
+HIT_PLAUSIBLE_RANGE = 2400.0
+
 #: A dropped game is held this long from the drop (D8): the README's "within 10 minutes".
 HOLD_SECONDS = 600.0
 

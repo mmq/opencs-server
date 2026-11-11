@@ -400,7 +400,7 @@ port) or restart the server, which resets the limits.
 
 | command | does |
 |---|---|
-| `status` | uptime; connections by phase (logon, Chamber, game); per city its players by team (and `[closing: no new players]`, `[failures: N, rebuilds: N]` for a city that has hit a bug, `[slow calls: N, worst N ms]` for one that has held up the server); held `/RESUME` games with the time left |
+| `status` | uptime; connections by phase (logon, Chamber, game); per city its players by team (and `[closing: no new players]`, `[failures: N, rebuilds: N]` for a city that has hit a bug, `[slow calls: N, worst N ms]` for one that has held up the server, `[odd hit reports: N without a shot, N from far away]` for one whose players have sent hit reports that look wrong: they are counted and still applied, so look at the log for which player); held `/RESUME` games with the time left |
 | `announce <text>` | a system line (`'a'`, sender 100) on every started in-game client and a `*** text` line to each Chamber pilot. Text is made printable ASCII and cut to 230 characters. Says how many received it |
 | `kick <callsign> [reason]` | in a game: the reason as a system line, then an unprompted `'C'` (I §5.5, I §8.5): the client returns to the Chamber exactly as after its own quit, where the reason is shown again. In the Chamber: a line, and the connection is closed; at the logon, just closed (no line is sent). See "Kicks and shutdown" |
 | `guppy <team> home` | the failsafe for a stranded team guppy (below); `<team>` is RED, BLUE, GREEN, BLACK or 0-3; applies in every city that has that team's guppy |

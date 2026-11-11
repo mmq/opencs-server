@@ -149,8 +149,54 @@ def test_the_hostile_input_warnings_are_logged_once_then_at_debug(
             c.client_message(a, hit(b, 25), 5.0 + i)  # damage class 5: past the client's table
             c.client_message(a, client.Shot(a, report(0).pos, 0, 0, 99), 5.0 + i)  # unsafe KIND
     warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
-    assert len(warnings) == 3
+    assert len(warnings) == 4  # the three above, and a's hits on b with no shot of its own
     assert c.own_pod_hit_reports == 5 and c.unrelayable_damage == 5 and c.unsafe_shots == 5
+
+
+def test_a_hit_with_no_shot_before_it_is_counted_and_still_damages() -> None:
+    c, (a, b) = playing([0, 1])
+    assert deliveries(c, c.client_message(a, hit(b), 5.0)) == [(b, server.Damage(a, 10))]
+    assert c.hits_without_a_shot == 1
+    fire(c, a, 5.5)
+    c.client_message(a, hit(b), 6.5)  # this one follows a shot of the same connection
+    assert c.hits_without_a_shot == 1
+    fire(c, a, 7.0, shooter=4100, kind=2)  # an NPC's shot it simulated is still a shot
+    c.client_message(a, hit(b), 8.0)
+    assert c.hits_without_a_shot == 1
+
+
+def test_a_hit_from_farther_than_a_shot_could_reach_is_counted_and_still_damages() -> None:
+    c, (a, b) = playing([0, 1])
+    c.client_message(b, report(0, cell_x=2), 2.0)  # about 1,200 ft from a
+    assert deliveries(c, c.client_message(a, hit(b), 5.0)) == [(b, server.Damage(a, 10))]
+    assert c.distant_hits == 0
+    c.client_message(b, report(0, cell_x=5), 6.0)  # about 3,000 ft from a
+    assert deliveries(c, c.client_message(a, hit(b), 7.0)) == [(b, server.Damage(a, 10))]
+    assert c.distant_hits == 1
+
+
+def test_a_hit_on_a_pod_with_no_position_yet_is_not_measured() -> None:
+    c, (a, b) = playing([0, 1])
+    victim = c.player(b)
+    assert victim is not None
+    victim.pod.placed = None
+    c.client_message(a, hit(b), 5.0)
+    assert c.distant_hits == 0
+
+
+def test_odd_hit_reports_are_warned_once_per_player_and_kind(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    c, (a, b, d) = playing([0, 1, 2])
+    c.client_message(b, report(0, cell_x=7), 2.0)
+    c.client_message(d, report(0, cell_x=7), 2.0)  # beside b
+    with caplog.at_level(logging.DEBUG, logger="opencs.world"):
+        for i in range(4):
+            c.client_message(a, hit(b), 5.0 + i)
+        c.client_message(d, hit(b), 9.0)  # another player gets its own warning
+    warnings = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
+    assert len(warnings) == 3  # a: no shot, far; d: no shot (it is beside b)
+    assert c.hits_without_a_shot == 5 and c.distant_hits == 4
 
 
 def test_a_relayed_shot_says_where_it_started_so_it_can_be_shed_and_only_it_does() -> None:
