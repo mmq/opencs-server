@@ -36,19 +36,23 @@ client; distributing the game files (they are copyrighted and never enter the re
 
 ## 3. Architecture: layers
 
-Each layer depends only on the layers above it in this table. **The arrows never point upward:** the wire
-layer knows nothing of players, and the world knows nothing of sockets or bytes.
+Each layer imports only the layers above it in this table, and the small root modules every layer may
+use (`policy`, `config`, `clock`, `connlog`, `ratelimit`, `tasks`, `logsetup`). **The arrows never point
+upward:** the wire layer knows nothing of players, and the world knows nothing of sockets or bytes. The
+layers from Net to Lobby do not import one another. `tests/unit/test_layering.py` fails if a module
+imports what its layer may not.
 
 | layer | package | does | does not know about |
 |---|---|---|---|
 | **Wire** | `opencs.wire` | the three number codecs, strings, grid bytes; frame build/parse; an incremental frame reader; the Chamber's line reader and command-mode arming | sockets, messages' meaning |
 | **Messages** | `opencs.messages` | one typed, immutable class per message (spec I §8), each with `encode()`/`decode()` that mirror each other; a registry from type letter (and sub-letter) to class | what a message causes |
 | **Net** | `opencs.net` | the asyncio listener; one `Connection` per socket: a read pump, a write pump with a bounded outbox, the tag counter applied at the send boundary | rules, phases |
-| **Sessions** | `opencs.session` | the connection's phases as explicit state machines (spec I §7.8): `Login` → `Chamber` → `InGame` → `Chamber`. Turns decoded client messages into calls on the lobby or a city | game rules |
-| **Lobby** | `opencs.lobby` | who is connected and where; `/PLAY`, `/CITY`, `/WHO`…; team choice; identity and callsigns | in-game rules |
-| **World** | `opencs.world` | one `City` per joinable game ("room"): pods, towers, guppies, modules, scoring, territory, weather, NPCs. **Pure rules: calls in, events out** | sockets, bytes, the clock's source |
-| **Routing** | `opencs.routing` | turns an event's audience (spec I App. B) into the sessions that receive it | rules |
 | **Store** | `opencs.store` | accounts, progress and `/RESUME` records behind small interfaces; a SQLite implementation and an in-memory one for tests | the game |
+| **World** | `opencs.world` | one `City` per joinable game ("room"): pods, towers, guppies, modules, scoring, territory, weather, NPCs. **Pure rules: calls in, events out** | sockets, bytes, the clock's source |
+| **Lobby** | `opencs.lobby` | who is connected and where; `/PLAY`, `/CITY`, `/WHO`…; team choice; identity and callsigns | in-game rules |
+| **Routing** | `opencs.routing` | turns an event's audience (spec I App. B) into the sessions that receive it | rules |
+| **Sessions** | `opencs.session` | the connection's phases as explicit state machines (spec I §7.8): `Login` → `Chamber` → `InGame` → `Chamber`. Turns decoded client messages into calls on the lobby or a city | game rules |
+| **Root modules** | `opencs.cities`, `opencs.control`, `opencs.admin` | the city tickers and reloading city files; the operator's commands as text in, text out; the loopback admin channel that carries them | sockets of players, game rules |
 | **App** | `opencs.app` | reads config, builds every service, wires them, starts the listener, handles shutdown | — |
 
 ### 3.1 Package layout

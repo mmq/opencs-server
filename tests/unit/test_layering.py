@@ -1,4 +1,5 @@
-"""Layering guard (DESIGN §3): a package imports only from layers below it."""
+"""Layering guard (DESIGN §3): a layer imports only the layers above it in the table, and the root
+modules too: nothing below ``cities``, ``control``, ``admin`` and ``app`` imports them."""
 
 from __future__ import annotations
 
@@ -31,7 +32,54 @@ ALLOWED: dict[str, set[str]] = {
     "net": {"wire", "messages", "policy", "clock", "connlog", "ratelimit"},
     "world": {"wire", "messages", "policy", "config"},
     "routing": {"messages", "world", "policy"},
+    # The shared root modules: leaves any layer may use.
+    "policy": set(),
+    "clock": set(),
+    "connlog": set(),
+    "tasks": set(),
+    "ratelimit": {"policy"},
+    "config": {"messages", "policy"},
+    "logsetup": {"config"},
+    # The root modules above the sessions: the city tickers, the operator's commands and the admin
+    # channel, then the app that builds everything.
+    "cities": {"clock", "config", "policy", "routing", "session", "tasks", "world"},
+    "control": {
+        "cities",
+        "config",
+        "connlog",
+        "lobby",
+        "messages",
+        "policy",
+        "routing",
+        "session",
+        "tasks",
+        "world",
+    },
+    "admin": {"clock", "config", "control", "policy", "ratelimit"},
+    "app": {
+        "__version__",
+        "admin",
+        "cities",
+        "clock",
+        "config",
+        "connlog",
+        "control",
+        "lobby",
+        "logsetup",
+        "net",
+        "policy",
+        "routing",
+        "session",
+        "store",
+        "tasks",
+        "world",
+    },
+    "__main__": {"app"},
+    "__init__": set(),
 }
+
+#: The modules only the app (and, for ``cities``/``control``/``admin``, one another) may import.
+ABOVE_THE_SESSIONS = {"cities", "control", "admin", "app"}
 
 
 #: Packages that must be sans-IO (DESIGN §3, §3.4) and the standard-library modules they may not
@@ -79,6 +127,23 @@ def test_the_guard_covers_the_layers_the_design_forbids() -> None:
     assert not {"net", "session", "lobby", "routing", "asyncio"} & ALLOWED["world"]
     assert not {"net", "session", "lobby", "world"} & ALLOWED["wire"]
     assert not {"net", "session", "lobby", "world"} & ALLOWED["messages"]
+    # Nothing at or below the sessions reaches up to the root modules above them.
+    for package in ("wire", "messages", "net", "store", "world", "lobby", "routing", "session"):
+        assert not ABOVE_THE_SESSIONS & ALLOWED[package], package
+    assert not {"control", "admin", "app"} & ALLOWED["cities"]
+    assert not {"admin", "app"} & ALLOWED["control"]
+    assert "app" not in ALLOWED["admin"]
+
+
+def test_every_module_and_package_has_a_layer() -> None:
+    """A new top-level module or package must be given its allowed imports here, and so a place in
+    the design."""
+    found = {
+        entry.name if entry.is_dir() else entry.stem
+        for entry in ROOT.iterdir()
+        if (entry.is_dir() and (entry / "__init__.py").exists()) or entry.suffix == ".py"
+    }
+    assert found == set(ALLOWED)
 
 
 def test_sans_io_packages_import_no_io_modules() -> None:

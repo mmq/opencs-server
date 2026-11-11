@@ -60,18 +60,21 @@ upgrades are in the operator guide, [`docs/OPERATING.md`](docs/OPERATING.md).
 
 ## Architecture in brief
 
-The code is a stack of layers, and no layer imports one above it:
+The code is a stack of layers, and a layer imports only layers above it in this table (and a few small
+shared modules such as `policy` and `clock`):
 
 | layer | package | does |
 |---|---|---|
 | wire | `opencs.wire` | number codecs, frames, the Chamber's line reader |
 | messages | `opencs.messages` | one typed class per protocol message (34 server, 24 client) |
 | net | `opencs.net` | the asyncio listener, one connection per socket, bounded outboxes |
-| session | `opencs.session` | the connection's phases: logon, Chamber, game |
-| lobby | `opencs.lobby` | who is where, the Chamber commands, teams and callsigns |
-| world | `opencs.world` | the game rules: one `City` per game |
-| routing | `opencs.routing` | turns an event's audience into the sessions that receive it |
 | store | `opencs.store` | accounts and progress behind small interfaces, with SQLite behind them |
+| world | `opencs.world` | the game rules: one `City` per game |
+| lobby | `opencs.lobby` | who is where, the Chamber commands, teams and callsigns |
+| routing | `opencs.routing` | turns an event's audience into the sessions that receive it |
+| session | `opencs.session` | the connection's phases: logon, Chamber, game |
+| operation | `opencs.cities`, `control`, `admin` | the city tickers, the operator's commands, the admin channel |
+| app | `opencs.app` | builds everything and wires it together |
 
 The game rules (`opencs.world`) are separate from the networking code, so they can be tested without a
 network. The server runs on a single asyncio event loop.
