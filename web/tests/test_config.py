@@ -48,3 +48,36 @@ def test_a_debug_flag_it_does_not_understand_is_refused() -> None:
 def test_the_game_servers_database_is_refused() -> None:
     with pytest.raises(ConfigError, match=r"opencs\.db"):
         load({**KEY, "OPENCS_WEB_DATABASE": "/var/lib/opencs/opencs.db"})
+
+
+def test_the_archive_settings() -> None:
+    config = load(KEY)
+    assert config.recordings is None
+    assert config.archive == Path("opencs-archive.db")
+    assert (config.archive_max_days, config.archive_max_bytes) == (365, 10_000_000_000)
+    config = load(
+        {
+            **KEY,
+            "STATE_DIRECTORY": "/var/lib/opencs-web",
+            "OPENCS_WEB_RECORDINGS": "/var/lib/opencs-recordings",
+            "OPENCS_WEB_ARCHIVE_MAX_DAYS": "30",
+            "OPENCS_WEB_ARCHIVE_MAX_BYTES": "1000000",
+        }
+    )
+    assert config.recordings == Path("/var/lib/opencs-recordings")
+    assert config.archive == Path("/var/lib/opencs-web/opencs-archive.db")
+    assert (config.archive_max_days, config.archive_max_bytes) == (30, 1_000_000)
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("ARCHIVE_MAX_DAYS", "0"),
+        ("ARCHIVE_MAX_BYTES", "ten"),
+        ("ARCHIVE", "/var/lib/opencs/opencs.db"),
+        ("ARCHIVE", "opencs-web.db"),
+    ],
+)
+def test_archive_settings_it_cannot_use_are_refused(name: str, value: str) -> None:
+    with pytest.raises(ConfigError, match=name):
+        load({**KEY, f"OPENCS_WEB_{name}": value})

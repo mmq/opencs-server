@@ -33,6 +33,12 @@ DATABASES = {
 }
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# The recording archive (``opencs_web.recordings.archive``): its own SQLite file, not Django's.
+OPENCS_RECORDINGS = _CONFIG.recordings
+OPENCS_ARCHIVE = _CONFIG.archive
+OPENCS_ARCHIVE_MAX_DAYS = _CONFIG.archive_max_days
+OPENCS_ARCHIVE_MAX_BYTES = _CONFIG.archive_max_bytes
+
 USE_TZ = True
 TIME_ZONE = "UTC"
 LANGUAGE_CODE = "en"
