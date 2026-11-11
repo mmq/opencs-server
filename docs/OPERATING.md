@@ -488,7 +488,15 @@ sudo sqlite3 /var/lib/opencs/opencs.db ".backup '/var/backups/opencs/opencs-$(da
 
 Run it as root: the `opencs` user cannot write to `/var/backups`. Run it daily from cron or a systemd
 timer, and copy the result off the machine. Restore by stopping the server and putting a backup in place
-of `opencs.db` (owned by `opencs`). `/RESUME` records, the cities' worlds (towers, territory, weather) and
+of `opencs.db` (owned by `opencs`).
+
+The database is written with `synchronous=NORMAL`, which cannot corrupt it and keeps a disk sync off
+the game's event loop. The price: if the machine itself loses power or the operating system crashes, the
+last few saves can be lost (a player's progress from their last few seconds, or a password just set).
+Stopping or crashing the server loses nothing. That is one more reason to take the backup above and keep
+copies off the machine.
+
+`/RESUME` records, the cities' worlds (towers, territory, weather) and
 the login rate-limit tables are in memory and are not backed up: a restart starts every city fresh, so
 announce one (`shutdown 120` on the admin channel) and players can finish first.
 

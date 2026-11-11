@@ -81,7 +81,9 @@ play testing.
   in `server.toml` to tune the security limits (for example behind a shared NAT).
 - Admin commands `accounts`, `create-account`, `reset-password`, `reset-progress` and
   `delete-account`; generated passwords are shown once and never logged.
-- The database uses WAL mode and is created private (directory 0700, file 0600).
+- The database uses WAL mode and is created private (directory 0700, file 0600). It is written with
+  `synchronous=NORMAL`, so a save does not wait for the disk; a power cut or operating system crash can
+  lose the last few saves, a server crash cannot.
 - Passwords are hashed with Argon2id (19 MiB, 2 passes), through `argon2-cffi`, the server's one
   runtime dependency. An account made with an earlier PBKDF2 hash still logs in, and its hash is
   replaced with Argon2id at that login. The database moves to schema version 2, which an older

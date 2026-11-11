@@ -286,6 +286,12 @@ def test_the_database_file_uses_write_ahead_logging(tmp_path: Path) -> None:
     db.close()
 
 
+def test_a_save_does_not_wait_for_the_disk(tmp_path: Path) -> None:
+    db = SqliteStore(tmp_path / "normal.db")
+    assert db._db.execute("PRAGMA synchronous").fetchone()[0] == 1  # NORMAL, not FULL (2)
+    db.close()
+
+
 def test_the_data_directory_and_database_are_private_to_the_server(tmp_path: Path) -> None:
     data = tmp_path / "data"
     _, db = open_stores(data)

@@ -1,9 +1,13 @@
 """The SQLite store: accounts and progress in one file (DESIGN §2, ADR 7).
 
 One connection, used only from the event loop thread (``check_same_thread`` stays on, so a stray
-thread fails loudly). A save is a single small row in its own transaction, which costs one
-journal sync (a few milliseconds on a disk); a server that grew to feel that would move saves to a
-thread, which the protocols allow but nothing needs yet.
+thread fails loudly). A save is a single small row in its own transaction. The file is in WAL mode
+with ``synchronous=NORMAL``: a commit is written to the log without waiting for the disk, and the
+log is synced at each checkpoint, so a save costs no fsync on the event loop. The database cannot
+be corrupted that way; a power cut or an operating system crash can lose the last few commits (a
+process crash loses none), which for this data means a player's last few seconds of progress or a
+just-set password. A server that grew to feel the writes themselves would move saves to a thread,
+which the protocols allow but nothing needs yet.
 
 The schema is versioned in a ``schema_version`` table and only ever moves forward: ``MIGRATIONS``
 is an append-only list, the n-th entry taking a database from version n-1 to n. A database from a
@@ -105,6 +109,7 @@ class SqliteStore:
                 # Readers (a backup, a future registration front end) never block the server's
                 # writes, nor it theirs, beyond the busy timeout.
                 self._db.execute("PRAGMA journal_mode=WAL")
+                self._db.execute("PRAGMA synchronous=NORMAL")
             self._migrate(migrations)
         except BaseException:
             self._db.close()

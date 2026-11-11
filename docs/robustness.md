@@ -162,6 +162,7 @@ refusal log is kept per full address. Log lines show the full address. Tests:
 | a shutdown or a kick of a player in a fight | not a death, nothing held | clean leave | `session/test_removal::test_a_kick_under_fire_is_not_a_death_and_holds_nothing` |
 | wire capture | `max_bytes` per file and `CAPTURE_DIR_MAX_BYTES` for the directory (oldest of our files removed first); never the logon; a write error ends the capture only | stops with a note | `net/test_capture::test_a_capture_stops_at_its_cap_with_a_note`, `test_the_logon_is_never_recorded`, `test_an_unwritable_directory_ends_the_capture_not_the_connection`, `test_the_oldest_files_go_when_the_directory_would_pass_its_cap` |
 | the database file (password hashes) | the data directory is made 0700 and `opencs.db` 0600 (`DATA_DIR_MODE`, `DATABASE_FILE_MODE`); the unit's `UMask=0077` covers the WAL files and logs | a warning if it cannot be made private | `store/test_stores::test_the_data_directory_and_database_are_private_to_the_server` |
+| the database after a power cut or operating system crash | WAL with `synchronous=NORMAL`: never corrupt, but the last few saves can be lost (a server crash loses none); backups in OPERATING.md | the database opens at the last synced save | `store/test_stores::test_a_save_does_not_wait_for_the_disk` (the setting; losing saves is a trade, not a bound) |
 | an invalid city file at reload | validated whole first | nothing changes | `test_cities::test_an_invalid_file_changes_nothing_not_even_the_valid_parts` |
 
 ## Threat model
