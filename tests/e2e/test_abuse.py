@@ -16,6 +16,7 @@ from opencs import policy
 from opencs.app import build_services
 from opencs.clock import ManualClock
 from opencs.lobby.identity import CURRENT_KDF, hash_password
+from opencs.session.phases import Services
 from opencs.store.memory import memory_stores
 
 
@@ -75,6 +76,17 @@ async def tiny_window(port: int) -> Client:
     return Client(reader, writer)
 
 
+def pin_send_buffer(services: Services, callsign: str) -> None:
+    """Fix the server's send buffer for ``callsign``'s connection small. Linux grows a socket's
+    send buffer to megabytes while it has data waiting (``net.ipv4.tcp_wmem``), enough to hold all
+    the chat a test sends, so a reader that has stopped would never put the server behind."""
+    [session] = [
+        s for s in services.sessions.all() if s.pilot is not None and s.pilot.callsign == callsign
+    ]
+    sock = session.io._writer.transport.get_extra_info("socket")  # type: ignore[attr-defined]
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 4096)
+
+
 def test_chat_never_overflows_a_player_who_reads_slowly() -> None:
     async def scenario() -> tuple[int, int, bool]:
         clock = ManualClock(1000.0)
@@ -85,6 +97,7 @@ def test_chat_never_overflows_a_player_who_reads_slowly() -> None:
             config, clock=clock, services=services, tick_sleep=TickGate().sleep
         )
         victim = await chamber(port, "VICTIM,sesame", await tiny_window(port))  # reads no more
+        pin_send_buffer(services, "VICTIM")
         sender = await chamber(port, "SENDER,sesame")
         watcher = await chamber(port, "WATCHER,sesame")
         with LogWatch("opencs.net", "outbox over") as cut:
