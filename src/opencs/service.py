@@ -140,7 +140,9 @@ class ServiceServer:
         log.info("service channel on %s", path)
 
     async def stop(self) -> None:
-        """Stop listening, close every connection and remove the socket file."""
+        """Stop listening, close every connection and remove the socket file. A connection whose
+        reader has stopped reading cannot finish closing (what it was sent is still unread), so
+        what is still open after ``SHUTDOWN_ABORT_GRACE`` is aborted."""
         if self._server is not None:
             self._server.close()
         for writer in list(self._writers):
@@ -148,6 +150,8 @@ class ServiceServer:
         if self._server is not None:
             with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(self._server.wait_closed(), policy.SHUTDOWN_ABORT_GRACE)
+        for writer in list(self._writers):
+            writer.transport.abort()
         if self._path is not None:
             with contextlib.suppress(OSError):
                 self._path.unlink()
@@ -173,8 +177,12 @@ class ServiceServer:
                 self._unsubscribe(connection, letter)
             self._writers.discard(writer)
             writer.close()
-            with contextlib.suppress(Exception):
-                await writer.wait_closed()
+            try:
+                await asyncio.wait_for(writer.wait_closed(), policy.SHUTDOWN_ABORT_GRACE)
+            except TimeoutError:
+                writer.transport.abort()  # a reader that has stopped reading
+            except Exception:
+                pass
 
     async def _hello(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> bool:
         try:
