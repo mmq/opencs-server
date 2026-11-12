@@ -11,19 +11,27 @@ A keyframe is what a late joiner is sent (``podreport.go_live``), built from the
 ``creating_messages`` and ``state_messages`` but never through ``introduce`` or ``inform``, which
 would mark the entities as held by a client.
 
+The same hooks feed the live feeds (``session.livefeed``, the service channel's ``subscribe``, ADR
+16): while the web watches a city, each record the recorder is given goes to its feeds too, whether
+or not the city is being recorded, so a feed holds exactly what a recording would.
+
 Nothing here may hold up or break a game: every call is cheap (a check and a queue append), and a
-bug in it stops recording for the run instead of reaching the caller.
+bug in it stops recording for the run (or ends the city's feeds) instead of reaching the caller.
 """
 
 from __future__ import annotations
 
+import json
 import logging
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Any
 
+from opencs import policy
 from opencs.clock import Clock, MonotonicClock
+from opencs.config import RecordingConfig
 from opencs.messages import ClientMessage, ServerMessage
-from opencs.recording import PilotInfo, Recorder
+from opencs.recording import Kind, PilotInfo, Recorder, chat_style, keeps_chat
+from opencs.session.livefeed import Feed
 from opencs.world.city import City
 from opencs.world.events import Event, ToPlayer
 from opencs.world.player import Player
@@ -32,12 +40,64 @@ log = logging.getLogger("opencs.recording")
 
 
 class Recording:
-    """The recorder's hooks. Without a ``Recorder`` (``[recording]`` off) every call returns at
-    once."""
+    """The recorder's hooks, and the live feeds'. Without a ``Recorder`` (``[recording]`` off) and
+    without a feed every call returns at once. ``settings`` is ``[recording]`` (the recorder's own
+    if there is one): the feeds keep chat and name bots as it says."""
 
-    def __init__(self, recorder: Recorder | None = None, clock: Clock | None = None) -> None:
+    def __init__(
+        self,
+        recorder: Recorder | None = None,
+        clock: Clock | None = None,
+        *,
+        settings: RecordingConfig | None = None,
+        wall: Callable[[], float] | None = None,
+    ) -> None:
         self.recorder = recorder
         self._clock = clock or MonotonicClock()
+        self.settings = recorder.config if recorder else (settings or RecordingConfig())
+        self._bots = frozenset(self.settings.bots)
+        #: The wall clock for a feed's start time (``time.time`` in the app; tests' clocks).
+        self._wall = wall or self._clock.now
+        #: City letter -> its live feeds.
+        self.feeds: dict[str, list[Feed]] = {}
+
+    # --- live feeds --------------------------------------------------------------------------
+
+    def open_feed(self, city: City, capacity: int = policy.SERVICE_FEED_ITEMS) -> Feed:
+        """A new live feed of ``city``, its first epoch begun at once."""
+        feed = Feed(city.config.letter, capacity)
+        self.feeds.setdefault(feed.letter, []).append(feed)
+        self._start_feed(feed, city, self._clock.now())
+        return feed
+
+    def close_feed(self, feed: Feed) -> None:
+        feed.close()
+        feeds = self.feeds.get(feed.letter, [])
+        if feed in feeds:
+            feeds.remove(feed)
+        if not feeds:
+            self.feeds.pop(feed.letter, None)
+
+    def _start_feed(self, feed: Feed, city: City, now: float) -> None:
+        feed.start(
+            now,
+            self._wall(),
+            city=city,
+            config=city.config,
+            players=[self._info(p) for p in city.players()],
+            snapshot=_snapshot(city, now),
+            state=_state(city),
+        )
+
+    def _feeds(self, letter: str) -> list[Feed]:
+        return self.feeds.get(letter, [])
+
+    def _feed_failed(self, letter: str, exc: Exception) -> None:
+        """A bug in feeding city ``letter``: its feeds end (the subscriber sees them close), the
+        game goes on."""
+        log.error("a bug in the live feed of city %s: its feeds end", letter, exc_info=exc)
+        for feed in list(self._feeds(letter)):
+            self.close_feed(feed)
 
     # --- running -----------------------------------------------------------------------------
 
@@ -57,6 +117,8 @@ class Recording:
     def joined(self, city: City, player_id: int, *, resumed: bool = False) -> None:
         """A player was seated in ``city``: start a segment if it now has a pilot to record, or
         note the join in the open one (with a keyframe for a ``/RESUME``)."""
+        if self._feeds(city.config.letter):
+            self._feed_joined(city, player_id, resumed)
         rec = self.recorder
         if rec is None:
             return
@@ -68,20 +130,39 @@ class Recording:
                 return
             player = city.player(player_id)
             if player is not None:
-                rec.player(letter, now, player_id, self._info(rec, player))
+                rec.player(letter, now, player_id, self._info(player))
             if resumed:
                 rec.keyframe(letter, now, _snapshot(city, now), _state(city), "resume")
         except Exception as exc:
             rec.stop("a bug in recording a join", exc)
 
+    def _feed_joined(self, city: City, player_id: int, resumed: bool) -> None:
+        letter = city.config.letter
+        try:
+            now = self._clock.now()
+            player = city.player(player_id)
+            payload = b"" if player is None else _row(self._info(player))
+            snapshot = _snapshot(city, now) if resumed else []
+            state = _state(city) if resumed else {}
+            for feed in self._feeds(letter):
+                feed.put(now, Kind.PLAYER, player_id, payload)
+                if resumed:
+                    feed.keyframe(now, snapshot, state, "resume")
+        except Exception as exc:
+            self._feed_failed(letter, exc)
+
     def left(self, city: City, player_id: int) -> None:
         """A player is out of ``city``: note it, and end the segment if no pilot to record is
         left."""
+        letter = city.config.letter
+        if feeds := self._feeds(letter):
+            now = self._clock.now()
+            for feed in feeds:
+                feed.put(now, Kind.PLAYER, player_id, b"")
         rec = self.recorder
         if rec is None:
             return
         try:
-            letter = city.config.letter
             if not rec.recording(letter):
                 return
             now = self._clock.now()
@@ -93,7 +174,17 @@ class Recording:
             rec.stop("a bug in recording a leave", exc)
 
     def after_tick(self, city: City) -> None:
-        """After a tick of ``city``: replace a segment that is old enough with a new one."""
+        """After a tick of ``city``: replace a segment that is old enough with a new one, and
+        start a new epoch of each feed that owes one (after a gap, or the city was rebuilt)."""
+        if feeds := self._feeds(city.config.letter):
+            try:
+                for feed in feeds:
+                    if feed.city is not city and not feed.owes_start:
+                        feed.restart("rebuilt")
+                    if feed.owes_start:
+                        self._start_feed(feed, city, self._clock.now())
+            except Exception as exc:
+                self._feed_failed(city.config.letter, exc)
         rec = self.recorder
         if rec is None:
             return
@@ -113,21 +204,30 @@ class Recording:
             letter,
             now,
             config=city.config,
-            players=[self._info(rec, p) for p in players],
+            players=[self._info(p) for p in players],
             snapshot=_snapshot(city, now),
             state=_state(city),
             reason=reason,
         )
 
-    @staticmethod
-    def _info(rec: Recorder, player: Player) -> PilotInfo:
-        bot = player.identity is None and rec.is_bot(player.callsign)
+    def _info(self, player: Player) -> PilotInfo:
+        bot = player.identity is None and player.callsign.upper() in self._bots
         return PilotInfo(player.id, player.callsign, player.team, bot)
 
     # --- what happens ------------------------------------------------------------------------
 
     def client(self, city: City, player_id: int, message: ClientMessage) -> None:
         """A message from ``player_id`` about to reach ``city`` (it passed the relay budgets)."""
+        if feeds := self._feeds(city.config.letter):
+            letter = city.config.letter
+            try:
+                style = chat_style(message)
+                if style is None or keeps_chat(self.settings, letter, style):
+                    now = self._clock.now()
+                    for feed in feeds:
+                        feed.put(now, Kind.CLIENT, player_id, message)
+            except Exception as exc:
+                self._feed_failed(letter, exc)
         rec = self.recorder
         if rec is None:
             return
@@ -140,6 +240,10 @@ class Recording:
 
     def to_player(self, city: City, player_id: int, message: ServerMessage) -> None:
         """A message sent to one player outside the router (the kick or shutdown notice)."""
+        if feeds := self._feeds(city.config.letter):
+            now = self._clock.now()
+            for feed in feeds:
+                feed.put(now, Kind.SERVER, player_id, message)
         rec = self.recorder
         if rec is None:
             return
@@ -154,15 +258,27 @@ class Recording:
         """Server events about to be delivered (``Router``'s tape): each once, without relayed
         copies; a message sent alike to several single players in this call is one record for
         everyone."""
+        letter = city.config.letter
+        feeds = self._feeds(letter)
         rec = self.recorder
-        if rec is None:
+        recording = rec is not None and rec.recording(letter)
+        if not feeds and not recording:
             return
         try:
-            letter = city.config.letter
-            if not rec.recording(letter):
-                return
-            now = self._clock.now()
-            for message, to in _fold(events):
+            folded = _fold(events)
+        except Exception as exc:
+            if rec is not None:
+                rec.stop("a bug in recording server events", exc)
+            self._feed_failed(letter, exc)
+            return
+        now = self._clock.now()
+        for feed in feeds:
+            for message, to in folded:
+                feed.put(now, Kind.SERVER, to, message)
+        if rec is None or not recording:
+            return
+        try:
+            for message, to in folded:
                 rec.server(letter, message, now, to=to)
         except Exception as exc:
             rec.stop("a bug in recording server events", exc)
@@ -195,6 +311,11 @@ def _fold(events: Sequence[Event]) -> list[tuple[ServerMessage, int | None]]:
         single[message] = (len(out), {audience.player_id})
         out.append((message, audience.player_id))
     return out
+
+
+def _row(info: PilotInfo) -> bytes:
+    """A PLAYER record's payload for a join, as the recorder writes it."""
+    return json.dumps(info.row(), separators=(",", ":"), sort_keys=True).encode("utf-8")
 
 
 def _snapshot(city: City, now: float) -> list[ServerMessage]:

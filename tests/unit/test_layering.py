@@ -70,6 +70,7 @@ ALLOWED: dict[str, set[str]] = {
         "policy",
         "ratelimit",
         "session",
+        "tasks",
     },
     "app": {
         "__version__",

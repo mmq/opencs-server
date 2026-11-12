@@ -14,6 +14,11 @@ other: a line over ``SERVICE_MAX_LINE`` bytes closes the connection, requests ov
 The requests that hash a password are also metered over all connections
 (``SERVICE_HASH_LIMIT``), and their hashes run on the hasher, off the loop. A request whose work on
 the loop is slow is logged. A password made here is in its reply only, never in the log.
+
+``subscribe`` (ADR 16) opens a live feed of a city on the connection: after its reply, lines with
+no ``id`` and a ``feed`` key carry the city's records as the recorder writes them
+(``session.livefeed``), interleaved with the replies to later requests, until ``unsubscribe`` or
+the connection ends. A reader that falls behind loses records, never holds up the game.
 """
 
 from __future__ import annotations
@@ -36,7 +41,9 @@ from opencs.connlog import STREAM_CHAMBER, STREAM_GAME
 from opencs.control import Control, hash_off_loop, parse_team
 from opencs.lobby.identity import NewPassword, Refused
 from opencs.ratelimit import TokenBucket
+from opencs.session.livefeed import Feed
 from opencs.session.phases import Services
+from opencs.tasks import watch
 
 log = logging.getLogger("opencs.service")
 
@@ -44,6 +51,8 @@ HELLO = "opencs-service"
 
 #: Ops that hash a password, metered over every connection (``policy.SERVICE_HASH_LIMIT``).
 _HASHING_OPS = frozenset({"register", "reset-password"})
+#: Ops about the connection's own live feeds.
+_FEED_OPS = frozenset({"subscribe", "unsubscribe"})
 
 type _Handler = Callable[[dict[str, Any]], Any]
 
@@ -54,6 +63,14 @@ class RequestError(Exception):
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
         self.code = code
+
+
+class _Connection:
+    """One connection's writer and its live feeds (city letter -> the feed and its sender)."""
+
+    def __init__(self, writer: asyncio.StreamWriter) -> None:
+        self.writer = writer
+        self.feeds: dict[str, tuple[Feed, asyncio.Task[None]]] = {}
 
 
 class ServiceServer:
@@ -67,6 +84,8 @@ class ServiceServer:
         *,
         hello_timeout: float = policy.SERVICE_HELLO_TIMEOUT,
         max_connections: int = policy.SERVICE_MAX_CONNECTIONS,
+        max_feeds: int = policy.SERVICE_MAX_FEEDS,
+        feed_items: int = policy.SERVICE_FEED_ITEMS,
         timer: Callable[[], float] = time.perf_counter,
     ) -> None:
         self._services = services
@@ -74,11 +93,14 @@ class ServiceServer:
         self._clock = clock
         self._hello_timeout = hello_timeout
         self._max = max_connections
+        self._max_feeds = max_feeds
+        self._feed_items = feed_items
         self._timer = timer  # real time, for the slow-request warning, whatever ``clock`` is
         self._hashes = TokenBucket(*policy.SERVICE_HASH_LIMIT, clock.now())
         self._server: asyncio.Server | None = None
         self._path: Path | None = None
         self._writers: set[asyncio.StreamWriter] = set()
+        self._feed_count = 0
         self._slow_unlogged = 0
         self._next_slow_warning = 0.0
         #: Each op with the arguments it takes; any other is refused.
@@ -138,14 +160,17 @@ class ServiceServer:
             writer.close()
             return
         self._writers.add(writer)
+        connection = _Connection(writer)
         try:
             if await self._hello(reader, writer):
-                await self._serve(reader, writer)
+                await self._serve(reader, connection)
         except (ConnectionError, asyncio.IncompleteReadError, asyncio.LimitOverrunError):
             log.info("service connection ended")
         except Exception:
             log.exception("service connection failed")
         finally:
+            for letter in list(connection.feeds):
+                self._unsubscribe(connection, letter)
             self._writers.discard(writer)
             writer.close()
             with contextlib.suppress(Exception):
@@ -177,7 +202,8 @@ class ServiceServer:
         log.info("service connection opened (protocol %s)", version)
         return True
 
-    async def _serve(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+    async def _serve(self, reader: asyncio.StreamReader, connection: _Connection) -> None:
+        writer = connection.writer
         requests = TokenBucket(*policy.SERVICE_REQUEST_LIMIT, self._clock.now())
         while line := await _read_line(reader):
             request = _parse(line)
@@ -187,7 +213,7 @@ class ServiceServer:
                     raise RequestError("bad-request", "a request is an object with an op")
                 if not requests.take(self._clock.now()):
                     raise RequestError("rate", "too many requests: slow down")
-                result = await self._request(request)
+                result = await self._request(request, connection)
                 reply: dict[str, Any] = {"id": rid, "ok": True, "result": result}
             except RequestError as exc:
                 reply = {"id": rid, "ok": False, "error": exc.code, "message": str(exc)}
@@ -196,8 +222,15 @@ class ServiceServer:
                 reply = {"id": rid, "ok": False, "error": "failed", "message": "see the log"}
             await _send(writer, reply)
 
-    async def _request(self, request: dict[str, Any]) -> Any:
+    async def _request(self, request: dict[str, Any], connection: _Connection) -> Any:
         op = request["op"]
+        if op in _FEED_OPS:
+            _only(request, "city")
+            letter = _city(request)
+            if op == "subscribe":
+                return self._subscribe(connection, letter)
+            self._unsubscribe(connection, letter)
+            return {"city": letter}
         if op not in self._ops:
             raise RequestError("unknown-op", f"no op {_op_name(request)!r}")
         keys, handler = self._ops[op]
@@ -229,6 +262,71 @@ class ServiceServer:
         )
         self._slow_unlogged = 0
         self._next_slow_warning = now + policy.SLOW_SERVICE_LOG_SECONDS
+
+    # --- live feeds --------------------------------------------------------------------------
+
+    def _subscribe(self, connection: _Connection, letter: str) -> dict[str, Any]:
+        """A live feed of city ``letter`` on this connection (once per city: asking again is
+        answered alike). Its first epoch is built at once, from the world as it stands."""
+        city = self._services.cities.get(letter)
+        if city is None:
+            raise RequestError("bad-request", f"no city {letter}")
+        held = connection.feeds.get(letter)
+        if held is not None and held[0].closed:  # ended by a bug in feeding it: a fresh one
+            self._unsubscribe(connection, letter)
+        if letter not in connection.feeds:
+            if self._feed_count >= self._max_feeds:
+                raise RequestError("busy", "too many live feeds open")
+            started = self._timer()
+            feed = self._services.recording.open_feed(city, self._feed_items)
+            self._timed("subscribe", self._timer() - started)
+            sender = watch(
+                asyncio.create_task(self._send_feed(connection.writer, feed)),
+                f"the live feed of city {letter}",
+            )
+            connection.feeds[letter] = (feed, sender)
+            self._feed_count += 1
+            log.info("live feed of city %s opened", letter)
+        return {"city": letter}
+
+    def _unsubscribe(self, connection: _Connection, letter: str) -> None:
+        held = connection.feeds.pop(letter, None)
+        if held is None:
+            return
+        feed, sender = held
+        sender.cancel()
+        self._services.recording.close_feed(feed)
+        self._feed_count -= 1
+        log.info(
+            "live feed of city %s closed (%d gaps, %d records dropped)",
+            letter,
+            feed.gaps,
+            feed.dropped,
+        )
+
+    async def _send_feed(self, writer: asyncio.StreamWriter, feed: Feed) -> None:
+        """Send ``feed``'s records every ``SERVICE_FEED_FLUSH_SECONDS``, at most
+        ``SERVICE_FEED_BATCH`` encoded per pass on the loop, waiting for the reader between
+        writes. While it waits, the loop goes on and the feed's queue fills to its cap."""
+        while not feed.closed:
+            if feed.queued <= 0:
+                await asyncio.sleep(policy.SERVICE_FEED_FLUSH_SECONDS)
+            started = self._timer()
+            lines = feed.lines()
+            self._timed("subscribe", self._timer() - started)
+            if not lines:
+                continue
+            writer.write(b"".join(_line(line) for line in lines))
+            feed.waiting = True
+            try:
+                await writer.drain()
+            except ConnectionError:
+                return
+            finally:
+                feed.waiting = False
+            await asyncio.sleep(0)  # a full queue is sent in passes, other work between them
+        # Ended without an unsubscribe (which cancels this): a bug in feeding the city.
+        writer.write(_line({"feed": feed.letter, "end": "failed"}))
 
     # --- requests ----------------------------------------------------------------------------
 
@@ -429,6 +527,13 @@ def _text(request: dict[str, Any], key: str) -> str:
     return value
 
 
+def _city(request: dict[str, Any]) -> str:
+    value = request.get("city")
+    if not isinstance(value, str) or len(value) != 1 or not "A" <= value.upper() <= "Z":
+        raise RequestError("bad-request", "city must be a city letter")
+    return value.upper()
+
+
 def _team(request: dict[str, Any]) -> str:
     value = request.get("team")
     team = parse_team(value) if isinstance(value, str) else None
@@ -468,7 +573,11 @@ async def _read_line(reader: asyncio.StreamReader) -> bytes | None:
         return None
 
 
+def _line(message: dict[str, Any]) -> bytes:
+    return json.dumps(message, separators=(",", ":")).encode("ascii") + b"\n"
+
+
 async def _send(writer: asyncio.StreamWriter, message: dict[str, Any]) -> None:
-    writer.write(json.dumps(message, separators=(",", ":")).encode("ascii") + b"\n")
+    writer.write(_line(message))
     with contextlib.suppress(ConnectionError):
         await writer.drain()

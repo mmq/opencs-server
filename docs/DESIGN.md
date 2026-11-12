@@ -149,6 +149,7 @@ src/opencs/
     persistence.py       loads a record before a join, writes what a city reports changed (II §11.3)
     held.py              the games held for dropped players: windows, reserved slots (II §13)
     recorder.py          what the game recorder is told: when, keyframes, events once each
+    livefeed.py          a city's records for the web's live map: bounded, drops and restarts (ADR 16)
     registry.py          every live session, for the operator
     cityhealth.py        which cities have failed or been slow, and so need rebuilding when empty
     budgets.py           a connection's rate limits, which outlive its phases (ADR 9)

@@ -95,7 +95,7 @@ def build_services(
     clock = clock or MonotonicClock()
     if recorder is None and config.server.recording.enabled:
         recorder = Recorder(config.server.recording)
-    recording = Recording(recorder, clock)
+    recording = Recording(recorder, clock, settings=config.server.recording, wall=time.time)
     stores = stores or memory_stores()
     limits = config.server.limits
     identity = Identity(
@@ -116,7 +116,9 @@ def build_services(
         lobby,
         clock,
         cities,
-        Router(recording if recorder is not None else None),
+        # The recorder and the live feeds (the service channel's ``subscribe``) hear the router;
+        # with neither possible, it does nothing extra.
+        Router(recording if recorder is not None or config.server.service.socket else None),
         Persistence(stores.progress, clock),
         held,
         LoginLimits(

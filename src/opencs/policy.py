@@ -193,6 +193,21 @@ SERVICE_HASH_LIMIT = (5, 0.2)
 SLOW_SERVICE_REQUEST_SECONDS = 0.02
 SLOW_SERVICE_LOG_SECONDS = 60.0
 
+#: Live feeds (``subscribe``, ADR 16): a city's records as the recorder writes them, for the web's
+#: real-time map. At most ``SERVICE_MAX_FEEDS`` at once over every connection. Ours: the web
+#: subscribes once per watched city, however many people watch it.
+SERVICE_MAX_FEEDS = 8
+#: Records a feed holds for a reader that is behind; past it they are all dropped and the feed
+#: starts again (a header and a keyframe) once the reader has caught up. A busy city makes about
+#: 40 records a second, so this is about a minute. Ours.
+SERVICE_FEED_ITEMS = 2000
+#: How often a feed's records are sent, and the most encoded in one go on the loop (the rest wait
+#: for the next pass, after other work has run). Ours.
+SERVICE_FEED_FLUSH_SECONDS = 0.25
+SERVICE_FEED_BATCH = 400
+#: Record bytes in one feed line, before base64. Ours: well under the web's line limit.
+SERVICE_FEED_LINE_BYTES = 32_768
+
 #: What every player is told when the server is going down; ``shutdown <n>`` adds
 #: ``" IN n SECONDS"``. Ours.
 SHUTDOWN_NOTICE = "SERVER SHUTTING DOWN"

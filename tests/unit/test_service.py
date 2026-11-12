@@ -4,6 +4,7 @@ no sleeping: a reply is read when the server sends it."""
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import logging
 import random
@@ -11,7 +12,8 @@ import shutil
 import socket
 import stat
 import tempfile
-from collections.abc import AsyncIterator, Iterator
+import time
+from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import asynccontextmanager
 from dataclasses import replace
 from pathlib import Path
@@ -29,6 +31,8 @@ from opencs.app import Seams, StartupError, serve
 from opencs.cities import CityManager
 from opencs.config import ServiceConfig
 from opencs.control import Control
+from opencs.messages import client, decode_client, decode_server, server
+from opencs.recording import Kind, read_segment
 from opencs.service import HELLO, ServiceServer
 from opencs.store.base import ARGON2ID
 from opencs.store.memory import memory_stores
@@ -73,6 +77,8 @@ class ServiceClient:
         """The reply to one request, checked to answer it."""
         self._next_id += 1
         reply = await self.send({"id": self._next_id, "op": op, **args})
+        while "feed" in reply:  # a live feed's line: the reply comes after
+            reply = await self.receive()
         assert reply["id"] == self._next_id
         return reply
 
@@ -629,3 +635,144 @@ def test_a_service_socket_that_cannot_be_made_stops_the_server_at_start(sock_dir
 
     with pytest.raises(StartupError, match="service channel"):
         run(scenario())
+
+
+# --- live feeds (ADR 16) ----------------------------------------------------------------------
+
+
+async def feed_lines(
+    c: ServiceClient, until: Callable[[dict[str, Any]], bool]
+) -> list[dict[str, Any]]:
+    """Feed lines read until one that ``until`` accepts (included)."""
+    out: list[dict[str, Any]] = []
+    while True:
+        line = await c.receive()
+        assert "feed" in line, line
+        out.append(line)
+        if until(line):
+            return out
+
+
+def epoch_bytes(lines: list[dict[str, Any]], epoch: int) -> bytes:
+    return b"".join(base64.b64decode(x["data"]) for x in lines if x.get("epoch") == epoch)
+
+
+def test_a_subscription_feeds_the_citys_records_and_nothing_private(sock_dir: Path) -> None:
+    world = make_world(tape=True)
+    flier = play(world, "A", 1, "ALICE,tangerine2")
+    flier.feed(frame(report(4)))
+
+    async def scenario() -> None:
+        async with running(sock_dir, world) as (path, _, _):
+            c = await hello(path)
+            assert await c.result("subscribe", city="a") == {"city": "A"}
+            [start] = await feed_lines(c, lambda line: True)
+            assert (start["feed"], start["epoch"], start["start"]) == ("A", 1, "subscribe")
+            flier.feed(frame(report(0, x_off=-40)))
+            flier.feed(frame(client.Chat(0, b"hello")))
+            lines = [start, *await feed_lines(c, lambda line: "start" not in line)]
+            segment = read_segment(epoch_bytes(lines, 1))
+            assert segment.header["players"] == [
+                {"id": 0, "callsign": "ALICE", "team": 1, "bot": False}
+            ]
+            said = [decode_client(r.payload) for r in segment.records if r.kind is Kind.CLIENT]
+            assert said == [report(0, x_off=-40), client.Chat(0, b"hello")]
+            text = b"".join(r.payload for r in segment.records) + json.dumps(lines).encode()
+            assert b"tangerine2" not in text.lower() and b"127.0.0.1" not in text
+            # Requests still work on a connection with a feed, answered between the lines.
+            assert (await c.ask("unsubscribe", city="A"))["ok"]
+            flier.feed(frame(report(0, x_off=-80)))
+            assert (await c.result("snapshot"))["cities"][0]["letter"] == "A"
+            assert world.services.recording.feeds == {}
+
+    run(scenario())
+
+
+def test_subscribing_needs_a_city_and_feeds_are_limited(sock_dir: Path) -> None:
+    world = make_world(tape=True)
+
+    async def scenario() -> None:
+        async with running(sock_dir, world, max_feeds=2) as (path, _, _):
+            c = await hello(path)
+            for bad in ("Q", "AB", 3, None):
+                reply = await c.ask("subscribe", city=bad)
+                assert (reply["ok"], reply["error"]) == (False, "bad-request")
+            assert (await c.ask("subscribe", city="A", extra=1))["error"] == "bad-request"
+            await c.result("subscribe", city="A")
+            await c.result("subscribe", city="A")  # the same feed: no second one
+            other = await hello(path)
+            await other.result("subscribe", city="B")
+            assert (await other.ask("subscribe", city="C"))["error"] == "busy"
+            await other.result("unsubscribe", city="B")
+            await other.result("subscribe", city="C")
+            other.writer.close()  # a connection that ends takes its feeds with it
+            await other.closed()
+            for _ in range(50):
+                if "C" not in world.services.recording.feeds:
+                    break
+                await asyncio.sleep(0.01)
+            assert set(world.services.recording.feeds) == {"A"}
+
+    run(scenario())
+
+
+def test_a_slow_reader_never_holds_up_the_game_and_gets_a_new_epoch_after_a_gap(
+    sock_dir: Path,
+) -> None:
+    world = make_world(tape=True)
+    flier = play(world, "A", 0)
+    flier.feed(frame(report(4)))
+    city = world.services.cities["A"]
+    recording = world.services.recording
+    pid = city.players()[0].id
+
+    async def scenario() -> None:
+        async with running(sock_dir, world, feed_items=1000) as (path, _, _):
+            c = await hello(path)
+            await c.result("subscribe", city="A")
+            [feed] = recording.feeds["A"]
+            # The reader stops reading. The game goes on (here: reports straight to the hooks,
+            # faster than any client may send them, and the ticker's after-tick): each costs the
+            # same, the feed never holds more than its cap, and the loop serves other requests.
+            # "Costs the same" is judged by the 99th percentile: a shared CI machine stops any
+            # process for tens of milliseconds now and then, whatever it is doing.
+            costs: list[float] = []
+            sent = 0
+            behind = False
+            while feed.gaps == 0:
+                for _ in range(100):
+                    started = time.perf_counter()
+                    recording.client(city, pid, report(0, x_off=sent % 500))
+                    costs.append(time.perf_counter() - started)
+                    sent += 1
+                    assert feed.queued <= 1000
+                    behind = behind or feed.waiting
+                recording.after_tick(city)
+                await asyncio.sleep(0.05)
+                assert sent < 1_000_000, "the reader never fell behind"
+            assert behind, "the sender waited on the reader"
+            costs.sort()
+            assert costs[len(costs) * 99 // 100] < 0.001  # a call takes some 20 microseconds
+            assert costs[-1] < 0.25  # none waited on the reader, which never reads again
+            other = await hello(path)
+            assert (await other.result("snapshot"))["cities"][0]["letter"] == "A"
+            recording.after_tick(city)
+            assert feed.queued == 0, "no new epoch while the reader is behind"
+            # The reader reads again: what was written before the gap, then a new epoch, built
+            # from the city as it is once the reader has caught up.
+            flier.feed(frame(report(0, x_off=7)))
+            lines: list[dict[str, Any]] = []
+            while not any(line.get("start") == "gap" for line in lines):
+                line = await c.receive()
+                lines.append(line)
+                recording.after_tick(city)
+            restart = next(line for line in lines if line.get("start") == "gap")
+            assert restart["dropped"] > 0 and restart["epoch"] == 2
+            segment = read_segment(base64.b64decode(restart["data"]))
+            snapshot = [
+                decode_server(r.payload)[0] for r in segment.records if r.kind is Kind.SNAPSHOT
+            ]
+            [pod] = [m for m in snapshot if isinstance(m, server.Introduce)]
+            assert pod.pos == report(0, x_off=7).pos
+
+    run(scenario())

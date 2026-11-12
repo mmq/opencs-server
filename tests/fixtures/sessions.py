@@ -22,6 +22,7 @@ from opencs.session.held import HeldGames
 from opencs.session.loginlimits import LoginLimits
 from opencs.session.persistence import Persistence
 from opencs.session.phases import Hasher, InlineHasher, Services
+from opencs.session.recorder import Recording
 from opencs.session.session import Session
 from opencs.store.base import AccountStore, Kdf, ProgressStore
 from opencs.store.memory import MemoryAccountStore, MemoryProgressStore
@@ -137,7 +138,10 @@ def make_world(
     id_ranges: Mapping[IdRange, tuple[int, int]] | None = None,
     hasher: Hasher | None = None,
     accounts: AccountStore | None = None,
+    tape: bool = False,
 ) -> World:
+    """``tape``: the router tells ``Services.recording`` every event, as the app's does with a
+    recorder or a service channel (for live feeds)."""
     clock = ManualClock(start)
     identity = Identity(accounts or MemoryAccountStore(), kdf=FAST_KDF, wall=clock.now)
     configs = cities or (city("A"), city("B"), city("C"))
@@ -147,7 +151,8 @@ def make_world(
         c.letter: City(c, random.Random(seed), reservations=held, id_ranges=id_ranges)
         for c in configs
     }
-    router = Router()
+    recording = Recording(None, clock)
+    router = Router(recording if tape else None)
     progress = progress or MemoryProgressStore()
     services = Services(
         identity,
@@ -159,6 +164,7 @@ def make_world(
         held,
         LoginLimits(clock),
         hasher=hasher or InlineHasher(),
+        recording=recording,
     )
     return World(clock, identity, lobby, services, progress)
 

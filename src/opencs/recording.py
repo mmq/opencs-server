@@ -142,6 +142,50 @@ def encode_header(header: Mapping[str, Any]) -> bytes:
     return MAGIC + varint(FORMAT_VERSION) + varint(len(body)) + body
 
 
+def segment_header(
+    letter: str, wall: float, config: CityConfig, players: Iterable[PilotInfo]
+) -> dict[str, Any]:
+    """A segment's JSON header: the server version, the city, the start (UTC, from ``wall``), the
+    city's configuration and the player table."""
+    return {
+        "server_version": __version__,
+        "city": letter,
+        "started_utc_ms": round(wall * 1000),
+        "config": asdict(config),
+        "players": [p.row() for p in players],
+    }
+
+
+def encode_payload(payload: bytes | ServerMessage | ClientMessage) -> bytes:
+    """A record's payload: a server message with the tag ``BYTE_MIN``, a client message, or bytes
+    as given. Raises ``ValueError`` for a message that does not encode."""
+    if isinstance(payload, ServerMessage):
+        return server_payload(payload, BYTE_MIN)
+    if isinstance(payload, ClientMessage):
+        return client_payload(payload)
+    return payload
+
+
+def keyframe_records(
+    delta_ms: int,
+    reason: str,
+    snapshot: Iterable[bytes],
+    state: Mapping[str, Any],
+) -> bytes:
+    """A keyframe: a KEYFRAME record of ``state`` (and ``reason``) ``delta_ms`` after the record
+    before, a SNAPSHOT record for each encoded payload, then KEYFRAME_END."""
+    out = [encode_record(delta_ms, Kind.KEYFRAME, None, _json({**state, "reason": reason}))]
+    out += [encode_record(0, Kind.SNAPSHOT, None, data) for data in snapshot]
+    out.append(encode_record(0, Kind.KEYFRAME_END, None, b""))
+    return b"".join(out)
+
+
+def keeps_chat(config: RecordingConfig, letter: str, style: int) -> bool:
+    """Whether a chat line of this style is recorded in city ``letter`` (``[recording] chat``)."""
+    mode = config.chat_for(letter)
+    return mode == "all" or (mode == "public" and style == CHAT_STYLE_OPEN)
+
+
 @dataclass(frozen=True, slots=True)
 class Record:
     """One record as read: ``at_ms`` is milliseconds since the segment's start."""
@@ -387,8 +431,7 @@ class Recorder:
 
     def keeps_chat(self, letter: str, style: int) -> bool:
         """Whether a chat line of this style is recorded in city ``letter`` (``chat``)."""
-        mode = self.config.chat_for(letter)
-        return mode == "all" or (mode == "public" and style == CHAT_STYLE_OPEN)
+        return keeps_chat(self.config, letter, style)
 
     # --- the loop's side: state --------------------------------------------------------------
 
@@ -452,7 +495,7 @@ class Recorder:
         setting leaves out is dropped here."""
         if letter not in self._began:
             return
-        style = _chat_style(message)
+        style = chat_style(message)
         if style is not None and not self.keeps_chat(letter, style):
             return
         self._put(letter, now, _Record(Kind.CLIENT, player_id, message))
@@ -564,16 +607,12 @@ class Recorder:
 
     def _encode(self, payload: bytes | ServerMessage | ClientMessage) -> bytes | None:
         try:
-            if isinstance(payload, ServerMessage):
-                return server_payload(payload, BYTE_MIN)
-            if isinstance(payload, ClientMessage):
-                return client_payload(payload)
+            return encode_payload(payload)
         except ValueError:
             self._unencodable += 1
             if self._unencodable == 1:
                 log.warning("left out a message that does not encode: %r", payload, exc_info=True)
             return None
-        return payload
 
     def _start(self, letter: str, now: float, begin: _Begin) -> bool:
         """Open a new segment for ``letter``; False (and nothing recorded for the city until its
@@ -589,13 +628,7 @@ class Recorder:
             path = self._directory / f"{letter}-{stamp}-{counter}{SUFFIX}{PART}"
         handle = _create(path)
         self._open[letter] = _Open(path, handle, now)
-        header = {
-            "server_version": __version__,
-            "city": letter,
-            "started_utc_ms": round(wall * 1000),
-            "config": asdict(begin.config),
-            "players": [p.row() for p in begin.players],
-        }
+        header = segment_header(letter, wall, begin.config, begin.players)
         self._append(self._open[letter], encode_header(header))
         log.info("recording city %s in %s", letter, path.name)
         return True
@@ -631,17 +664,11 @@ class Recorder:
         segment = self._open.get(letter)
         if segment is None:
             return
-        out = [
-            encode_record(
-                segment.delta(now), Kind.KEYFRAME, None, _json({**state, "reason": reason})
-            )
-        ]
-        for item in snapshot:
-            data = self._encode(item)
-            if data is not None:
-                out.append(encode_record(0, Kind.SNAPSHOT, None, data))
-        out.append(encode_record(0, Kind.KEYFRAME_END, None, b""))
-        self._append(segment, b"".join(out), letter=letter, now=now)
+        encoded = (self._encode(item) for item in snapshot)
+        data = keyframe_records(
+            segment.delta(now), reason, (d for d in encoded if d is not None), state
+        )
+        self._append(segment, data, letter=letter, now=now)
 
     def _write(
         self, letter: str, now: float, kind: Kind, player: int | None, payload: bytes
@@ -707,7 +734,7 @@ def _create(path: Path) -> BinaryIO:
         raise
 
 
-def _chat_style(message: ClientMessage | bytes) -> int | None:
+def chat_style(message: ClientMessage | bytes) -> int | None:
     """The style of a client chat message, None for anything else (or chat that does not
     decode, which the city would not take either)."""
     if isinstance(message, bytes):
