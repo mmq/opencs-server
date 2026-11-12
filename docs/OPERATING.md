@@ -693,6 +693,44 @@ of requests costs the web process CPU, below the game's, and never the game. To 
 address too, build Caddy with the `rate_limit` plugin (github.com/mholt/caddy-ratelimit) and uncomment
 its block in the Caddyfile; or use the firewall, as for the game port (`sudo ufw limit 443/tcp`).
 
+### Without Caddy
+
+Caddy is only the HTTPS front door: it gets and renews the certificate, listens on ports 80 and 443 so
+the web process needs no privileges, and buffers slow clients before they reach the one uvicorn worker.
+The site itself is plain HTTP on the loopback address, so anything that does those jobs will do.
+
+**On your own machine, no proxy at all.** For a local server, or to try the site out, run uvicorn
+yourself and open it over plain HTTP:
+
+```bash
+export OPENCS_WEB_SECRET_KEY=anything-long-for-local-use \
+       OPENCS_WEB_HTTPS=false \
+       OPENCS_WEB_ALLOWED_HOSTS=127.0.0.1,localhost \
+       OPENCS_WEB_SERVICE_SOCKET=/path/to/service.sock      # the server's [service] socket
+uv run uvicorn opencs_web.asgi:application                  # then open http://127.0.0.1:8000/
+```
+
+`OPENCS_WEB_HTTPS=false` stops the redirect to HTTPS, HSTS and secure-only cookies; leave it `true`
+anywhere the site is reached over the internet. To reach it from other machines on a home network, add
+`--host 0.0.0.0` and the machine's address or name to `OPENCS_WEB_ALLOWED_HOSTS` (nothing is encrypted:
+fine on your own network, not on the internet, and never once the site has logins).
+
+**Behind a proxy the host already runs** (nginx, Apache, another Caddy): pass the site's name to
+`http://127.0.0.1:8000` with the `Host` and `X-Forwarded-Proto` headers set, and do not buffer
+`/status/events` (the live stream): in nginx, `proxy_buffering off` for that location. The unit trusts
+forwarded headers from `127.0.0.1` only, so the proxy must be on the same machine.
+
+**Behind a tunnel or a host that serves HTTPS for you** (Cloudflare Tunnel, a platform's front end):
+point it at `http://127.0.0.1:8000`; no public ports or certificates on the server. The tunnel's own
+agent runs on the machine, so the forwarded headers still come from `127.0.0.1`.
+
+**uvicorn serving HTTPS itself.** Possible (`--ssl-keyfile`, `--ssl-certfile`, `--port 443`), but it
+saves nothing: the certificate still needs certbot or similar to get and renew it, uvicorn must be
+restarted to load a renewed one, the unit needs `AmbientCapabilities=CAP_NET_BIND_SERVICE` and its
+`IPAddressDeny=any` removed, and nothing buffers slow clients. Use it only for a small private server.
+
+The game server needs none of this: the site, the recorder and the archiver are each optional.
+
 Log lines (logger `opencs_web`, in the journal):
 
 | line | meaning |
