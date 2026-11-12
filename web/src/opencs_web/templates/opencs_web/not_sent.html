@@ -1,0 +1,13 @@
+{% extends "opencs_web/base.html" %}
+{% block title %}No email sent · OpenCS{% endblock %}
+{% block main %}
+<h1>No email was sent</h1>
+{% if reason == "cap" %}<p>This site has sent as many emails today as it may. Please try again tomorrow.</p>
+{% elif reason == "source" %}<p>Too many emails have been asked for from your network in the last while. Please try again later.</p>
+{% elif reason == "recipient" %}<p>Too many emails have been sent to that address in the last while. Please try again later.</p>
+{% else %}<p>Our email could not be sent just now: the mail service did not take it. Nothing has been
+made, so you can simply try again later.</p>
+{% endif %}
+{% if contact %}<p>If it goes on, the operator can make you an account or give you a new password: {{ contact }}.</p>
+{% else %}<p>If it goes on, ask the operator of this server for an account.</p>{% endif %}
+{% endblock %}

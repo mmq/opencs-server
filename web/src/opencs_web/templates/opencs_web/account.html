@@ -1,0 +1,56 @@
+{% extends "opencs_web/base.html" %}
+{% block title %}Your account · OpenCS{% endblock %}
+{% block main %}
+<h1>Your account</h1>
+{% if notice %}<p class="notice" role="status">{{ notice }}</p>{% endif %}
+<dl class="summary">
+<dt>Account name</dt><dd>{{ player.game_name }}</dd>
+<dt>Email address</dt><dd>{{ player.email }}</dd>
+{% if found %}<dt>Callsign</dt><dd>{% if found.callsign %}{{ found.callsign }}{% else %}not chosen yet: you are asked at your first logon{% endif %}</dd>
+<dt>In the game now</dt><dd>{% if found.online %}yes{% else %}no{% endif %}</dd>
+{% endif %}
+</dl>
+{% if not found %}<p class="errors" role="alert">The game server cannot be reached just now, so your callsign
+and password cannot be changed. Please try again in a few minutes.</p>{% endif %}
+{% if never_played %}<p class="note">You have not logged on to the game with this account yet. The server removes
+accounts that are never played (after 30 days, unless the operator has set otherwise), and this site
+then forgets them too.</p>{% endif %}
+
+<section aria-labelledby="callsign-heading">
+<h2 id="callsign-heading">Callsign</h2>
+<p>What other pilots see. You may change it once a week, while you are not in the game.</p>
+<form method="post" action="{% url 'change-callsign' %}" novalidate>
+{% csrf_token %}
+{% include "opencs_web/_fields.html" with form=callsign_form %}
+<button type="submit">Change my callsign</button>
+</form>
+</section>
+
+<section aria-labelledby="password-heading">
+<h2 id="password-heading">Game password</h2>
+<p>{% if delivery == "email" %}A new password is made up and emailed to you.{% elif delivery == "both" %}A new password is made up, shown once and emailed to you.{% else %}A new password is made up and shown once.{% endif %}
+The old one stops working at once, but a game session already logged on is not ended by it.</p>
+<form method="post" action="{% url 'new-password' %}" novalidate>
+{% csrf_token %}
+{% include "opencs_web/_fields.html" with form=password_form %}
+<button type="submit">Give me a new password</button>
+</form>
+</section>
+
+<section aria-labelledby="delete-heading">
+<h2 id="delete-heading">Delete</h2>
+<p>Forgetting your email address leaves the game account as it is, but this site can then no longer
+give it a new password. Deleting the game account removes its name, callsign, password and progress
+from the game server for good; it must not be in the game or have a game held for <code>/RESUME</code>.</p>
+<form method="post" action="{% url 'delete' %}" novalidate>
+{% csrf_token %}
+{% include "opencs_web/_fields.html" with form=delete_form %}
+<button type="submit">Delete</button>
+</form>
+</section>
+
+<form method="post" action="{% url 'logout' %}">
+{% csrf_token %}
+<button type="submit">Log out</button>
+</form>
+{% endblock %}

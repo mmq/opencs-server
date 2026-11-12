@@ -94,15 +94,24 @@ async def status_events(
 
 # --- the process's one cache and its streams ------------------------------------------------
 
+_channel: ServiceChannel | None = None
 _cache: StatusCache | None = None
 _streams: Streams | None = None
+
+
+def channel() -> ServiceChannel:
+    """The process's one connection to the service channel, shared by the status cache and the
+    account pages: the server allows four in all."""
+    global _channel  # noqa: PLW0603
+    if _channel is None:
+        _channel = ServiceChannel(settings.OPENCS_SERVICE_SOCKET)
+    return _channel
 
 
 def status_cache() -> StatusCache:
     global _cache  # noqa: PLW0603
     if _cache is None:
-        channel = ServiceChannel(settings.OPENCS_SERVICE_SOCKET)
-        _cache = StatusCache(lambda: channel.request("snapshot"))
+        _cache = StatusCache(lambda: channel().request("snapshot"))
     return _cache
 
 
@@ -114,7 +123,9 @@ def streams() -> Streams:
 
 
 def reset() -> None:
-    """Forget the cache and the stream counts (tests, after changing the settings)."""
-    global _cache, _streams  # noqa: PLW0603
+    """Forget the channel, the cache and the stream counts (tests, after changing the
+    settings)."""
+    global _channel, _cache, _streams  # noqa: PLW0603
+    _channel = None
     _cache = None
     _streams = None

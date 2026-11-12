@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from django.core.exceptions import ImproperlyConfigured
 from django.utils.csp import CSP
 
@@ -16,9 +18,10 @@ SECRET_KEY = _CONFIG.secret_key
 DEBUG = _CONFIG.debug
 ALLOWED_HOSTS = list(_CONFIG.allowed_hosts)
 
-INSTALLED_APPS = ["opencs_web"]
+INSTALLED_APPS = ["django.contrib.sessions", "opencs_web"]
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -31,7 +34,7 @@ TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
         "APP_DIRS": True,
-        "OPTIONS": {"context_processors": []},
+        "OPTIONS": {"context_processors": ["opencs_web.accountviews.site"]},
     }
 ]
 
@@ -53,6 +56,44 @@ OPENCS_ARCHIVE_MAX_BYTES = _CONFIG.archive_max_bytes
 OPENCS_SERVICE_SOCKET = _CONFIG.service_socket
 OPENCS_MAX_STREAMS = _CONFIG.max_streams
 OPENCS_MAX_STREAMS_PER_ADDRESS = _CONFIG.max_streams_per_address
+
+# Registration and web accounts (``opencs_web.accounts``).
+OPENCS_SITE_URL = _CONFIG.site_url
+OPENCS_REGISTRATION = _CONFIG.registration
+OPENCS_PASSWORD_DELIVERY = _CONFIG.password_delivery
+OPENCS_CHOSEN_PASSWORDS = _CONFIG.chosen_passwords
+OPENCS_CONTACT = _CONFIG.contact
+OPENCS_PRIVACY_FILE = _CONFIG.privacy_file
+OPENCS_EMAIL_DAILY_CAP = _CONFIG.email_daily_cap
+#: A form sent back sooner than this after it was shown is taken for a script's (the challenge).
+OPENCS_FORM_MIN_SECONDS = 3.0
+
+# Email: through an SMTP server (Resend's, or any), or printed to the log when none is set, so
+# development needs no provider. The tests use Django's in-memory backend.
+DEFAULT_FROM_EMAIL = _CONFIG.email_from
+MAILERS: dict[str, dict[str, Any]]
+if _CONFIG.email is None:
+    MAILERS = {"default": {"BACKEND": "django.core.mail.backends.console.EmailBackend"}}
+else:
+    MAILERS = {
+        "default": {
+            "BACKEND": "django.core.mail.backends.smtp.EmailBackend",
+            "OPTIONS": {
+                "host": _CONFIG.email.host,
+                "port": _CONFIG.email.port,
+                "username": _CONFIG.email.user,
+                "password": _CONFIG.email.password,
+                "use_tls": _CONFIG.email.security == "starttls",
+                "use_ssl": _CONFIG.email.security == "ssl",
+                "timeout": 10,
+            },
+        }
+    }
+
+# A web account's session: in the web's database, so logging out ends it. Two weeks.
+SESSION_COOKIE_AGE = 14 * 24 * 3600
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = "Lax"
 
 USE_TZ = True
 TIME_ZONE = "UTC"

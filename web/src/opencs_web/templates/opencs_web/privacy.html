@@ -1,0 +1,26 @@
+{% extends "opencs_web/base.html" %}
+{% block title %}Privacy · OpenCS{% endblock %}
+{% block main %}
+<h1>Privacy</h1>
+<h2>What this site keeps</h2>
+<ul>
+<li>Your email address, to send you links to log in and, if this site is set up to, your game password.
+It is never shown to other players.</li>
+<li>Your game account's name, to know which account is yours.</li>
+<li>For a day or two, a note of each email sent: when, from which network address, and a scrambled form
+of the address it went to, so that the site can limit how many it sends.</li>
+<li>A cookie that keeps you logged in, for two weeks or until you log out.</li>
+</ul>
+<h2>What the game server keeps</h2>
+<ul>
+<li>Your account name, your callsign, a hash of your password (never the password itself) and your
+progress.</li>
+<li>Your callsign is shown to other players and on this site's status page.</li>
+<li>Games, and the chat in them, may be recorded, as the server's operator has set it up.</li>
+</ul>
+<h2>Deleting</h2>
+<p>When you are logged in, <a href="{% url 'account' %}">your account page</a> lets you delete your email
+address from this site, and your game account from the game server as well.</p>
+{% for paragraph in operator_text %}<p>{{ paragraph }}</p>
+{% endfor %}{% if contact %}<p>Questions: {{ contact }}.</p>{% endif %}
+{% endblock %}

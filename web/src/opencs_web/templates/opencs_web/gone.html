@@ -1,0 +1,8 @@
+{% extends "opencs_web/base.html" %}
+{% block title %}Account removed · OpenCS{% endblock %}
+{% block main %}
+<h1>Your game account is gone</h1>
+<p>The game account <strong>{{ name }}</strong> is no longer on the game server: the operator removed
+it, or it was removed because it was never played. Your email address has been forgotten here as well.
+{% if registration_open %}You can <a href="{% url 'register' %}">register again</a>.{% endif %}</p>
+{% endblock %}

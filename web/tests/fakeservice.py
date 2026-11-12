@@ -55,6 +55,8 @@ class FakeService:
         self.hello_reply: dict[str, Any] | None = None
         self.silent = False
         self.refuse: str | None = None
+        #: Other ops and their results.
+        self.results: dict[str, Any] = {}
         self._server: asyncio.Server | None = None
         self._writers: set[asyncio.StreamWriter] = set()
 
@@ -93,6 +95,9 @@ class FakeService:
                     )
                 elif request["op"] == "snapshot":
                     await _send(writer, {"id": request["id"], "ok": True, "result": self.snapshot})
+                elif request["op"] in self.results:
+                    result = self.results[request["op"]]
+                    await _send(writer, {"id": request["id"], "ok": True, "result": result})
                 else:
                     await _send(
                         writer,

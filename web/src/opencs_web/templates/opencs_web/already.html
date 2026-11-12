@@ -1,0 +1,7 @@
+{% extends "opencs_web/base.html" %}
+{% block title %}Already registered · OpenCS{% endblock %}
+{% block main %}
+<h1>You already have an account</h1>
+<p>This email address already has a game account here: one per address.
+<a href="{% url 'login' %}">Log in</a> to see it or to get a new password.</p>
+{% endblock %}

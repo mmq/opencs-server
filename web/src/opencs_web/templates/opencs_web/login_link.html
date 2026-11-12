@@ -1,0 +1,9 @@
+{% extends "opencs_web/base.html" %}
+{% block title %}Log in · OpenCS{% endblock %}
+{% block main %}
+<h1>Log in</h1>
+<form method="post">
+{% csrf_token %}
+<button type="submit">Log in to your account</button>
+</form>
+{% endblock %}

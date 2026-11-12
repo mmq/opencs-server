@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}OpenCS{% endblock %}</title>
+<link rel="stylesheet" href="{% url 'asset' 'site.css' %}">
+{% block head %}{% endblock %}
+</head>
+<body>
+<header>
+<p class="site"><a href="{% url 'home' %}">OpenCS</a></p>
+<nav aria-label="Site">
+<a href="{% url 'home' %}">Status</a>
+{% if registration_open %}<a href="{% url 'register' %}">Register</a>{% endif %}
+<a href="{% url 'account' %}">Your account</a>
+</nav>
+</header>
+<main>
+{% block main %}{% endblock %}
+</main>
+<footer>
+<a href="{% url 'privacy' %}">Privacy</a>{% if contact %} · Operator: {{ contact }}{% endif %}
+</footer>
+</body>
+</html>

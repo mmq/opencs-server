@@ -1,0 +1,14 @@
+{% extends "opencs_web/base.html" %}
+{% block title %}Register · OpenCS{% endblock %}
+{% block main %}
+<h1>Register</h1>
+<p>One game account for each email address. We send a link to the address you give; the account is
+made when you follow it.</p>
+<form method="post" action="{% url 'register' %}" novalidate>
+{% csrf_token %}
+{% include "opencs_web/_fields.html" %}
+<button type="submit">Send the link</button>
+</form>
+<p class="note">Already registered? <a href="{% url 'login' %}">Log in with your email address</a>.
+What we keep is in the <a href="{% url 'privacy' %}">privacy note</a>.</p>
+{% endblock %}

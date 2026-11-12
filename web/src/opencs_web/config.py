@@ -4,8 +4,8 @@ production). Every default is the safe one: debug off, no host allowed, no secre
 from __future__ import annotations
 
 import os
-from collections.abc import Mapping
-from dataclasses import dataclass
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from opencs.policy import DATABASE_FILE_NAME as GAME_DATABASE_FILE_NAME
@@ -23,6 +23,18 @@ DEFAULT_ARCHIVE_MAX_BYTES = 10_000_000_000
 #: since they share one snapshot a second.
 DEFAULT_MAX_STREAMS = 200
 DEFAULT_MAX_STREAMS_PER_ADDRESS = 4
+#: How a password the server makes up reaches the player: on the page, once; by email; or both.
+PASSWORD_DELIVERIES = ("show", "email", "both")
+DEFAULT_PASSWORD_DELIVERY = "show"
+#: How the mail server is reached: STARTTLS (port 587), TLS from the start (465), or in the clear
+#: (a relay on the same machine only).
+EMAIL_SECURITIES = {"starttls": 587, "ssl": 465, "none": 25}
+DEFAULT_EMAIL_SECURITY = "starttls"
+#: Emails the site sends in a day (24 hours), in all: below the provider's own limit (Resend's
+#: free plan sends 100 a day), so sign-ups and log-ins stop with a clear page before the provider
+#: refuses, and a few are left for passwords (which are sent past it).
+DEFAULT_EMAIL_DAILY_CAP = 90
+DEFAULT_EMAIL_FROM = "OpenCS <opencs@localhost>"
 TRUE = {"1", "true", "yes", "on"}
 FALSE = {"", "0", "false", "no", "off"}
 
@@ -45,6 +57,31 @@ class WebConfig:
     https: bool = True
     max_streams: int = DEFAULT_MAX_STREAMS
     max_streams_per_address: int = DEFAULT_MAX_STREAMS_PER_ADDRESS
+    #: The site's address as players reach it, for the links in its emails (no trailing slash);
+    #: None: taken from each request.
+    site_url: str | None = None
+    #: Whether the site takes new registrations.
+    registration: bool = True
+    password_delivery: str = DEFAULT_PASSWORD_DELIVERY
+    chosen_passwords: bool = False
+    #: How to reach the operator, for when the site cannot help (shown on its pages).
+    contact: str | None = None
+    #: A plain-text file of the operator's own words for the privacy page.
+    privacy_file: Path | None = None
+    email: EmailConfig | None = None
+    email_from: str = DEFAULT_EMAIL_FROM
+    email_daily_cap: int = DEFAULT_EMAIL_DAILY_CAP
+
+
+@dataclass(frozen=True)
+class EmailConfig:
+    """An SMTP server to send through. Without one, mail is printed to the log (development)."""
+
+    host: str
+    port: int
+    user: str
+    password: str = field(repr=False)
+    security: str
 
 
 def _flag(env: Mapping[str, str], name: str, default: bool = False) -> bool:
@@ -85,6 +122,42 @@ def _count(env: Mapping[str, str], name: str, default: int) -> int:
     return value
 
 
+def _choice(env: Mapping[str, str], name: str, choices: Iterable[str], default: str) -> str:
+    raw = env.get(PREFIX + name, "").strip().lower() or default
+    if raw not in choices:
+        raise ConfigError(f"{PREFIX}{name} must be one of {', '.join(choices)}, not {raw!r}")
+    return raw
+
+
+def _email(env: Mapping[str, str]) -> EmailConfig | None:
+    """``OPENCS_WEB_EMAIL_HOST`` and the rest, or None (the console) if no host is set."""
+    host = env.get(PREFIX + "EMAIL_HOST", "").strip()
+    if not host:
+        return None
+    security = _choice(env, "EMAIL_SECURITY", EMAIL_SECURITIES, DEFAULT_EMAIL_SECURITY)
+    port = _count(env, "EMAIL_PORT", EMAIL_SECURITIES[security])
+    if port > 65535:
+        raise ConfigError(f"{PREFIX}EMAIL_PORT must be a port number, not {port}")
+    if not env.get(PREFIX + "EMAIL_FROM", "").strip():
+        raise ConfigError(f"{PREFIX}EMAIL_FROM must be set to send email through {host}")
+    return EmailConfig(
+        host=host,
+        port=port,
+        user=env.get(PREFIX + "EMAIL_USER", "").strip(),
+        password=env.get(PREFIX + "EMAIL_PASSWORD", "").strip(),
+        security=security,
+    )
+
+
+def _site_url(env: Mapping[str, str]) -> str | None:
+    raw = env.get(PREFIX + "SITE_URL", "").strip().rstrip("/")
+    if not raw:
+        return None
+    if not raw.startswith(("https://", "http://")) or " " in raw:
+        raise ConfigError(f"{PREFIX}SITE_URL must be an address like https://opencs.example.org")
+    return raw
+
+
 def load(env: Mapping[str, str] | None = None) -> WebConfig:
     """Read the settings; raise ConfigError if one is missing or wrong."""
     if env is None:
@@ -114,4 +187,17 @@ def load(env: Mapping[str, str] | None = None) -> WebConfig:
         max_streams_per_address=_count(
             env, "MAX_STREAMS_PER_ADDRESS", DEFAULT_MAX_STREAMS_PER_ADDRESS
         ),
+        site_url=_site_url(env),
+        registration=_flag(env, "REGISTRATION", default=True),
+        password_delivery=_choice(
+            env, "PASSWORD_DELIVERY", PASSWORD_DELIVERIES, DEFAULT_PASSWORD_DELIVERY
+        ),
+        chosen_passwords=_flag(env, "CHOSEN_PASSWORDS"),
+        contact=env.get(PREFIX + "CONTACT", "").strip() or None,
+        privacy_file=Path(privacy)
+        if (privacy := env.get(PREFIX + "PRIVACY_FILE", "").strip())
+        else None,
+        email=_email(env),
+        email_from=env.get(PREFIX + "EMAIL_FROM", "").strip() or DEFAULT_EMAIL_FROM,
+        email_daily_cap=_count(env, "EMAIL_DAILY_CAP", DEFAULT_EMAIL_DAILY_CAP),
     )

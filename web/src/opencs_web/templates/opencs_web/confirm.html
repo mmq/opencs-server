@@ -1,0 +1,12 @@
+{% extends "opencs_web/base.html" %}
+{% block title %}Make your account · OpenCS{% endblock %}
+{% block main %}
+<h1>Make your game account</h1>
+<p>Your address, <strong>{{ email }}</strong>, is confirmed. Check the name and callsign, then make
+the account.</p>
+<form method="post" novalidate>
+{% csrf_token %}
+{% include "opencs_web/_fields.html" %}
+<button type="submit">Make my account</button>
+</form>
+{% endblock %}

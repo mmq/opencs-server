@@ -1,0 +1,7 @@
+{% extends "opencs_web/base.html" %}
+{% block title %}Link not valid · OpenCS{% endblock %}
+{% block main %}
+<h1>This link does not work any more</h1>
+<p>It has been used, or it has expired: a registration link lasts a day, a log-in link half an hour.
+{% if registration_open %}<a href="{% url 'register' %}">Register</a> or {% endif %}<a href="{% url 'login' %}">log in</a> again to get a new one.</p>
+{% endblock %}

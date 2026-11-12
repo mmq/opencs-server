@@ -1,0 +1,11 @@
+{% extends "opencs_web/base.html" %}
+{% block title %}Log in · OpenCS{% endblock %}
+{% block main %}
+<h1>Log in</h1>
+<p>Give the email address you registered with, and we send you a link to log in.</p>
+<form method="post" action="{% url 'login' %}" novalidate>
+{% csrf_token %}
+{% include "opencs_web/_fields.html" %}
+<button type="submit">Send the link</button>
+</form>
+{% endblock %}

@@ -55,6 +55,10 @@ extend-exclude = ["docs"]  # prose with code samples, not code
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF", "N", "PL"]
 ignore = ["PLR2004"]  # magic-value comparisons: protocol code compares against spec constants
 
+[tool.ruff.lint.per-file-ignores]
+# Django writes the migrations; their class attributes are lists by its convention.
+"web/src/opencs_web/migrations/*" = ["RUF012"]
+
 [tool.ruff.lint.pylint]
 max-args = 8
 

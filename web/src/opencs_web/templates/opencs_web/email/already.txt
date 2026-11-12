@@ -1,0 +1,10 @@
+{% autoescape off %}You already have an OpenCS account
+Someone, probably you, asked to register a game account with this address. It already has one:
+{{ name }}. There is one account per address.
+
+To see it, change its callsign or get a new password, log in here:
+
+{{ login }}
+
+If it was not you, ignore this email.
+{% endautoescape %}

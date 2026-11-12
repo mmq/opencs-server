@@ -58,3 +58,16 @@ def test_the_web_never_imports_the_game_servers_store(path: Path) -> None:
             names = [node.module]
         for name in names:
             assert not name.startswith(("opencs.store", "opencs.lobby")), f"{path.name}: {name}"
+
+
+def test_the_models_and_their_migrations_agree() -> None:
+    env = {**os.environ, "DJANGO_SETTINGS_MODULE": "testsettings"}
+    result = subprocess.run(
+        [sys.executable, "-m", "opencs_web", "makemigrations", "--check", "--dry-run"],
+        env=env,
+        cwd=Path(__file__).parent,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr

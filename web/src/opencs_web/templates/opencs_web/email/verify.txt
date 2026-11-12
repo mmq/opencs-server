@@ -1,0 +1,9 @@
+{% autoescape off %}Confirm your OpenCS account
+Someone, probably you, asked to register the game account {{ name }} with this address.
+
+To make the account, open this link within {{ hours }} hours:
+
+{{ url }}
+
+If it was not you, ignore this email: nothing is made without the link.
+{% endautoescape %}

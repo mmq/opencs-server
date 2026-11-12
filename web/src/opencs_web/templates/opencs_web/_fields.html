@@ -1,0 +1,13 @@
+{% if form.non_field_errors %}<div class="errors" role="alert">{{ form.non_field_errors }}</div>
+{% endif %}{% for field in form.hidden_fields %}{% if field.errors %}<div class="errors" role="alert">{{ field.errors }}</div>
+{% endif %}{{ field }}
+{% endfor %}{% for field in form.visible_fields %}{% if field.name == "website" %}<div class="trap" aria-hidden="true">
+{{ field.label_tag }} {{ field }}
+</div>
+{% else %}<div class="field">
+{{ field.label_tag }}
+{{ field }}
+{% if field.help_text %}<p class="help">{{ field.help_text }}</p>{% endif %}
+{{ field.errors }}
+</div>
+{% endif %}{% endfor %}

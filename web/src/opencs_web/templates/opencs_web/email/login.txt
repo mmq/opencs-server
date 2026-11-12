@@ -1,0 +1,7 @@
+{% autoescape off %}Log in to OpenCS
+To log in to the web account for the game account {{ name }}, open this link within {{ minutes }} minutes:
+
+{{ url }}
+
+If it was not you, ignore this email.
+{% endautoescape %}

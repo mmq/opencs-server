@@ -1,0 +1,9 @@
+{% autoescape off %}Log in to OpenCS
+Someone, probably you, asked to log in with this address, but no account here uses it.
+{% if registration_open %}
+To register one:
+
+{{ register }}
+{% endif %}
+If it was not you, ignore this email.
+{% endautoescape %}

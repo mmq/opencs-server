@@ -41,3 +41,45 @@ h2 { margin-top: 1.5rem; }
   font-family: ui-monospace, monospace;
 }
 .guest, .note { color: var(--muted); }
+header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 1.5rem;
+  border-bottom: 1px solid var(--rule);
+}
+header .site { font-weight: bold; margin: 0.5rem 0; }
+header nav a { margin-right: 1rem; }
+a { color: inherit; }
+footer {
+  border-top: 1px solid var(--rule);
+  margin-top: 2rem;
+  padding-top: 0.5rem;
+  color: var(--muted);
+}
+form { margin: 1rem 0; }
+.field { margin-bottom: 0.75rem; }
+.field label { display: block; font-weight: bold; }
+.field input[type="text"], .field input[type="email"], .field input[type="password"] {
+  font: inherit;
+  width: 100%;
+  max-width: 20rem;
+}
+.field ul { list-style: none; padding: 0; margin: 0.25rem 0; }
+.help { margin: 0.25rem 0; color: var(--muted); font-size: 0.9rem; }
+.errors, .errorlist { color: #b00020; }
+@media (prefers-color-scheme: dark) {
+  .errors, .errorlist { color: #ff8a80; }
+}
+.notice { font-weight: bold; }
+.password { font-size: 1.4rem; letter-spacing: 0.1em; }
+button { font: inherit; padding: 0.3rem 0.8rem; }
+/* The challenge's field for scripts (opencs_web.forms.ChallengeForm): kept from people's eyes and
+   from screen readers, but not removed, so a form filler still finds it. */
+.trap {
+  position: absolute;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}

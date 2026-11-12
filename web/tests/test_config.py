@@ -105,3 +105,82 @@ def test_the_site_settings_are_read() -> None:
     assert (config.max_streams, config.max_streams_per_address) == (50, 2)
     with pytest.raises(ConfigError, match="MAX_STREAMS"):
         load({**KEY, "OPENCS_WEB_MAX_STREAMS": "0"})
+
+
+def test_the_account_settings_default_to_showing_a_made_up_password_and_the_console() -> None:
+    config = load(KEY)
+    assert config.registration is True
+    assert config.password_delivery == "show"
+    assert config.chosen_passwords is False
+    assert config.email is None  # the console: mail is printed to the log
+    assert config.email_daily_cap == 90
+    assert config.site_url is None and config.contact is None and config.privacy_file is None
+
+
+def test_resends_smtp_settings_are_read() -> None:
+    config = load(
+        {
+            **KEY,
+            "OPENCS_WEB_EMAIL_HOST": "smtp.resend.com",
+            "OPENCS_WEB_EMAIL_USER": "resend",
+            "OPENCS_WEB_EMAIL_PASSWORD": "re_secret",
+            "OPENCS_WEB_EMAIL_FROM": "OpenCS <noreply@opencs.example.org>",
+            "OPENCS_WEB_EMAIL_DAILY_CAP": "80",
+            "OPENCS_WEB_PASSWORD_DELIVERY": "Both",
+            "OPENCS_WEB_CHOSEN_PASSWORDS": "true",
+            "OPENCS_WEB_SITE_URL": "https://opencs.example.org/",
+        }
+    )
+    assert config.email is not None
+    assert (config.email.host, config.email.port, config.email.security) == (
+        "smtp.resend.com",
+        587,
+        "starttls",
+    )
+    assert (config.email.user, config.email.password) == ("resend", "re_secret")
+    assert "re_secret" not in repr(config)
+    assert config.email_from == "OpenCS <noreply@opencs.example.org>"
+    assert config.email_daily_cap == 80
+    assert config.password_delivery == "both"
+    assert config.chosen_passwords is True
+    assert config.site_url == "https://opencs.example.org"
+    ssl = load(
+        {
+            **KEY,
+            "OPENCS_WEB_EMAIL_HOST": "h",
+            "OPENCS_WEB_EMAIL_FROM": "a@b",
+            "OPENCS_WEB_EMAIL_SECURITY": "ssl",
+        }
+    )
+    assert ssl.email is not None and ssl.email.port == 465
+
+
+@pytest.mark.parametrize(
+    ("env", "name"),
+    [
+        ({"OPENCS_WEB_PASSWORD_DELIVERY": "post"}, "PASSWORD_DELIVERY"),
+        ({"OPENCS_WEB_EMAIL_HOST": "smtp.resend.com"}, "EMAIL_FROM"),
+        (
+            {
+                "OPENCS_WEB_EMAIL_HOST": "h",
+                "OPENCS_WEB_EMAIL_FROM": "a@b",
+                "OPENCS_WEB_EMAIL_SECURITY": "tls13",
+            },
+            "EMAIL_SECURITY",
+        ),
+        (
+            {
+                "OPENCS_WEB_EMAIL_HOST": "h",
+                "OPENCS_WEB_EMAIL_FROM": "a@b",
+                "OPENCS_WEB_EMAIL_PORT": "70000",
+            },
+            "EMAIL_PORT",
+        ),
+        ({"OPENCS_WEB_EMAIL_DAILY_CAP": "0"}, "EMAIL_DAILY_CAP"),
+        ({"OPENCS_WEB_SITE_URL": "opencs.example.org"}, "SITE_URL"),
+        ({"OPENCS_WEB_CHOSEN_PASSWORDS": "sometimes"}, "CHOSEN_PASSWORDS"),
+    ],
+)
+def test_account_settings_it_cannot_use_are_refused(env: dict[str, str], name: str) -> None:
+    with pytest.raises(ConfigError, match=name):
+        load({**KEY, **env})
