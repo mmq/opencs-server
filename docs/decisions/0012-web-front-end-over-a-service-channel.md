@@ -36,12 +36,18 @@ The channel is on the game's loop, so everything it does there is bounded:
 - a snapshot carries callsigns, teams and counts, never addresses, account details or chat, and the web
   caches it, so public traffic does not reach the loop.
 
+Every op but `snapshot` is the operator's (`status` adds each city's health as numbers: failures, slow
+calls, odd hit reports). The web keeps them behind its own admin log-in, apart from players' web
+accounts: a password and a second factor (TOTP), roles, a second page and a recent code for
+destructive commands, and an audit log of who did what.
+
 ## Consequences
 
 - The server's runtime dependencies stay as ADR 1 and ADR 13 have them. The web process may use any
   framework and is deployed, restarted and sandboxed on its own.
 - A bug or a flood in the web process can reach the game only through bounded requests. A compromised web
-  process can do what the operator can, but cannot read the password hashes.
+  process can do what the operator can, but cannot read the password hashes. A stolen admin password
+  alone does nothing without the second factor.
 - The Unix socket needs a platform that has one; on others (Windows) the channel cannot be turned on yet.
   The protocol is only lines on a stream, so a second listener can be added: loopback TCP, with a secret
   from a file both accounts can read carried in the hello, since a port has no file permissions.

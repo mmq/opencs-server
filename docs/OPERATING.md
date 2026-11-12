@@ -623,7 +623,8 @@ at most once a minute.
 `opencs-web` (the web package, `web/`) is the site: a status page (the account count, how long the
 server has been up, each city's name, capacity and pilots by team, callsign, guest or not, and the
 games held for `/RESUME`, kept live in the browser by server-sent events and readable without
-JavaScript), and registration and web accounts ("Registration and accounts" below). It runs as its own user, `opencs-web`, as Django under one uvicorn worker on
+JavaScript), registration and web accounts ("Registration and accounts" below), and admin pages
+("Administration" below). It runs as its own user, `opencs-web`, as Django under one uvicorn worker on
 `127.0.0.1:8000`, behind Caddy, which serves HTTPS. It reaches the game server only through the service
 channel (above), and asks it for at most one snapshot a second: while someone has the page open, one
 snapshot a second is shared by every open page; otherwise a page load asks only if the last snapshot is
@@ -674,6 +675,9 @@ Settings, in `/etc/opencs-web/environment` (the archiver's are in "The archiver"
 | `OPENCS_WEB_EMAIL_USER`, `OPENCS_WEB_EMAIL_PASSWORD` | the SMTP login (for Resend: `resend` and an API key) | none |
 | `OPENCS_WEB_EMAIL_FROM` | the sender, as `OpenCS <noreply@opencs.example.org>`, on a domain the provider has verified; required with a host | `OpenCS <opencs@localhost>` |
 | `OPENCS_WEB_EMAIL_DAILY_CAP` | emails the site sends in 24 hours before it stops sending links; keep it below the provider's limit | 90 |
+| `OPENCS_WEB_ADMIN` | `true` to have the admin pages ("Administration" below); off, every page under their path is a 404 | `false` |
+| `OPENCS_WEB_ADMIN_PATH` | where the admin pages are, as `admin` or `ops/7f3k` (letters, digits, `-_.~` and `/`); not a secret, but a less obvious one meets fewer scanners | `admin` |
+| `OPENCS_WEB_ADMIN_SESSION_MINUTES` | the longest an admin's log-in lasts (it also ends after 15 minutes without a page) | 60 |
 
 The unit, [`deploy/opencs-web.service`](../deploy/opencs-web.service), runs uvicorn with one worker
 (the snapshot cache and the stream counts live in its memory), listening on the loopback address only,
@@ -772,10 +776,88 @@ the password is shown on the page instead.
 
 The site's own database holds the web accounts (email address, account name, when the server made the
 account), the links it has sent (with the name and callsign asked for; deleted two days after they
-expire), sessions, and for two days a note of each email sent (the time, the source network and a keyed
+expire), sessions, the admin accounts and the audit log ("Administration"), and for two days a note of each email sent (the time, the source network and a keyed
 hash of the address), for the limits. It never holds a password. The privacy page (`/privacy`, linked
 from every page) says this in plain words; add your own, for example on recording, in
 `OPENCS_WEB_PRIVACY_FILE`.
+
+### Administration
+
+The admin pages give the operator's commands on the web, with a log of who did what. They are off
+unless `OPENCS_WEB_ADMIN=true`, and live under `OPENCS_WEB_ADMIN_PATH` (default `/admin/`). Admins are
+not players: an admin account is made only on the command line, and players' web accounts never reach
+these pages. Django's own admin site is not installed.
+
+```bash
+sudo sh -c 'echo "OPENCS_WEB_ADMIN=true" >> /etc/opencs-web/environment'
+sudo -u opencs-web env $(sudo cat /etc/opencs-web/environment) \
+    /opt/opencs/.venv/bin/opencs-web createadmin alice                  # asks for a password
+sudo -u opencs-web env $(sudo cat /etc/opencs-web/environment) \
+    /opt/opencs/.venv/bin/opencs-web createadmin bob --role moderator
+sudo systemctl restart opencs-web
+```
+
+`createadmin` asks for a password (12 characters or more, not a common one, not all digits, not like
+the name; `--password-stdin` reads it from standard input instead), hashes it with Argon2id, and then
+prints, once, the second factor: a TOTP secret for an authenticator app (any of them: 6 digits, 30
+seconds, SHA-1), as a key to type in and as an `otpauth://` URI, and ten recovery codes. No QR code is
+drawn, to keep the web free of another dependency; to scan one, make it on your own machine from the
+URI (`qrencode -t ansiutf8 'otpauth://...'`), never with a web service. Keep the recovery codes apart
+from the phone; each logs in once in place of the app's code.
+
+**Logging in** takes the name, the password and a code on one form, and every failure looks the same.
+Five wrong ones in a row lock the account for 15 minutes; tries from one network (an IPv4 address or an
+IPv6 /64) are limited to 10 and then one a minute, and django-otp slows a device down after each wrong
+code. A code works once. A log-in lasts `OPENCS_WEB_ADMIN_SESSION_MINUTES` (60) at most, and 15 minutes
+without a page. It shares the site's session cookie with a player's log-in, so logging out of either
+there ends both.
+
+**Roles.** An `admin` does everything; a `moderator` sees the status and the server's health, kicks and
+announces. Anything else a moderator tries is refused and logged.
+
+**The pages.** The status, kept live as on the public page, and below it what `status` adds, as
+loaded: each city's failures and rebuilds, slow calls, and odd hit reports (hits with no shot on
+record, hits from too far away: applied all the same, a sign of a modified client or a bad connection,
+not proof), and the held games. Then the commands, each over the service channel: announce, kick,
+send a team's guppy home, reset a game password, reset progress, delete a game account, shut down
+with a countdown or cancel it, and reload the cities. A destructive one (kick, the three account
+commands, shutdown, reload) first shows a page saying what it will do (for an account, whether it
+exists and is in the game now), and runs only from that page's button; if the admin's last code was
+over 5 minutes ago that page asks for a fresh one. A new password is shown once on the result page and
+kept nowhere; since it does not end a session already logged on, its page offers to kick the account
+as well. Deleting a game account here removes its web account too. While the game server does not
+answer, every command says so and nothing is done.
+
+**The audit log** (`/admin/audit`, admins only) lists the latest 200 entries: each log-in, failed
+log-in, log-out, command and refusal, with who, when, from which address, what, to whom, and the
+server's reply (never a password). Changes made with `createadmin` and `resetadmin` are in it too. The
+site only adds to it; it is in the web's database (`AuditEntry`), so a backup of that file keeps it.
+
+**Changing an admin** (each change ends the admin's log-ins):
+
+```bash
+opencs-web resetadmin alice --password      # a new password
+opencs-web resetadmin alice --totp          # a lost phone: a new secret, shown once
+opencs-web resetadmin alice --codes         # new recovery codes, shown once
+opencs-web resetadmin alice --role moderator
+opencs-web resetadmin alice --unlock        # forget the wrong log-ins that locked it
+opencs-web resetadmin alice --remove        # the audit log keeps the name
+```
+
+Django's `createsuperuser` and `changepassword` exist too, but a user made by `createsuperuser` has no
+role and no second factor and cannot log in here: use `createadmin`.
+
+For more, keep the pages from the internet altogether: reach them only through an SSH tunnel to
+`127.0.0.1:8000`, or have Caddy answer the admin path only for your own addresses, in the site's block
+of the Caddyfile:
+
+```
+@admin {
+    path /admin /admin/*
+    not remote_ip 203.0.113.7
+}
+respond @admin 404
+```
 
 ### Email
 
@@ -885,6 +967,8 @@ Log lines (logger `opencs_web`, in the journal):
 | `game account NAME registered from the web` / `password of NAME reset from the web` | as it says; never the password |
 | `game account NAME is gone from the server: its web account is removed` | the operator or the prune removed it |
 | `game account NAME deleted from the web; its callsign CALLSIGN stays in recordings` | nothing to do; `opencs-web forget_callsign CALLSIGN` if the player asks for it to be taken out |
+| `admin NAME logged in` / `admin NAME: ACTION TARGET: RESULT` | the admin pages; the audit log has the details |
+| `admin NAME locked for 15 minutes after 5 wrong log-ins` | a `WARNING`: someone is guessing, or an admin has forgotten; `resetadmin NAME --unlock` |
 
 ## Stopping, signals and kicks
 

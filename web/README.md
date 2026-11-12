@@ -30,7 +30,17 @@ deletes the web account, or the game account as well (`delete-account`). The gam
 decide every name, callsign and password, and its refusals are shown as they come; the site keeps
 only the email address, the account name and when the server made it. Emails are limited per network,
 per address and per day, and go through any SMTP server, or are printed to the log when none is set.
-OPERATING, "Registration and accounts" and "Email", has the details. Administration comes next.
+OPERATING, "Registration and accounts" and "Email", has the details.
+
+Administration (`staff.py`, `staffviews.py`, `staffforms.py`, `staffurls.py`), off unless
+`OPENCS_WEB_ADMIN=true`: admins are Django users with an `AdminAccount` (a role, `admin` or
+`moderator`), made only by `opencs-web createadmin` and changed by `opencs-web resetadmin`. A log-in
+takes the password (Django's Argon2 hasher) and a code from an authenticator app (django-otp's TOTP
+device) or a recovery code (its static device), with a lock after five wrong ones and a short session.
+The pages show the status and each city's health counters from the channel's `status`, and run the
+operator's commands over the channel; destructive ones are confirmed on a second page, with a fresh
+code if the last was over five minutes ago, and everything goes in an append-only audit log
+(`AuditEntry`). OPERATING, "Administration", has the details.
 
 ## Settings
 
@@ -45,7 +55,7 @@ Read from the environment (in production, a systemd `EnvironmentFile`):
 | `OPENCS_WEB_SERVICE_SOCKET` | the game server's service socket | none: the status page says offline |
 | `OPENCS_WEB_MAX_STREAMS` | live status streams at once | 200 |
 | `OPENCS_WEB_MAX_STREAMS_PER_ADDRESS` | live status streams from one address (an IPv6 /64) | 4 |
-| `OPENCS_WEB_DATABASE` | the web's SQLite file (web accounts, emailed links, sessions) | `opencs-web.db` in `$STATE_DIRECTORY`, else the working directory |
+| `OPENCS_WEB_DATABASE` | the web's SQLite file (web accounts, emailed links, sessions, admins, the audit log) | `opencs-web.db` in `$STATE_DIRECTORY`, else the working directory |
 | `OPENCS_WEB_SITE_URL` | the site's address, for links in emails | the address each request came to |
 | `OPENCS_WEB_REGISTRATION` | `false` to take no new registrations | `true` |
 | `OPENCS_WEB_PASSWORD_DELIVERY` | a made-up password is `show`n once, `email`ed, or `both` | `show` |
@@ -58,6 +68,9 @@ Read from the environment (in production, a systemd `EnvironmentFile`):
 | `OPENCS_WEB_EMAIL_USER`, `OPENCS_WEB_EMAIL_PASSWORD` | the SMTP login (Resend: `resend` and an API key) | none |
 | `OPENCS_WEB_EMAIL_FROM` | the sender, on a domain the provider has verified | `OpenCS <opencs@localhost>`; required with a host |
 | `OPENCS_WEB_EMAIL_DAILY_CAP` | emails in 24 hours, below the provider's limit (Resend's free plan: 100) | 90 |
+| `OPENCS_WEB_ADMIN` | `true` for the admin pages; off, they are 404s | `false` |
+| `OPENCS_WEB_ADMIN_PATH` | where the admin pages are | `admin` |
+| `OPENCS_WEB_ADMIN_SESSION_MINUTES` | the longest an admin's log-in lasts (15 minutes idle ends it sooner) | 60 |
 | `OPENCS_WEB_RECORDINGS` | the game recorder's directory, for `archive` | none |
 | `OPENCS_WEB_ARCHIVE` | the recording archive's SQLite file | `opencs-archive.db`, placed as the database |
 | `OPENCS_WEB_ARCHIVE_MAX_DAYS` | the archive keeps games this many days | 365 |

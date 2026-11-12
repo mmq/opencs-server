@@ -40,6 +40,16 @@ upgrading.
   privacy page, and OPERATING steps for SPF, DKIM and DMARC. Set `registration = "closed"` in
   `server.toml` with it. The web unit now runs `opencs-web migrate` before it starts and may connect
   out to the mail server.
+- Admin pages in the web front end (`OPENCS_WEB_ADMIN=true`, under `OPENCS_WEB_ADMIN_PATH`): the
+  status with each city's health (failures, slow calls, odd hit reports), and announce, kick, guppy
+  home, reset a password (with a kick beside it), reset progress, delete an account, shutdown with a
+  countdown or cancel it, and reload, over the service channel. Admins are made only on the command line
+  (`opencs-web createadmin`, `resetadmin`), log in with a password and an authenticator app's code or a
+  recovery code, are locked after five wrong tries, and are logged out after 15 idle minutes or
+  `OPENCS_WEB_ADMIN_SESSION_MINUTES`. Destructive commands are confirmed on a second page, with a fresh
+  code after five minutes; a `moderator` role only kicks and announces. Everything goes in an audit log
+  the site only adds to. The web now depends on `django-otp` too. The service channel's `status` adds
+  each city's health as numbers.
 - `no_account_text` in `server.toml`: what a login with an unknown name is told while registration
   is closed, so it can give the web site's address (the default is unchanged). The service channel's
   `account` and `register` say when an account was made, and `account` when it last logged in.
