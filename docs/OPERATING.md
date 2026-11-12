@@ -603,7 +603,8 @@ printf '%s\n' '{"hello":"opencs-service","version":1}' '{"id":1,"op":"snapshot"}
 | `account` | `name` | whether that account exists and is online, its callsign, when it was made (`created`) and last logged in to (`last_login`, `null` before its first login), as Unix times; all `null` if there is no account. The web keeps `created` to tell its account from a later one of the same name |
 | `register` | `name`, `password`, `callsign` (both optional) | a new account, `{"name", "password", "callsign", "created"}`: with `password` the one given, without it a made-up one; with `callsign` the account plays under it (the `/CALLSIGN` rules, and free), without it (`null`) the player is asked at the first login. The password is in the reply only, never logged. The rules are those of every new account (a chosen password too: 6 to 12 printable characters, no spaces, and no lower case, since the client's entry types capitals); a refusal (`"refused"`) says why. Whether players may choose is the web's setting; the game sends passwords in the clear, so a made-up one is the safer default |
 | `reset-password` | `name`, `password` | a new password for an account, chosen or made up, as `register`; it clears the account's wrong-password limits, as the admin command does |
-| `status`, `reload` | | the admin command's reply lines, `{"lines": [...]}` |
+| `status` | | the admin command's reply lines, and each city's health as numbers for the web's admin pages: `{"lines": [...], "cities": [{"letter", "name", "players", "failures", "rebuilds", "slow_calls", "worst_call_ms", "hits_without_a_shot", "distant_hits"}]}`. No addresses |
+| `reload` | | the admin command's reply lines, `{"lines": [...]}` |
 | `announce` | `text` | as the admin command |
 | `kick` | `callsign`, `reason` (optional) | as the admin command; the callsign in any case |
 | `guppy-home` | `team` | as `guppy <team> home` |

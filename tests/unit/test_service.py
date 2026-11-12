@@ -536,6 +536,41 @@ def test_the_operators_commands_work_over_the_channel(sock_dir: Path) -> None:
     run(scenario())
 
 
+def test_status_gives_each_citys_health_as_numbers_for_the_admin_pages(sock_dir: Path) -> None:
+    world = make_world()
+    play(world, "A", 0, "ALICE,tangerine2")
+    city = world.services.cities["A"]
+    city.hits.hits_without_a_shot = 3
+    city.hits.distant_hits = 1
+
+    async def scenario() -> None:
+        async with running(sock_dir, world) as (path, _, _):
+            c = await hello(path)
+            status = await c.result("status")
+            assert any(
+                "[odd hit reports: 3 without a shot, 1 from far away]" in line
+                for line in status["lines"]
+            )
+            by_letter = {entry["letter"]: entry for entry in status["cities"]}
+            assert by_letter["A"] == {
+                "letter": "A",
+                "name": city.config.name,
+                "players": 1,
+                "failures": 0,
+                "rebuilds": 0,
+                "slow_calls": 0,
+                "worst_call_ms": 0,
+                "hits_without_a_shot": 3,
+                "distant_hits": 1,
+            }
+            assert len(by_letter) == len(world.services.cities)
+            # The public snapshot has none of it.
+            snapshot = json.dumps(await c.result("snapshot"))
+            assert "hits" not in snapshot and "failures" not in snapshot
+
+    run(scenario())
+
+
 def test_a_request_that_holds_up_the_loop_is_logged_once_a_minute(
     sock_dir: Path, caplog: pytest.LogCaptureFixture
 ) -> None:

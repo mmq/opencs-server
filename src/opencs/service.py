@@ -90,7 +90,7 @@ class ServiceServer:
                 lambda r: self._password("register", r),
             ),
             "reset-password": (("name", "password"), lambda r: self._password("reset-password", r)),
-            "status": ((), lambda _: self._admin("status")),
+            "status": ((), self._status),
             "announce": (("text",), lambda r: self._admin(f"announce {_text(r, 'text')}")),
             "kick": (("callsign", "reason"), self._kick),
             "guppy-home": (("team",), lambda r: self._admin(f"guppy {_team(r)} home")),
@@ -274,6 +274,29 @@ class ServiceServer:
             "cities": cities,
             "held": len(services.held.live()),
         }
+
+    async def _status(self, _: dict[str, Any]) -> dict[str, Any]:
+        """The operator's ``status`` lines, and for the web's admin pages each city's health as
+        numbers: its failures and rebuilds, slow calls, and odd hit reports (hits with no shot
+        on record, hits from too far away; applied all the same, a detection signal). Admin-only,
+        like every op here but ``snapshot``: still no addresses."""
+        services = self._services
+        health = services.city_health
+        cities = [
+            {
+                "letter": letter,
+                "name": city.config.name,
+                "players": services.lobby.count(letter),
+                "failures": health.failures(letter),
+                "rebuilds": health.rebuilds(letter),
+                "slow_calls": health.slow_calls(letter),
+                "worst_call_ms": round(health.worst_call(letter) * 1000),
+                "hits_without_a_shot": city.hits_without_a_shot,
+                "distant_hits": city.distant_hits,
+            }
+            for letter, city in sorted(services.cities.items())
+        ]
+        return {"lines": await self._control.run("status"), "cities": cities}
 
     def _account(self, request: dict[str, Any]) -> dict[str, Any]:
         name = _name(request)
