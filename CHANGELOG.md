@@ -28,6 +28,18 @@ upgrading.
   server-sent events and readable without JavaScript, "offline" while the game server is down. It
   asks the game server for one snapshot a second at most, and nothing while no one is looking
   (OPERATING, "The web front end").
+- Registration and web accounts in the web front end: an account name, an optional callsign and an
+  email address; an emailed link (signed, expiring, used once) makes the game account through the
+  service channel, and the made-up password is shown once, emailed or both
+  (`OPENCS_WEB_PASSWORD_DELIVERY`), or players choose their own (`OPENCS_WEB_CHOSEN_PASSWORDS`, off by
+  default). One account per address, and the site never says whether an address is registered. Log-in
+  by emailed link; an account page to change the callsign, get a new password, and forget the address
+  or delete the game account too. Accounts the server deletes or prunes are dropped from the site.
+  Email goes through any SMTP server (`OPENCS_WEB_EMAIL_*`, Resend as the example; printed to the log
+  when none is set), limited per network, per address and to a daily cap below the provider's. A
+  privacy page, and OPERATING steps for SPF, DKIM and DMARC. Set `registration = "closed"` in
+  `server.toml` with it. The web unit now runs `opencs-web migrate` before it starts and may connect
+  out to the mail server.
 - `no_account_text` in `server.toml`: what a login with an unknown name is told while registration
   is closed, so it can give the web site's address (the default is unchanged). The service channel's
   `account` and `register` say when an account was made, and `account` when it last logged in.
@@ -38,6 +50,8 @@ upgrading.
   so neither slows the games as the account table grows.
 
 ### Players
+- On a server with the web front end, you register on its site with an email address, and get a new
+  password or change your callsign there.
 - Callsigns are separate from account names, as on GEnie. A new account is asked for one the first
   time it enters the Chamber (Return keeps its name when that is free), and `/CALLSIGN` changes it once
   a week: 3 to 12 letters in either case, digits and punctuation, no spaces and nothing that reads as a

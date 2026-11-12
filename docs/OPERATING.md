@@ -618,10 +618,10 @@ at most once a minute.
 
 ## The web front end
 
-`opencs-web` (the web package, `web/`) is the site. So far it is a status page: the account count, how
-long the server has been up, each city's name, capacity and pilots by team (callsign, guest or not) and
-the games held for `/RESUME`, kept live in the browser by server-sent events and readable without
-JavaScript. It runs as its own user, `opencs-web`, as Django under one uvicorn worker on
+`opencs-web` (the web package, `web/`) is the site: a status page (the account count, how long the
+server has been up, each city's name, capacity and pilots by team, callsign, guest or not, and the
+games held for `/RESUME`, kept live in the browser by server-sent events and readable without
+JavaScript), and registration and web accounts ("Registration and accounts" below). It runs as its own user, `opencs-web`, as Django under one uvicorn worker on
 `127.0.0.1:8000`, behind Caddy, which serves HTTPS. It reaches the game server only through the service
 channel (above), and asks it for at most one snapshot a second: while someone has the page open, one
 snapshot a second is shared by every open page; otherwise a page load asks only if the last snapshot is
@@ -659,15 +659,28 @@ Settings, in `/etc/opencs-web/environment` (the archiver's are in "The archiver"
 | `OPENCS_WEB_MAX_STREAMS` | live status streams open at once | 200 |
 | `OPENCS_WEB_MAX_STREAMS_PER_ADDRESS` | live status streams from one address (an IPv6 /64) | 4 |
 | `OPENCS_WEB_DEBUG` | `true` for development only | `false` |
-| `OPENCS_WEB_DATABASE` | the web's own SQLite file (not used yet) | `opencs-web.db` in the state directory |
+| `OPENCS_WEB_DATABASE` | the web's own SQLite file: web accounts, the links it has emailed, sessions | `opencs-web.db` in the state directory |
+| `OPENCS_WEB_SITE_URL` | the site's address as players reach it, for the links in emails, as `https://opencs.example.org` | none: the address each request came to |
+| `OPENCS_WEB_REGISTRATION` | `false` to take no new registrations (existing web accounts still log in) | `true` |
+| `OPENCS_WEB_PASSWORD_DELIVERY` | how a password the server makes up reaches the player: `show` (on the page, once), `email`, or `both` | `show` |
+| `OPENCS_WEB_CHOSEN_PASSWORDS` | `true` to let players choose their own game password (never emailed) | `false` |
+| `OPENCS_WEB_CONTACT` | how to reach the operator, shown in the footer and when the site cannot help (an address, a URL) | none |
+| `OPENCS_WEB_PRIVACY_FILE` | a plain-text file of your own words for the privacy page, paragraphs separated by a blank line | none |
+| `OPENCS_WEB_EMAIL_HOST` | the SMTP server, as `smtp.resend.com`; unset, every email is printed to the log instead (development) | none |
+| `OPENCS_WEB_EMAIL_SECURITY` | `starttls`, `ssl` (TLS from the start), or `none` (a relay on the same machine only) | `starttls` |
+| `OPENCS_WEB_EMAIL_PORT` | the SMTP port | 587 for `starttls`, 465 for `ssl`, 25 for `none` |
+| `OPENCS_WEB_EMAIL_USER`, `OPENCS_WEB_EMAIL_PASSWORD` | the SMTP login (for Resend: `resend` and an API key) | none |
+| `OPENCS_WEB_EMAIL_FROM` | the sender, as `OpenCS <noreply@opencs.example.org>`, on a domain the provider has verified; required with a host | `OpenCS <opencs@localhost>` |
+| `OPENCS_WEB_EMAIL_DAILY_CAP` | emails the site sends in 24 hours before it stops sending links; keep it below the provider's limit | 90 |
 
 The unit, [`deploy/opencs-web.service`](../deploy/opencs-web.service), runs uvicorn with one worker
 (the snapshot cache and the stream counts live in its memory), listening on the loopback address only,
 and trusting the forwarded headers from `127.0.0.1` alone. It runs in the server's group to reach the
 socket, and is sandboxed like the server's: `ProtectSystem=strict` with only `/var/lib/opencs-web`
-writable, `IPAddressAllow=localhost` and `IPAddressDeny=any`, and the game first for the machine's
-resources, with `CPUWeight=50` (the game's is the default, 100) and `MemoryMax=256M` (the game's is 512M).
-`--limit-concurrency 400` answers 503 past that many connections at once.
+writable (outgoing connections are allowed, for the mail provider's SMTP server; the unit says how to
+pin them to its addresses), and the game first for the machine's resources, with `CPUWeight=50` (the game's is the default, 100) and `MemoryMax=256M` (the game's is 512M).
+`--limit-concurrency 400` answers 503 past that many connections at once. Before each start it runs
+`opencs-web migrate`, which makes the web's database or brings it up to date after an upgrade.
 
 **Caddy.** [`deploy/Caddyfile`](../deploy/Caddyfile) serves the site's name over HTTPS (Caddy gets the
 certificate itself), compresses pages but not the event stream, refuses request bodies over 64 KB, and
@@ -694,6 +707,128 @@ of requests costs the web process CPU, below the game's, and never the game. To 
 address too, build Caddy with the `rate_limit` plugin (github.com/mholt/caddy-ratelimit) and uncomment
 its block in the Caddyfile; or use the firewall, as for the game port (`sudo ufw limit 443/tcp`).
 
+### Registration and accounts
+
+With the web front end, players register on the site, and the game's own first-login registration
+should be off: set `registration = "closed"` in `server.toml`, and `no_account_text` to send a login
+with an unknown name to the site, as `"NO SUCH ACCOUNT: REGISTER AT OPENCS.EXAMPLE.ORG"`. Open
+registration in the game would let anyone claim names with no address to reach them by.
+
+**Registering.** A player gives an account name, a callsign (optional: without one they are asked at
+their first logon) and an email address. The site emails a link (good for 24 hours, once); the link
+opens a page whose button makes the game account over the service channel (`register`), so a mail
+scanner that fetches the link makes nothing. The password the server makes up is then shown once,
+emailed, or both (`OPENCS_WEB_PASSWORD_DELIVERY`); with `OPENCS_WEB_CHOSEN_PASSWORDS=true` the player
+may type their own instead, held to the server's rules for a new password and never emailed. Every rule
+for names, callsigns and passwords is the server's (ADR 10): the page shows the server's own refusal,
+and the name or callsign can be changed on the link's page and tried again. The site checks only their
+shape first, and asks the server whether the name is taken before it sends the email.
+
+One game account per email address. Asked to register an address that already has one, the site
+emails that address a reminder instead, and the page looks the same either way: it never says whether
+an address is registered. Logging in to the site is by an emailed link as well (good for 30 minutes,
+once), and the same holds: an address with no account is sent a note saying so.
+
+**The account page** shows the game account's name, callsign and whether it is in the game, and lets the
+player change the callsign (`set-callsign`, under the game's rules, so once a week and not while in the
+game), get a new game password (`reset-password`, delivered as at registration; it does **not** end a
+session already logged on, so kick it if the old password may be known), and delete:
+
+- *Forget my email address:* the web account goes; the game account stays as it was, but the site can
+  no longer give it a new password (the operator still can).
+- *Delete my game account too:* the server's `delete-account` (refused while the account is in the game
+  or has a game held), then the web account. The log names the callsign: take it out of the recording
+  archive with `opencs-web forget_callsign CALLSIGN` ("The archiver"). The site does not do that itself,
+  since it rewrites archive files and may take a while.
+
+**Accounts the server removes.** When the operator deletes an account, or the daily prune removes one
+never played (`unplayed_account_days`), the site finds out the next time that web account logs in or
+opens a page, removes the web account and says so. It keeps the time the server made the account and
+compares it, so a later account of the same name is never taken for the old one. Registering a name the
+server has freed replaces a stale web account for it. The account page warns an account never played
+that it will be pruned.
+
+**The challenge, and limits on email.** What a flood of sign-ups costs is email, and a free provider's
+daily allowance is small (Resend's free plan: 100 a day), so the site limits the emails it sends, not
+the pages: 5 an hour and 20 a day from one network (an IPv4 address or an IPv6 /64), 3 an hour and 6 a
+day to one address, and `OPENCS_WEB_EMAIL_DAILY_CAP` (90) in 24 hours in all. Past a limit the page says
+which, plainly, and sends nothing; a password emailed after a registration or a reset is always sent
+(the few left below the provider's limit are for those). The forms also carry a challenge that needs
+no third party: a field people do not see, which form-filling scripts fill in (answered as if it worked,
+with nothing sent), and a signed time, so a form sent back within 3 seconds of being shown, or after
+two hours, is shown again. No CAPTCHA service sees the players, and it works without JavaScript; a
+script written for this site gets past it, and then only as far as the limits. The questions the pages
+put to the game server for a visitor (is the name taken, is this web account's game account still
+there) are limited as well, in the web process's memory: 10 in a burst and then one every 6 seconds per
+network, 20 and then 2 a second in all, well under the channel's own limits, so the status page keeps
+its share.
+
+**When email fails** (the provider down, refusing, the cap reached), the page says so and that nothing
+was made, and gives `OPENCS_WEB_CONTACT` if set: the operator can still make accounts with
+`create-account` and reset passwords. A registration whose link has been followed is never lost: if
+the game server does not answer, the link keeps working until it expires; if the password email fails,
+the password is shown on the page instead.
+
+The site's own database holds the web accounts (email address, account name, when the server made the
+account), the links it has sent (with the name and callsign asked for; deleted two days after they
+expire), sessions, and for two days a note of each email sent (the time, the source network and a keyed
+hash of the address), for the limits. It never holds a password. The privacy page (`/privacy`, linked
+from every page) says this in plain words; add your own, for example on recording, in
+`OPENCS_WEB_PRIVACY_FILE`.
+
+### Email
+
+The site sends email through any SMTP server, with Django's SMTP backend; it has no provider-specific
+code, so changing provider is a change of settings. Without `OPENCS_WEB_EMAIL_HOST` every email is
+printed to the log instead (`journalctl -u opencs-web`), which is how to try the site without a
+provider: the links are in the log.
+
+**With Resend** (resend.com; the free plan sends 100 a day and 3000 a month): add your domain in
+Resend's dashboard and publish the DNS records it gives (below), create an API key with "sending
+access", then:
+
+```bash
+sudo sh -c 'umask 077; cat >> /etc/opencs-web/environment' <<'END'
+OPENCS_WEB_SITE_URL=https://opencs.example.org
+OPENCS_WEB_EMAIL_HOST=smtp.resend.com
+OPENCS_WEB_EMAIL_SECURITY=ssl
+OPENCS_WEB_EMAIL_USER=resend
+OPENCS_WEB_EMAIL_PASSWORD=re_your_api_key
+OPENCS_WEB_EMAIL_FROM=OpenCS <noreply@opencs.example.org>
+OPENCS_WEB_CONTACT=opencs@example.org
+END
+sudo systemctl restart opencs-web
+```
+
+The sender's domain must be one the provider has verified. To send a test (it uses the same settings):
+
+```bash
+sudo env $(sudo cat /etc/opencs-web/environment) /opt/opencs/.venv/bin/opencs-web sendtestemail you@example.org
+```
+
+`could not send an email (SUBJECT): REASON` in the log is a send that failed; the player was told.
+
+**Deliverability: SPF, DKIM and DMARC.** Mail from a domain without them goes to spam or is refused.
+All three are DNS records on the domain in `OPENCS_WEB_EMAIL_FROM`; with Resend, its dashboard shows the
+exact names and values to publish (copy them from there; the shapes below are for orientation, and
+`example.org` stands for your domain):
+
+1. **SPF** says which servers may send for the domain. Resend sends from a subdomain it uses as the
+   return path, by default `send.example.org`: a `TXT` record there, `v=spf1 include:amazonses.com ~all`,
+   and an `MX` record there for bounces, as the dashboard gives it. Your main domain's own SPF record,
+   if it has one, is not changed.
+2. **DKIM** signs each message. A `TXT` record at `resend._domainkey.example.org` holding the public key
+   the dashboard shows (`p=MIGf...`).
+3. **DMARC** tells receivers what to do with mail that fails both, and where to report. Start by only
+   watching, with a `TXT` record at `_dmarc.example.org`:
+   `v=DMARC1; p=none; rua=mailto:dmarc-reports@example.org`. Once the reports show your mail passing
+   (a week or two), tighten it to `p=quarantine`, and later `p=reject`. If the domain already has a
+   DMARC record, keep it and check that it does not reject the new mail.
+
+Then press "Verify" in the dashboard (DNS may take an hour), send yourself a test and look at the
+message's headers: `spf=pass`, `dkim=pass` and `dmarc=pass`. Mail-tester services score a message for
+free. Another provider's steps are the same three records with its own values.
+
 ### Without Caddy
 
 Caddy is only the HTTPS front door: it gets and renews the certificate, listens on ports 80 and 443 so
@@ -708,13 +843,17 @@ export OPENCS_WEB_SECRET_KEY=anything-long-for-local-use \
        OPENCS_WEB_HTTPS=false \
        OPENCS_WEB_ALLOWED_HOSTS=127.0.0.1,localhost \
        OPENCS_WEB_SERVICE_SOCKET=/path/to/service.sock      # the server's [service] socket
+uv run opencs-web migrate                                   # the web's database, opencs-web.db, here
 uv run uvicorn opencs_web.asgi:application                  # then open http://127.0.0.1:8000/
 ```
+
+With no `OPENCS_WEB_EMAIL_HOST` the emails the site sends (registration and log-in links) are printed
+where uvicorn logs: open the link from there.
 
 `OPENCS_WEB_HTTPS=false` stops the redirect to HTTPS, HSTS and secure-only cookies; leave it `true`
 anywhere the site is reached over the internet. To reach it from other machines on a home network, add
 `--host 0.0.0.0` and the machine's address or name to `OPENCS_WEB_ALLOWED_HOSTS` (nothing is encrypted:
-fine on your own network, not on the internet, and never once the site has logins).
+fine on your own network, never on the internet, where log-in links and cookies would cross in clear).
 
 **Behind a proxy the host already runs** (nginx, Apache, another Caddy): pass the site's name to
 `http://127.0.0.1:8000` with the `Host` and `X-Forwarded-Proto` headers set, and do not buffer
@@ -727,8 +866,8 @@ agent runs on the machine, so the forwarded headers still come from `127.0.0.1`.
 
 **uvicorn serving HTTPS itself.** Possible (`--ssl-keyfile`, `--ssl-certfile`, `--port 443`), but it
 saves nothing: the certificate still needs certbot or similar to get and renew it, uvicorn must be
-restarted to load a renewed one, the unit needs `AmbientCapabilities=CAP_NET_BIND_SERVICE` and its
-`IPAddressDeny=any` removed, and nothing buffers slow clients. Use it only for a small private server.
+restarted to load a renewed one, the unit needs `AmbientCapabilities=CAP_NET_BIND_SERVICE` and
+`--host` other than the loopback address, and nothing buffers slow clients. Use it only for a small private server.
 
 The game server needs none of this: the site, the recorder and the archiver are each optional.
 
@@ -740,6 +879,11 @@ Log lines (logger `opencs_web`, in the journal):
 | `service channel connected again (game server VERSION)` | back after that |
 | `status updates started` / `status updates stopped: no viewers` | the first live page opened, the last one closed |
 | `the game server's snapshot was not understood: ...` | a server newer than the web: upgrade the web |
+| `could not send an email (SUBJECT): REASON` | a `WARNING`: the mail provider is down or refused; the player was told |
+| `register email refused: cap limit` (or `source`, `recipient`) | the daily cap or a rate limit stopped an email |
+| `game account NAME registered from the web` / `password of NAME reset from the web` | as it says; never the password |
+| `game account NAME is gone from the server: its web account is removed` | the operator or the prune removed it |
+| `game account NAME deleted from the web; its callsign CALLSIGN may be in recordings` | run `opencs-web forget_callsign CALLSIGN` if you keep recordings |
 
 ## Stopping, signals and kicks
 

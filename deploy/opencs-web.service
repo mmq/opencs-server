@@ -20,6 +20,8 @@ Environment=OPENCS_WEB_SERVICE_SOCKET=/run/opencs/service.sock
 # host, connects; uvicorn trusts its X-Forwarded-For and X-Forwarded-Proto from 127.0.0.1 alone.
 # --limit-concurrency answers 503 past that many connections at once (live streams included);
 # --lifespan off: Django has no startup or shutdown hooks to run.
+# The web's own database (web accounts, sessions), made or brought up to date before each start.
+ExecStartPre=/opt/opencs/.venv/bin/opencs-web migrate --no-input
 ExecStart=/opt/opencs/.venv/bin/uvicorn opencs_web.asgi:application \
     --host 127.0.0.1 --port 8000 --workers 1 \
     --proxy-headers --forwarded-allow-ips 127.0.0.1 \
@@ -39,9 +41,11 @@ IOWeight=50
 MemoryMax=256M
 TasksMax=32
 LimitNOFILE=1024
-# Sandboxing: the web needs its state directory, the socket and the loopback address.
-# `systemd-analyze security opencs-web` scores what is left. (Sending email, later, will need
-# IPAddressAllow for the mail provider.)
+# Sandboxing: the web needs its state directory, the socket, the loopback address and the mail
+# provider's SMTP server (OPENCS_WEB_EMAIL_HOST), whose addresses are not fixed, so outgoing
+# connections are not limited by address. To pin them, add IPAddressDeny=any and
+# IPAddressAllow=localhost plus the provider's addresses (they may change: check its documentation).
+# `systemd-analyze security opencs-web` scores what is left.
 UMask=0077
 NoNewPrivileges=true
 PrivateTmp=true
@@ -54,8 +58,6 @@ ProtectControlGroups=true
 ProtectClock=true
 ProtectHostname=true
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
-IPAddressAllow=localhost
-IPAddressDeny=any
 RestrictNamespaces=true
 RestrictRealtime=true
 RestrictSUIDSGID=true

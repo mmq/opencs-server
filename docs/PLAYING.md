@@ -96,7 +96,8 @@ password must be 6 to 12 characters (the most the game's password entry takes) o
 punctuation. A name other than a guest name with no password, a wrong password, a name that is already
 online, or too many attempts in a short time is refused with a line saying so. After five wrong
 passwords for one account, from anywhere, that account waits a few minutes before it can be tried again. A server may also turn off
-registration, in which case the operator gives you an account, and it removes accounts that were made
+registration, in which case you register on its web site, if it has one (the refusal at logon says
+where), or the operator gives you an account, and it removes accounts that were made
 and never played after 30 days. **Choose a throwaway password you use nowhere else:** the server stores
 only a salted hash, but the connection is not encrypted, so the password crosses the internet as plain
 text.
