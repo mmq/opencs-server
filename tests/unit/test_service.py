@@ -263,12 +263,17 @@ def test_an_account_registered_over_the_channel_logs_in_and_its_password_is_neve
             assert made["password"] not in caplog.text
             h = enter_lobby(world, f"NEWPILOT,{made['password']}")
             assert h.session.pilot is not None
-            assert await c.result("account", name="newpilot") == {
+            found = await c.result("account", name="newpilot")
+            assert found == {
                 "name": "NEWPILOT",
                 "exists": True,
                 "online": True,
                 "callsign": "NEWPILOT",
+                "created": made["created"],
+                "last_login": found["last_login"],
             }
+            assert isinstance(made["created"], float)
+            assert found["last_login"] >= made["created"]
             h.session.closed()
             again = await c.result("reset-password", name="NEWPILOT")
             assert again["password"] != made["password"]
@@ -286,7 +291,12 @@ def test_the_web_may_choose_the_password_within_the_servers_rules(
             c = await hello(path)
             with caplog.at_level(logging.DEBUG):
                 made = await c.result("register", name="chooser", password="PICK,ME!1")
-                assert made == {"name": "CHOOSER", "password": "PICK,ME!1", "callsign": None}
+                assert made == {
+                    "name": "CHOOSER",
+                    "password": "PICK,ME!1",
+                    "callsign": None,
+                    "created": made["created"],
+                }
                 again = await c.result("reset-password", name="CHOOSER", password="SECOND2")
                 assert again["password"] == "SECOND2"
             assert "PICK,ME!1" not in caplog.text and "SECOND2" not in caplog.text
@@ -511,6 +521,8 @@ def test_the_operators_commands_work_over_the_channel(sock_dir: Path) -> None:
                 "exists": False,
                 "online": False,
                 "callsign": None,
+                "created": None,
+                "last_login": None,
             }
             assert (await c.result("reload"))["lines"] == [
                 "no config file is known: nothing to reload"

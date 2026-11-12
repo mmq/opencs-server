@@ -22,7 +22,15 @@ from argon2.low_level import Type, hash_secret_raw
 
 from opencs import policy
 from opencs.lobby import commands
-from opencs.store.base import ARGON2ID, PBKDF2_SHA256, Account, AccountStore, Kdf, StaleCursor
+from opencs.store.base import (
+    ARGON2ID,
+    PBKDF2_SHA256,
+    Account,
+    AccountStore,
+    AccountTimes,
+    Kdf,
+    StaleCursor,
+)
 
 log = logging.getLogger("opencs.lobby")
 
@@ -212,6 +220,7 @@ class Identity:
         guest_names: tuple[str, ...] = policy.DEFAULT_GUEST_NAMES,
         kdf: Kdf = CURRENT_KDF,
         registration: str = policy.DEFAULT_REGISTRATION,
+        no_account_text: str = policy.DEFAULT_NO_ACCOUNT_TEXT,
         min_password_length: int = policy.MIN_PASSWORD_LENGTH,
         max_accounts: int = policy.MAX_ACCOUNTS,
         wall: Callable[[], float] = lambda: 0.0,
@@ -220,6 +229,7 @@ class Identity:
         self._guest_names = frozenset(name.upper() for name in guest_names)
         self._kdf = kdf
         self._registration_open = registration == "open"
+        self._no_account_text = no_account_text
         self._min_password_length = min_password_length
         self._max_accounts = max_accounts
         #: The wall clock (the server passes ``time.time``): when a callsign was chosen must
@@ -583,6 +593,11 @@ class Identity:
     def account_exists(self, name: str) -> bool:
         return self._store.get(name) is not None
 
+    def account_times(self, name: str) -> AccountTimes | None:
+        """When account ``name`` (upper case) was made and last logged in to, None if there is
+        none. The web keeps ``created`` to tell its account from a later one of the same name."""
+        return self._store.times(name)
+
     @property
     def registration_open(self) -> bool:
         return self._registration_open
@@ -642,7 +657,7 @@ class Identity:
         if account is not None:
             return PasswordCheck(name, password, account.salt, account.kdf, account)
         if not self._registration_open:
-            return Refused("NO SUCH ACCOUNT: ASK THE OPERATOR FOR ONE")
+            return Refused(self._no_account_text)
         if (refusal := self.new_account_refusal(name, password)) is not None:
             return refusal
         if gate is not None and not gate.may_register():

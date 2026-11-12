@@ -486,6 +486,24 @@ def test_the_service_channel_is_off_by_default_and_its_socket_is_relative_to_the
         load_config(write_config(tmp_path, {"A": CITY}, server=text))
 
 
+def test_the_no_account_text_has_a_default_and_must_fit_one_printable_line(
+    tmp_path: Path,
+) -> None:
+    server = load_config(write_config(tmp_path, {"A": CITY})).server
+    assert server.no_account_text == "NO SUCH ACCOUNT: ASK THE OPERATOR FOR ONE"
+    text = "NO SUCH ACCOUNT: REGISTER AT OPENCS.EXAMPLE.ORG"
+    path = write_config(
+        tmp_path, {"A": CITY}, server=f'default_city = "A"\nno_account_text = "{text}"\n'
+    )
+    assert load_config(path).server.no_account_text == text
+    for bad in ("", "   ", "X" * 80, "CAF\u00c9", "TAB\\tHERE"):
+        path = write_config(
+            tmp_path, {"A": CITY}, server=f'default_city = "A"\nno_account_text = "{bad}"\n'
+        )
+        with pytest.raises(ConfigError, match="no_account_text"):
+            load_config(path)
+
+
 def test_registration_is_open_by_default_and_may_be_closed(tmp_path: Path) -> None:
     assert load_config(write_config(tmp_path, {"A": CITY})).server.registration == "open"
     path = write_config(

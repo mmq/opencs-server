@@ -71,6 +71,15 @@ class Callsign:
     changed: float | None
 
 
+@dataclass(frozen=True, slots=True)
+class AccountTimes:
+    """When an account was made and last logged in to (wall-clock seconds; None before its first
+    login)."""
+
+    created: float
+    last_login: float | None
+
+
 class AccountStore(Protocol):
     """Accounts by name."""
 
@@ -96,6 +105,11 @@ class AccountStore(Protocol):
     def set_callsign(self, name: str, callsign: str, changed: float | None) -> bool:
         """Give account ``name`` this callsign, changed at ``changed`` (None: its first); False if
         there is no such account. Whether another account holds it is the caller's to check."""
+        ...
+
+    def times(self, name: str) -> AccountTimes | None:
+        """When account ``name`` was made and last logged in to, None if there is no such
+        account."""
         ...
 
     def count(self) -> int:

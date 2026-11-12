@@ -102,6 +102,7 @@ def build_services(
         stores.accounts,
         guest_names=config.server.guest_names,
         registration=config.server.registration,
+        no_account_text=config.server.no_account_text,
         min_password_length=limits.min_password_length,
         max_accounts=limits.max_accounts,
         wall=time.time,

@@ -250,6 +250,7 @@ start; **only the city files are re-read by `reload`** (below).
 | `default_city` | `"B"` | a loaded city | what a bare `/PLAY` picks when every city is empty |
 | `guest_names` | `["JOINGENIE"]` | names; `[]` turns guests off | the guest names (II §3): no password check, the only names several players may share, never saved |
 | `registration` | `"open"` | `"open"`, `"closed"` | open: a first login with an unknown name registers it (new names: 3-12 of `A-Z 0-9 _ -`, not reserved, which includes look-alikes such as `ADM1N` and `ADM-IN`; passwords of 6 to 12 printable characters, no spaces, not the account name nor a common one). Closed: it is refused, and the operator makes accounts with `create-account`. Either way at most `[limits] max_accounts`, and accounts never played are removed after `[limits] unplayed_account_days` |
+| `no_account_text` | `"NO SUCH ACCOUNT: ASK THE OPERATOR FOR ONE"` | 1-79 characters of printable ASCII | what a login with an unknown name is shown while `registration = "closed"`: one line of the client's logon screen. With the web front end's registration, give the site's address, as `"NO SUCH ACCOUNT: REGISTER AT OPENCS.EXAMPLE.ORG"`. Capitals match the rest of the logon's lines |
 | `[limits] max_connections` | `128` | 1-10000 | connections at once, in all |
 | `[limits] max_connections_per_address` | `4` | 3 to the subnet limit | connections at once from one IP address |
 | `[limits] max_connections_per_subnet` | `12` | the address limit to the total | connections at once from one /24 (IPv4) or /64 (IPv6) |
@@ -598,8 +599,8 @@ printf '%s\n' '{"hello":"opencs-service","version":1}' '{"id":1,"op":"snapshot"}
 | op | arguments | result |
 |---|---|---|
 | `snapshot` | | uptime, account count, cap and registration mode, connections in game and in the Chamber, each city's name, capacity, whether it is open and its pilots (callsign, team, guest or not), held games. No addresses, account details or chat |
-| `account` | `name` | whether that account exists and is online, and its callsign (`null` if there is no account) |
-| `register` | `name`, `password`, `callsign` (both optional) | a new account, `{"name", "password", "callsign"}`: with `password` the one given, without it a made-up one; with `callsign` the account plays under it (the `/CALLSIGN` rules, and free), without it (`null`) the player is asked at the first login. The password is in the reply only, never logged. The rules are those of every new account (a chosen password too: 6 to 12 printable characters, no spaces, and no lower case, since the client's entry types capitals); a refusal (`"refused"`) says why. Whether players may choose is the web's setting; the game sends passwords in the clear, so a made-up one is the safer default |
+| `account` | `name` | whether that account exists and is online, its callsign, when it was made (`created`) and last logged in to (`last_login`, `null` before its first login), as Unix times; all `null` if there is no account. The web keeps `created` to tell its account from a later one of the same name |
+| `register` | `name`, `password`, `callsign` (both optional) | a new account, `{"name", "password", "callsign", "created"}`: with `password` the one given, without it a made-up one; with `callsign` the account plays under it (the `/CALLSIGN` rules, and free), without it (`null`) the player is asked at the first login. The password is in the reply only, never logged. The rules are those of every new account (a chosen password too: 6 to 12 printable characters, no spaces, and no lower case, since the client's entry types capitals); a refusal (`"refused"`) says why. Whether players may choose is the web's setting; the game sends passwords in the clear, so a made-up one is the safer default |
 | `reset-password` | `name`, `password` | a new password for an account, chosen or made up, as `register`; it clears the account's wrong-password limits, as the admin command does |
 | `status`, `reload` | | the admin command's reply lines, `{"lines": [...]}` |
 | `announce` | `text` | as the admin command |
@@ -776,7 +777,7 @@ error changes nothing and the first one is reported. Then, per city:
 
 A running game is never changed under its players (II §17). A `/PLAY` begun against the old
 configuration just before the swap is told "CITY x FILLED UP: TRY AGAIN". A change to `server.toml` (the
-port, logging, capture, recording, admin, `default_city`, `guest_names`, `registration`, `[limits]`) needs a restart; a reload says that it saw one. A
+port, logging, capture, recording, admin, `default_city`, `guest_names`, `registration`, `no_account_text`, `[limits]`) needs a restart; a reload says that it saw one. A
 config whose `default_city` is missing or has `enabled = false` is refused at validation, at start-up and
 on `reload` alike (nothing changes), so the lobby always has a city to offer.
 
@@ -913,7 +914,11 @@ Anyone can connect any program to the game port, so before opening it to the int
 4. **Guests and registration.** Guests need no password and are capped at 2 per address and 24 in all.
    Set `guest_names = []` to turn them off. With `registration = "closed"`, only the accounts you make
    with `create-account` exist. Open registration is limited per address and server-wide, capped at
-   `max_accounts`, and accounts never played are removed after `unplayed_account_days`.
+   `max_accounts`, and accounts never played are removed after `unplayed_account_days`. With the web
+   front end's registration ("Registration and accounts"), set `registration = "closed"`: players then
+   register on the site, with a verified email address, and `no_account_text` sends a login with an
+   unknown name there. Open registration lets anyone claim names from the game's logon, with no
+   address to reach them by and no way for them to get a new password.
 5. **Logs to watch.** Every refused connection is logged as `refusing ADDRESS: REASON` (at most once a
    minute per address, with a count of those held back), and every refused login as
    `login refused from ADDRESS: REASON`. A fail2ban filter for the first:
@@ -932,9 +937,9 @@ Anyone can connect any program to the game port, so before opening it to the int
    Guesses at an account from elsewhere do not lock its owner out of an address they have logged in from
    since the server started; from a new address, or just after a restart, the owner may be refused until
    the guessing stops. `reset-password`, the operator's or the service channel's, clears an account's
-   limits. Players cannot change their own password: the game has no command for it, so a player who
-   wants a new one asks the operator, who runs `reset-password` (a front end for it is the web service's
-   job, not this server's).
+   limits. Players cannot change their own password in the game: it has no command for it, so a player
+   who wants a new one asks the operator, who runs `reset-password`, or uses the web front end's account
+   page, which does the same over the service channel.
 7. **Backups** (above), and an upgrade path you have tried (`tools/smoke.sh` after each one).
 
 What the server cannot defend against alone is in `docs/robustness.md`, "Threat model".

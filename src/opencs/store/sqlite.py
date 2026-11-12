@@ -26,6 +26,7 @@ from opencs import policy
 from opencs.store.base import (
     PBKDF2_SHA256,
     Account,
+    AccountTimes,
     Callsign,
     Kdf,
     ProgressRecord,
@@ -229,6 +230,12 @@ class SqliteStore:
             "SELECT callsign, callsign_changed FROM accounts WHERE name = ?", (name,)
         ).fetchone()
         return None if row is None else Callsign(row[0], row[1])
+
+    def times(self, name: str) -> AccountTimes | None:
+        row = self._db.execute(
+            "SELECT created, last_login FROM accounts WHERE name = ?", (name,)
+        ).fetchone()
+        return None if row is None else AccountTimes(row[0], row[1])
 
     def callsign_owner(self, callsign: str) -> str | None:
         # upper() folds ASCII only, as str.upper does on the ASCII a callsign is made of; the

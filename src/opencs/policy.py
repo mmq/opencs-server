@@ -705,6 +705,12 @@ ACCOUNT_PRUNE_PAUSE = 0.5
 REGISTRATION_MODES = ("open", "closed")
 DEFAULT_REGISTRATION = "open"
 
+#: What a login with an unknown name is told while registration is closed (``no_account_text`` in
+#: ``server.toml``): an operator with a web site may give its address instead. It is a line of the
+#: logon screen, so printable ASCII and short enough for one line of the client's 80 columns. Ours.
+DEFAULT_NO_ACCOUNT_TEXT = "NO SUCH ACCOUNT: ASK THE OPERATOR FOR ONE"
+MAX_NO_ACCOUNT_TEXT_LENGTH = 79
+
 #: Length of a password the server makes (``create-account``, ``reset-password``, the web), from
 #: capitals and digits without look-alikes, all of which the client's entry can type. About 50
 #: bits. Ours.

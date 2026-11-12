@@ -343,6 +343,19 @@ def test_the_callsign_migration_gives_old_accounts_their_cut_names(tmp_path: Pat
     db.close()
 
 
+def test_an_account_says_when_it_was_made_and_last_logged_in_to(stores: Stores) -> None:
+    assert stores.accounts.times("ALICE") is None
+    stores.accounts.create(Account("ALICE", b"s1", b"h1", Kdf.pbkdf2(1)))
+    made = stores.accounts.times("ALICE")
+    assert made is not None and made.last_login is None
+    stores.accounts.touch_login("ALICE")
+    touched = stores.accounts.times("ALICE")
+    assert touched is not None and touched.created == made.created
+    assert touched.last_login is not None and touched.last_login >= made.created
+    stores.accounts.delete("ALICE")
+    assert stores.accounts.times("ALICE") is None
+
+
 def test_a_password_can_be_replaced_only_on_an_existing_account(stores: Stores) -> None:
     stores.accounts.create(Account("ALICE", b"s1", b"h1", Kdf.pbkdf2(1)))
     assert stores.accounts.set_password(Account("ALICE", b"s2", b"h2", Kdf.pbkdf2(2)))

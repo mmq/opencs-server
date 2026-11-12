@@ -20,6 +20,9 @@ guest_names = ["JOINGENIE"]
 # Whether the first login with an unknown name registers it ("open", II §3) or is refused ("closed":
 # the operator makes accounts with `create-account` on the admin channel).
 registration = "open"
+# What a login with an unknown name is told while registration is closed: one line of printable
+# ASCII, at most 79 characters. With a web site for registration, give its address.
+# no_account_text = "NO SUCH ACCOUNT: REGISTER AT OPENCS.EXAMPLE.ORG"
 
 [logging]
 # DEBUG, INFO, WARNING, ERROR or CRITICAL, for everything the server logs.

@@ -144,6 +144,8 @@ class ServerConfig:
     guest_names: tuple[str, ...] = policy.DEFAULT_GUEST_NAMES
     #: ``policy.REGISTRATION_MODES``: whether a first login registers its name.
     registration: str = policy.DEFAULT_REGISTRATION
+    #: What a login with an unknown name is told while registration is closed.
+    no_account_text: str = policy.DEFAULT_NO_ACCOUNT_TEXT
     limits: LimitsConfig = LimitsConfig()
     service: ServiceConfig = ServiceConfig()
     recording: RecordingConfig = RecordingConfig()
@@ -599,12 +601,21 @@ def _parse_server(path: Path, data: Mapping[str, Any]) -> ServerConfig:
             for name in table.str_list("guest_names", policy.DEFAULT_GUEST_NAMES)
         ),
         registration=table.string("registration", policy.DEFAULT_REGISTRATION),
+        no_account_text=table.string("no_account_text", policy.DEFAULT_NO_ACCOUNT_TEXT),
         limits=_parse_limits(table),
         service=_parse_service(path, table),
         recording=_parse_recording(path, table),
     )
     if config.registration not in policy.REGISTRATION_MODES:
         raise table.fail("registration", f"must be one of {', '.join(policy.REGISTRATION_MODES)}")
+    text = config.no_account_text
+    if not 1 <= len(text.strip()) <= len(text) <= policy.MAX_NO_ACCOUNT_TEXT_LENGTH or not all(
+        policy.PRINTABLE_LOW <= ch <= policy.PRINTABLE_HIGH for ch in text
+    ):
+        raise table.fail(
+            "no_account_text",
+            f"must be 1..{policy.MAX_NO_ACCOUNT_TEXT_LENGTH} characters of printable ASCII",
+        )
     table.done()
     return config
 

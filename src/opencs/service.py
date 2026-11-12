@@ -278,11 +278,15 @@ class ServiceServer:
     def _account(self, request: dict[str, Any]) -> dict[str, Any]:
         name = _name(request)
         identity = self._services.identity
+        times = identity.account_times(name)
         return {
             "name": name,
-            "exists": identity.account_exists(name),
+            "exists": times is not None,
             "online": identity.account_online(name),
             "callsign": identity.callsign_of(name),
+            # When it was made: the web tells its account from a later one of the same name.
+            "created": None if times is None else times.created,
+            "last_login": None if times is None else times.last_login,
         }
 
     def _set_callsign(self, request: dict[str, Any]) -> dict[str, Any]:
@@ -331,7 +335,13 @@ class ServiceServer:
         if op == "register":
             log.info("account %s created over the service channel", account.name)
             # None: the player is asked for a callsign at the first login.
-            return {"name": account.name, "password": password, "callsign": callsign}
+            times = identity.account_times(account.name)
+            return {
+                "name": account.name,
+                "password": password,
+                "callsign": callsign,
+                "created": None if times is None else times.created,
+            }
         # As the operator's reset does: the guesses that locked the owner out are forgotten.
         self._services.login_limits.forget_account(account.name)
         log.info("password of %s reset over the service channel", account.name)

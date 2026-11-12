@@ -7,7 +7,14 @@ from collections.abc import Callable, Iterable
 from dataclasses import replace
 
 from opencs import policy
-from opencs.store.base import Account, Callsign, ProgressRecord, StaleCursor, Stores
+from opencs.store.base import (
+    Account,
+    AccountTimes,
+    Callsign,
+    ProgressRecord,
+    StaleCursor,
+    Stores,
+)
 
 
 class MemoryAccountStore:
@@ -16,6 +23,7 @@ class MemoryAccountStore:
     def __init__(self, now: Callable[[], float] = time.time) -> None:
         self._accounts: dict[str, Account] = {}
         self._seen: dict[str, float] = {}  # created or last logged in to
+        self._times: dict[str, AccountTimes] = {}
         self._callsigns: dict[str, Callsign] = {}
         self._owners: dict[str, str] = {}  # upper-cased callsign -> account name
         self._now = now
@@ -28,6 +36,7 @@ class MemoryAccountStore:
             return False
         self._accounts[account.name] = account
         self._seen[account.name] = self._now()
+        self._times[account.name] = AccountTimes(self._seen[account.name], None)
         if callsign is None:
             callsign = account.name[: policy.MAX_CALLSIGN_LENGTH]
         self._callsigns[account.name] = Callsign(callsign, None)
@@ -54,12 +63,16 @@ class MemoryAccountStore:
         if old is not None and self._owners.get(old.callsign.upper()) == name:
             del self._owners[old.callsign.upper()]
 
+    def times(self, name: str) -> AccountTimes | None:
+        return self._times.get(name)
+
     def count(self) -> int:
         return len(self._accounts)
 
     def touch_login(self, name: str) -> None:
         if name in self._accounts:
             self._seen[name] = self._now()
+            self._times[name] = replace(self._times[name], last_login=self._seen[name])
 
     def stale(
         self, before: float, *, after: StaleCursor | None = None, limit: int | None = None
@@ -79,6 +92,7 @@ class MemoryAccountStore:
 
     def delete(self, name: str) -> bool:
         self._seen.pop(name, None)
+        self._times.pop(name, None)
         self._disown(name)
         self._callsigns.pop(name, None)
         return self._accounts.pop(name, None) is not None

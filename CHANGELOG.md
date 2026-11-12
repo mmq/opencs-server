@@ -28,6 +28,9 @@ upgrading.
   server-sent events and readable without JavaScript, "offline" while the game server is down. It
   asks the game server for one snapshot a second at most, and nothing while no one is looking
   (OPERATING, "The web front end").
+- `no_account_text` in `server.toml`: what a login with an unknown name is told while registration
+  is closed, so it can give the web site's address (the default is unchanged). The service channel's
+  `account` and `register` say when an account was made, and `account` when it last logged in.
 - `create-account` and `reset-password` hash their password off the game's loop.
 - The start of the web site, `web/` (`opencs-web`): a Django skeleton with its own dependencies; the
   server still installs only `argon2-cffi`.

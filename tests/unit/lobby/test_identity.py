@@ -462,6 +462,12 @@ def test_with_registration_closed_an_unknown_name_is_refused() -> None:
     assert pilot(identity.login("JOINGENIE")).is_guest  # guests are another matter
 
 
+def test_with_registration_closed_an_unknown_name_is_told_the_configured_text() -> None:
+    text = "NO SUCH ACCOUNT: REGISTER AT OPENCS.EXAMPLE.ORG"
+    identity = Identity(MemoryAccountStore(), kdf=FAST, registration="closed", no_account_text=text)
+    assert identity.login("STRANGER,sesame") == Refused(text)
+
+
 def test_register_follows_the_same_rules_and_makes_a_password_when_none_is_given() -> None:
     identity, _ = make()
     assert isinstance(identity.register("ADMIN"), Refused)
