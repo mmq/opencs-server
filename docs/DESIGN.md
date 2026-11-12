@@ -170,7 +170,7 @@ tools/
   smoke.sh               start a throwaway server and run the judge
   make_fixture.py        turn a capture log into a replay fixture
 .github/workflows/
-  ci.yml                 lint, types and tests (Python 3.12 and 3.15, and macOS), and the smoke test
+  ci.yml                 lint, types, tests (Python 3.12 and 3.15, and macOS), the build and the smoke test
 deploy/
   opencs.service         the systemd unit the operator guide installs
   opencs-web*            the web front end's unit and the archiver's (path, service, timer)
