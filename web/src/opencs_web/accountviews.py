@@ -475,10 +475,9 @@ async def delete(request: HttpRequest) -> HttpResponse:
             form.add_error(None, str(e))
         if form.errors:
             return _account_page(request, player, found, delete_form=form, status=400)
-        # The recording archive is the operator's: it is named here for them.
+        # Recordings keep the callsign; taking it out is the operator's choice, on request.
         log.info(
-            "game account %s deleted from the web; its callsign %s may be in recordings "
-            "(opencs-web forget_callsign)",
+            "game account %s deleted from the web; its callsign %s stays in recordings",
             player.game_name,
             callsign or "(none)",
         )

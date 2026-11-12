@@ -86,7 +86,8 @@ kept. Recorded chat is for administrators only; a public replay shows none.
   keep callsigns out of reach of an account's deletion. Without the archiver, the operator moves or
   deletes segments by hand, since the server never deletes an unmarked one.
 - Callsigns are in the header, in PLAYER records and in payloads (`'G'` and others). Deleting an account
-  is the archiver's job (`opencs-web forget_callsign`): raw segments are short-lived, and rewriting them
-  on the server would mean decoding every payload.
+  leaves them: a recording is a record of the game, and the callsign stays in it. Taking a callsign
+  out is an operator's tool, used on request (`opencs-web forget_callsign`); it works on the archive,
+  since raw segments are short-lived and rewriting them on the server would mean decoding every payload.
 - Recordings hold chat, team chat included by default. Whether and how to tell players is the
   operator's decision.

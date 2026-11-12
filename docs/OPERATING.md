@@ -477,8 +477,9 @@ The recordings directory must be mode 2770 (as in "Layout"); one made 0700 by an
 Retention removes whole games, oldest first, after each run. At about 0.5 MB an hour for a busy city, a
 city busy all day reaches 10 GB in about two years, so the age limit is the one that normally applies.
 
-**Deleting an account's recordings.** After `delete-account`, take the account's callsign (each one it
-has used) out of the archive:
+**Taking a callsign out of the recordings.** Deleting an account, by the operator or from the site,
+leaves its callsign in the recordings: they are a record of the games. When a player asks (a privacy
+request, say), take the callsign (each one the account has used) out of the archive:
 
 ```bash
 sudo -u opencs-web env $(sudo cat /etc/opencs-web/environment) OPENCS_WEB_RECORDINGS=/var/lib/opencs-recordings \
@@ -737,9 +738,8 @@ session already logged on, so kick it if the old password may be known), and del
 - *Forget my email address:* the web account goes; the game account stays as it was, but the site can
   no longer give it a new password (the operator still can).
 - *Delete my game account too:* the server's `delete-account` (refused while the account is in the game
-  or has a game held), then the web account. The log names the callsign: take it out of the recording
-  archive with `opencs-web forget_callsign CALLSIGN` ("The archiver"). The site does not do that itself,
-  since it rewrites archive files and may take a while.
+  or has a game held), then the web account. Recordings keep the callsign; if the player asks,
+  take it out with `opencs-web forget_callsign CALLSIGN` ("The archiver").
 
 **Accounts the server removes.** When the operator deletes an account, or the daily prune removes one
 never played (`unplayed_account_days`), the site finds out the next time that web account logs in or
@@ -883,7 +883,7 @@ Log lines (logger `opencs_web`, in the journal):
 | `register email refused: cap limit` (or `source`, `recipient`) | the daily cap or a rate limit stopped an email |
 | `game account NAME registered from the web` / `password of NAME reset from the web` | as it says; never the password |
 | `game account NAME is gone from the server: its web account is removed` | the operator or the prune removed it |
-| `game account NAME deleted from the web; its callsign CALLSIGN may be in recordings` | run `opencs-web forget_callsign CALLSIGN` if you keep recordings |
+| `game account NAME deleted from the web; its callsign CALLSIGN stays in recordings` | nothing to do; `opencs-web forget_callsign CALLSIGN` if the player asks for it to be taken out |
 
 ## Stopping, signals and kicks
 
