@@ -48,8 +48,8 @@ upgrading.
   recovery code, are locked after five wrong tries, and are logged out after 15 idle minutes or
   `OPENCS_WEB_ADMIN_SESSION_MINUTES`. Destructive commands are confirmed on a second page, with a fresh
   code after five minutes; a `moderator` role only kicks and announces. Everything goes in an audit log
-  the site only adds to. The web now depends on `django-otp` too. The service channel's `status` adds
-  each city's health as numbers.
+  the site only adds to. The web now depends on `django-otp` and `segno` (the enrolment QR code, drawn
+  in the terminal) too. The service channel's `status` adds each city's health as numbers.
 - `no_account_text` in `server.toml`: what a login with an unknown name is told while registration
   is closed, so it can give the web site's address (the default is unchanged). The service channel's
   `account` and `register` say when an account was made, and `account` when it last logged in.

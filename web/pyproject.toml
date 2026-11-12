@@ -12,6 +12,7 @@ dependencies = [
     "django>=5.2",
     "uvicorn>=0.30",
     "django-otp>=1.6",
+    "segno>=1.6",
 ]
 
 [project.scripts]

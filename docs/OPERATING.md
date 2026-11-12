@@ -800,10 +800,11 @@ sudo systemctl restart opencs-web
 `createadmin` asks for a password (12 characters or more, not a common one, not all digits, not like
 the name; `--password-stdin` reads it from standard input instead), hashes it with Argon2id, and then
 prints, once, the second factor: a TOTP secret for an authenticator app (any of them: 6 digits, 30
-seconds, SHA-1), as a key to type in and as an `otpauth://` URI, and ten recovery codes. No QR code is
-drawn, to keep the web free of another dependency; to scan one, make it on your own machine from the
-URI (`qrencode -t ansiutf8 'otpauth://...'`), never with a web service. Keep the recovery codes apart
-from the phone; each logs in once in place of the app's code.
+seconds, SHA-1), as a QR code drawn in the terminal to scan with the phone, as a key to type in and as
+an `otpauth://` URI, and ten recovery codes. The QR code is drawn for a dark terminal background; if a
+phone will not read it (a light background inverts it), type the key or paste the URI instead. Never
+make a QR code of the URI with a web service. Keep the recovery codes apart from the phone; each logs
+in once in place of the app's code.
 
 **Logging in** takes the name, the password and a code on one form, and every failure looks the same.
 Five wrong ones in a row lock the account for 15 minutes; tries from one network (an IPv4 address or an

@@ -16,6 +16,7 @@ from typing import Any
 from unittest import mock
 
 import pytest
+import segno
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.core.management.base import CommandError
@@ -668,6 +669,15 @@ def test_createadmin_shows_the_second_factor_once_and_it_logs_in(
     assert entries(action="createadmin")[0].target == "ops"
     with pytest.raises(CommandError, match="exists"):
         _create("ops", PASSWORD)
+
+
+def test_createadmin_draws_the_uri_as_a_qr_code(service: ThreadedService) -> None:
+    out = _create("ops", PASSWORD)
+    uri = re.search(r"otpauth://totp/\S+", out)
+    assert uri
+    drawn = io.StringIO()
+    segno.make(uri.group(), error="m").terminal(out=drawn, compact=True)
+    assert drawn.getvalue() in out  # the code printed is the URI's, not some other
 
 
 @pytest.mark.parametrize("password", ["short", "123456789012345", "password1234"])

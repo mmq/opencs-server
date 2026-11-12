@@ -4,10 +4,12 @@ input, and the second factor, made and shown once."""
 from __future__ import annotations
 
 import getpass
+import io
 import sys
 from base64 import b32encode
 from typing import Any
 
+import segno
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.core.management.base import CommandError, CommandParser, OutputWrapper
@@ -47,12 +49,16 @@ def new_totp(user: Any, out: OutputWrapper) -> None:
     TOTPDevice.objects.filter(user=user).delete()
     device = TOTPDevice.objects.create(user=user, name="authenticator", confirmed=True)
     secret = b32encode(device.bin_key).decode("ascii").rstrip("=")
+    # Drawn in text, light squares as blocks, so it scans from a terminal with a dark background;
+    # if a phone will not read it, the key and the URI below say the same.
+    qr = io.StringIO()
+    segno.make(device.config_url, error="m").terminal(out=qr, compact=True)
     out.write(
         "\nAdd this to an authenticator app (shown only now; anyone who has it has the "
-        "second factor):\n"
-        f"  key (type it in):  {' '.join(secret[i : i + 4] for i in range(0, len(secret), 4))}\n"
-        f"  or this URI (paste it, or make a QR code of it on your own machine):\n"
-        f"  {device.config_url}\n"
+        "second factor). Scan the code:\n\n"
+        f"{qr.getvalue()}\n"
+        f"  or type the key:  {' '.join(secret[i : i + 4] for i in range(0, len(secret), 4))}\n"
+        f"  or paste the URI: {device.config_url}\n"
         "  (TOTP, SHA-1, 6 digits, 30 seconds)\n"
     )
 
