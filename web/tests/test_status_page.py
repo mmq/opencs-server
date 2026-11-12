@@ -14,6 +14,7 @@ from django.test import AsyncClient, Client, override_settings
 
 from fakeservice import SNAPSHOT, FakeService, socket_dir
 from opencs_web import live
+from opencs_web.siteassets import asset_version
 from opencs_web.status import StatusCache
 
 #: Callsigns are 3 to 12 of ``!``..``~``: every one of these is a legal callsign.
@@ -64,7 +65,9 @@ def test_every_callsign_and_name_is_escaped() -> None:
     page = Client().get("/").content.decode()
     for callsign in HOSTILE:
         assert f"<li>{html.escape(callsign)}" in page
-    assert "<script>" not in page.replace('<script src="/assets/live.js" defer></script>', "")
+    assert "<script>" not in page.replace(
+        f'<script src="/assets/{asset_version()}/live.js" defer></script>', ""
+    )
     assert "<b>" not in page and "<i>" not in page and "</ul></li>" not in page
     assert "&lt;i&gt;CITY&lt;/i&gt;" in page
 
@@ -170,12 +173,21 @@ def test_the_event_stream_sends_offline() -> None:
 
 def test_the_assets_are_served_and_nothing_else() -> None:
     client = Client()
-    css = client.get("/assets/site.css")
+    version = asset_version()
+    css = client.get(f"/assets/{version}/site.css")
     assert css.status_code == 200 and css["Content-Type"].startswith("text/css")
-    js = client.get("/assets/live.js")
+    assert f'href="/assets/{version}/site.css"' in client.get("/").content.decode()
+    js = client.get(f"/assets/{version}/live.js")
     assert js.status_code == 200 and b"EventSource" in js.content
-    assert client.get("/assets/settings.py").status_code == 404
-    assert client.get("/assets/..%2Fviews.py").status_code == 404
+    assert client.get(f"/assets/{version}/settings.py").status_code == 404
+    assert client.get(f"/assets/{version}/..%2Fviews.py").status_code == 404
+    assert client.get("/assets/live.js").status_code == 404
+
+
+def test_a_page_from_before_an_upgrade_gets_the_current_asset_uncached() -> None:
+    response = Client().get("/assets/000000000000/live.js")
+    assert response.status_code == 200 and b"EventSource" in response.content
+    assert response["Cache-Control"] == "no-cache"
 
 
 def test_the_deploy_checks_leave_only_the_hsts_choices() -> None:

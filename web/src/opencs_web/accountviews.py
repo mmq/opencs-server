@@ -37,6 +37,7 @@ from opencs_web.forms import (
     RegisterForm,
 )
 from opencs_web.models import EmailLink, Player
+from opencs_web.siteassets import asset_version
 
 log = logging.getLogger("opencs_web.accounts")
 
@@ -52,6 +53,7 @@ TOO_FAST = "Too many requests from your network just now. Please wait a minute a
 def site(request: HttpRequest) -> dict[str, Any]:
     """What every page's header and footer need (a context processor: no database)."""
     return {
+        "assets": asset_version(),
         "contact": settings.OPENCS_CONTACT,
         "registration_open": settings.OPENCS_REGISTRATION,
     }

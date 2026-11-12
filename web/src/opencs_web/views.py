@@ -1,5 +1,4 @@
 from functools import lru_cache
-from importlib.resources import files
 
 from django.conf import settings
 from django.http import Http404, HttpRequest, HttpResponse, StreamingHttpResponse
@@ -9,15 +8,8 @@ from django.views.decorators.http import require_safe
 
 from opencs_web import live
 from opencs_web.mapviews import delay_words
+from opencs_web.siteassets import ASSETS, asset_bytes, asset_version
 from opencs_web.status import Status
-
-#: The page's own style sheet and script, served from the package: no external assets.
-ASSETS = {
-    "site.css": "text/css; charset=utf-8",
-    "live.js": "text/javascript; charset=utf-8",
-    "maps.js": "text/javascript; charset=utf-8",
-    "maptrack.js": "text/javascript; charset=utf-8",
-}
 
 
 @require_safe
@@ -60,14 +52,16 @@ def render_status(status: Status) -> str:
 
 
 @require_safe
-async def asset(request: HttpRequest, name: str) -> HttpResponse:
+async def asset(request: HttpRequest, version: str, name: str) -> HttpResponse:
+    """A style sheet or script, under the version of the whole set (:func:`asset_version`): a
+    browser keeps it for good, and an upgrade changes every address at once, so a page never mixes
+    old and new files (``maps.js`` imports ``./maptrack.js`` from the same version). A page from
+    before an upgrade asking for the old version gets the current file, not kept."""
     if name not in ASSETS:
         raise Http404
-    response = HttpResponse(_asset(name), content_type=ASSETS[name])
-    response["Cache-Control"] = "public, max-age=3600"
+    response = HttpResponse(asset_bytes(name), content_type=ASSETS[name])
+    if version == asset_version():
+        response["Cache-Control"] = "public, max-age=31536000, immutable"
+    else:
+        response["Cache-Control"] = "no-cache"
     return response
-
-
-@lru_cache
-def _asset(name: str) -> bytes:
-    return files("opencs_web").joinpath("assets", name).read_bytes()

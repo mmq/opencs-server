@@ -21,7 +21,7 @@ urlpatterns = [
     path("maps/<str:letter>/map.json", mapviews.city_map, name="map"),
     path("maps/<str:letter>/track.json", mapviews.track, name="map-track"),
     path("maps/<str:letter>/live", mapviews.track_stream, name="map-stream"),
-    path("assets/<str:name>", views.asset, name="asset"),
+    path("assets/<str:version>/<str:name>", views.asset, name="asset"),
     path("healthz", views.health, name="health"),
     # The admin pages: a 404 each while OPENCS_WEB_ADMIN is off.
     path(f"{settings.OPENCS_ADMIN_PATH}/", include("opencs_web.staffurls")),

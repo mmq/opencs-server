@@ -18,11 +18,11 @@ upgrading.
   free-space floor. A slow or failing disk stops the recording, never the game. Recordings hold chat;
   the server deletes only segments the archiver has marked done (ADR 14).
 - A recording archiver, `opencs-web archive`, run by a systemd path unit (with an hourly timer as a
-  backstop) or from cron: it stores each finished segment compressed in an archive of its own (about 0.5 MB an hour for a busy city),
-  with tables of games, pilots and battle events, deletes the segment, and keeps 12 months or 10 GB.
-  `opencs-web forget_callsign` takes a deleted account's callsign out of it. The server now makes
-  segments mode 0640 so the archiver, in its group, can read them; the recordings directory should be
-  2770 (OPERATING, "The archiver").
+  backstop) or from cron: it stores each finished segment compressed in an archive of its own (about 0.5
+  MB an hour for a busy city), with tables of games, pilots and battle events, deletes the segment, and
+  keeps 12 months or 10 GB. `opencs-web forget_callsign` takes a deleted account's callsign out of it.
+  The server now makes segments mode 0640 so the archiver, in its group, can read them; the recordings
+  directory should be 2770 (OPERATING, "The archiver").
 - A public status page in the web front end (`opencs-web`, `deploy/opencs-web.service` behind Caddy,
   `deploy/Caddyfile`): accounts, uptime, each city's pilots by team and the held games, live by
   server-sent events and readable without JavaScript, "offline" while the game server is down. It
@@ -63,6 +63,9 @@ upgrading.
   (`OPENCS_WEB_MAP_DELAY_PUBLIC`; 0 is allowed and makes a radar), administrators as they happen
   (`OPENCS_WEB_MAP_DELAY_ADMIN`); nothing newer is ever sent. Recorded chat only for administrators,
   with `OPENCS_WEB_MAP_ADMIN_CHAT` (ADR 16).
+- The site's style sheet and scripts are served under a version made from their contents
+  (`/assets/<version>/maps.js`), kept by browsers for good: an upgrade changes every address at once,
+  so no page runs an old script against a new one.
 - The service channel's `subscribe` and `unsubscribe`: a city's live feed, the records the recorder is
   given whether or not the city is recorded, from a capped queue that drops and starts again rather
   than wait for a slow reader (ADR 16). The router now hears every event when the service channel is on.

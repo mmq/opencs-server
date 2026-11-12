@@ -1,5 +1,5 @@
 {% extends "opencs_web/staff/base.html" %}
-{% block staffhead %}<script src="{% url 'asset' 'live.js' %}" defer></script>{% endblock %}
+{% block staffhead %}<script src="{% url 'asset' assets 'live.js' %}" defer></script>{% endblock %}
 {% block main %}
 <h1>Admin</h1>
 {% if notice %}<p class="notice" role="status">{{ notice }}</p>{% endif %}

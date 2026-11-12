@@ -16,6 +16,7 @@ from pytest_django.fixtures import Settings as SettingsWrapper
 from opencs_web import mapviews
 from opencs_web.maps.source import Recordings
 from opencs_web.maps.windows import WINDOW_MS, build_window, window_start
+from opencs_web.siteassets import asset_version
 from test_staff import ThreadedService, log_in, make_admin, service  # noqa: F401
 
 pytestmark = pytest.mark.django_db
@@ -38,7 +39,9 @@ def assert_strict(response: object, page: str) -> None:
     assert "default-src 'none'" in csp and "script-src 'self'" in csp
     assert "connect-src 'self'" in csp and "unsafe" not in csp
     assert "<style" not in page and " style=" not in page and "<script>" not in page
-    assert re.findall(r"<script[^>]*>", page) == ['<script type="module" src="/assets/maps.js">']
+    assert re.findall(r"<script[^>]*>", page) == [
+        f'<script type="module" src="/assets/{asset_version()}/maps.js">'
+    ]
     assert "http" not in page  # nothing from elsewhere
 
 
@@ -99,11 +102,11 @@ def test_the_status_page_links_the_maps(settings: SettingsWrapper) -> None:
 def test_the_viewer_s_scripts_are_served_and_cached() -> None:
     client = Client()
     for name in ("maps.js", "maptrack.js"):
-        response = client.get(f"/assets/{name}")
+        response = client.get(f"/assets/{asset_version()}/{name}")
         assert response.status_code == 200
         assert response["Content-Type"] == "text/javascript; charset=utf-8"
-        assert "max-age" in response["Cache-Control"]
-    script = text(client.get("/assets/maps.js"))
+        assert response["Cache-Control"] == "public, max-age=31536000, immutable"
+    script = text(client.get(f"/assets/{asset_version()}/maps.js"))
     # it imports only its own module, and never writes markup
     assert re.findall(r'from "([^"]+)"', script) == ["./maptrack.js"]
     assert "innerHTML" not in script and "insertAdjacentHTML" not in script
