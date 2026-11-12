@@ -23,6 +23,11 @@ upgrading.
   `opencs-web forget_callsign` takes a deleted account's callsign out of it. The server now makes
   segments mode 0640 so the archiver, in its group, can read them; the recordings directory should be
   2770 (OPERATING, "The archiver").
+- A public status page in the web front end (`opencs-web`, `deploy/opencs-web.service` behind Caddy,
+  `deploy/Caddyfile`): accounts, uptime, each city's pilots by team and the held games, live by
+  server-sent events and readable without JavaScript, "offline" while the game server is down. It
+  asks the game server for one snapshot a second at most, and nothing while no one is looking
+  (OPERATING, "The web front end").
 - `create-account` and `reset-password` hash their password off the game's loop.
 - The start of the web site, `web/` (`opencs-web`): a Django skeleton with its own dependencies; the
   server still installs only `argon2-cffi`.

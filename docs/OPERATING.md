@@ -58,6 +58,7 @@ below). Do that once it has finished.
 | `/var/lib/opencs-captures` | session captures, if `[capture]` is enabled |
 | `/var/lib/opencs-recordings` | game recordings, if `[recording] dir` is set; better on a filesystem of its own ("Recording games") |
 | `/var/lib/opencs-web` | the web's state: the recording archive, `opencs-archive.db` (systemd makes it) |
+| `/etc/opencs-web/environment` | the web's settings, mode 0600 ("The web front end", "The archiver") |
 | `/run/opencs` | the service socket, if `[service]` is set (systemd makes the directory) |
 
 ```bash
@@ -200,6 +201,8 @@ sudo systemctl stop opencs           # graceful: players are saved
 |---|---|---|---|
 | game | TCP 2399 (`port`) | **public** | what the players' games connect to; open and forward this one |
 | admin | none (`[admin] port`; 2400 in the example) | **this machine only** | bound to `127.0.0.1` whatever the config says; never open or forward it |
+| web | TCP 80 and 443, Caddy | **public**, if the web front end runs | HTTPS, and 80 for the certificate and the redirect ("The web front end") |
+| uvicorn | TCP 8000 (`deploy/opencs-web.service`) | **this machine only** | bound to `127.0.0.1`; only Caddy connects |
 
 ```bash
 sudo ufw allow 2399/tcp
@@ -437,7 +440,7 @@ sudo useradd --system --shell /usr/sbin/nologin opencs-web     # if the web fron
 sudo usermod -aG opencs opencs-web
 cd /opt/opencs && sudo uv sync --no-dev --all-packages         # adds opencs-web (Django) to the .venv
 sudo install -d -m 0700 /etc/opencs-web
-sudo sh -c 'umask 077; echo "OPENCS_WEB_SECRET_KEY=$(head -c 32 /dev/urandom | base64 | tr -d "=+/")" \
+sudo sh -c 'umask 077; echo "OPENCS_WEB_SECRET_KEY=$(head -c 48 /dev/urandom | base64 | tr -d "=+/")" \
     > /etc/opencs-web/environment'
 sudo install -m 644 deploy/opencs-web-archive.{path,service,timer} /etc/systemd/system/
 sudo systemctl daemon-reload
@@ -612,6 +615,93 @@ connection 5 new passwords in a burst and then one every 5 seconds, far below wh
 A request that holds up the server for over 20 ms is logged (`service request ... held up the server`),
 at most once a minute.
 
+## The web front end
+
+`opencs-web` (the web package, `web/`) is the site. So far it is a status page: the account count, how
+long the server has been up, each city's name, capacity and pilots by team (callsign, guest or not) and
+the games held for `/RESUME`, kept live in the browser by server-sent events and readable without
+JavaScript. It runs as its own user, `opencs-web`, as Django under one uvicorn worker on
+`127.0.0.1:8000`, behind Caddy, which serves HTTPS. It reaches the game server only through the service
+channel (above), and asks it for at most one snapshot a second: while someone has the page open, one
+snapshot a second is shared by every open page; otherwise a page load asks only if the last snapshot is
+over a second old, and with nobody looking nothing is asked. If the server is stopped, the socket is
+missing or the channel refuses, the page says the game server is offline (it is still a page, not an
+error) and recovers by itself when the server is back, within ten seconds.
+
+Turn on the service channel first (`[service] socket`, above). Then the web package, its user and its
+settings (the archiver, if installed, has made the user and the file already: add the host line):
+
+```bash
+sudo useradd --system --shell /usr/sbin/nologin opencs-web     # unless the archiver has made it
+sudo usermod -aG opencs opencs-web                             # may connect to the service socket
+cd /opt/opencs && sudo uv sync --no-dev --all-packages         # adds opencs-web (Django, uvicorn)
+sudo install -d -m 0700 /etc/opencs-web
+sudo sh -c 'umask 077; echo "OPENCS_WEB_SECRET_KEY=$(head -c 48 /dev/urandom | base64 | tr -d "=+/")" \
+    >> /etc/opencs-web/environment'                            # unless the archiver's step made one
+sudo sh -c 'echo "OPENCS_WEB_ALLOWED_HOSTS=opencs.example.org" >> /etc/opencs-web/environment'
+sudo env $(sudo cat /etc/opencs-web/environment) /opt/opencs/.venv/bin/opencs-web check --deploy
+sudo install -m 644 deploy/opencs-web.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now opencs-web
+curl -s http://127.0.0.1:8000/healthz                         # ok
+journalctl -u opencs-web
+```
+
+Settings, in `/etc/opencs-web/environment` (the archiver's are in "The archiver"):
+
+| variable | meaning | default |
+|---|---|---|
+| `OPENCS_WEB_SECRET_KEY` | Django's secret key; `check --deploy` wants 50 characters or more (the command above makes 64) | none: required |
+| `OPENCS_WEB_ALLOWED_HOSTS` | the site's host names, comma-separated, as in the Caddyfile | none, so every request is refused |
+| `OPENCS_WEB_SERVICE_SOCKET` | the service socket (the unit sets it) | none: the page says offline |
+| `OPENCS_WEB_HTTPS` | `false` only to try the site over plain HTTP on the loopback address | `true` |
+| `OPENCS_WEB_MAX_STREAMS` | live status streams open at once | 200 |
+| `OPENCS_WEB_MAX_STREAMS_PER_ADDRESS` | live status streams from one address (an IPv6 /64) | 4 |
+| `OPENCS_WEB_DEBUG` | `true` for development only | `false` |
+| `OPENCS_WEB_DATABASE` | the web's own SQLite file (not used yet) | `opencs-web.db` in the state directory |
+
+The unit, [`deploy/opencs-web.service`](../deploy/opencs-web.service), runs uvicorn with one worker
+(the snapshot cache and the stream counts live in its memory), listening on the loopback address only,
+and trusting the forwarded headers from `127.0.0.1` alone. It runs in the server's group to reach the
+socket, and is sandboxed like the server's: `ProtectSystem=strict` with only `/var/lib/opencs-web`
+writable, `IPAddressAllow=localhost` and `IPAddressDeny=any`, and the game first for the machine's
+resources, with `CPUWeight=50` (the game's is the default, 100) and `MemoryMax=256M` (the game's is 512M).
+`--limit-concurrency 400` answers 503 past that many connections at once.
+
+**Caddy.** [`deploy/Caddyfile`](../deploy/Caddyfile) serves the site's name over HTTPS (Caddy gets the
+certificate itself), compresses pages but not the event stream, refuses request bodies over 64 KB, and
+passes everything to uvicorn. Set the name in it, then:
+
+```bash
+sudo apt install -y caddy
+sudo cp deploy/Caddyfile /etc/caddy/Caddyfile        # and set the site's name in it
+sudo systemctl reload caddy
+sudo ufw allow 80/tcp && sudo ufw allow 443/tcp      # 80 for the certificate and the redirect
+```
+
+Behind it, Django takes the request as HTTPS from Caddy's `X-Forwarded-Proto`, redirects plain HTTP to
+HTTPS (except `/healthz`, for checks on the loopback address), sends HSTS for a year, marks its cookies
+secure and sends a strict Content-Security-Policy (the page's own style sheet and script, nothing
+inline, nothing from elsewhere). `opencs-web check --deploy` then reports two warnings, both choices
+left to the domain's owner: W005, HSTS without `includeSubDomains`, since other names under the domain
+may not all be HTTPS; and W021, no HSTS preload, which is hard to undo.
+
+**Rate limits.** Caddy's standard build has no rate limiter. The site caps live streams itself, in all
+and per address (a stream past a cap is told to come back in 30 s; the page still shows the status it
+loaded with), uvicorn caps connections, and every page comes from the one cached snapshot, so a flood
+of requests costs the web process CPU, below the game's, and never the game. To limit requests per
+address too, build Caddy with the `rate_limit` plugin (github.com/mholt/caddy-ratelimit) and uncomment
+its block in the Caddyfile; or use the firewall, as for the game port (`sudo ufw limit 443/tcp`).
+
+Log lines (logger `opencs_web`, in the journal):
+
+| line | meaning |
+|---|---|
+| `service channel unavailable: REASON` | a `WARNING`, once each time the reason changes: no socket, permission denied (is the user in the server's group?), a refused hello, no answer in time |
+| `service channel connected again (game server VERSION)` | back after that |
+| `status updates started` / `status updates stopped: no viewers` | the first live page opened, the last one closed |
+| `the game server's snapshot was not understood: ...` | a server newer than the web: upgrade the web |
+
 ## Stopping, signals and kicks
 
 | signal / command | effect |
@@ -766,7 +856,8 @@ held games, and a pilot can be online on both at once.
 Anyone can connect any program to the game port, so before opening it to the internet:
 
 1. **Firewall.** Open only the game port (`sudo ufw allow 2399/tcp`), never the admin port. The
-   service channel is a Unix socket and has no port; the web front end's HTTPS port is its own. As an outer
+   service channel is a Unix socket and has no port; the web front end needs 80 and 443 for Caddy
+   ("The web front end"), and its own port, 8000, stays on the loopback address. As an outer
    layer against connection floods, let the kernel refuse an address that opens connections too fast,
    before the server sees it: `sudo ufw limit 2399/tcp` (6 new connections in 30 s per address), or
    with nftables, `tcp dport 2399 ct state new meter opencs { ip saddr limit rate over 20/minute } drop`

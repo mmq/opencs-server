@@ -1,0 +1,54 @@
+# /etc/caddy/Caddyfile: HTTPS in front of the web front end (deploy/opencs-web.service).
+# Replace opencs.example.org with the site's name, which must also be in OPENCS_WEB_ALLOWED_HOSTS.
+# Caddy gets and renews the certificate itself; ports 80 and 443 must reach it.
+
+{
+	# Only with the rate_limit plugin (below):
+	# order rate_limit before reverse_proxy
+}
+
+opencs.example.org {
+	# Compress pages, but not the live status stream: compressing it could hold events back.
+	@compressible not path /status/events
+	encode @compressible zstd gzip
+
+	# Nothing the site takes is large.
+	request_body {
+		max_size 64KB
+	}
+
+	# Django sets these on its own responses (CSP, HSTS, nosniff, frame and referrer policy); the
+	# "?" sets them only where it did not, as on Caddy's own error pages when uvicorn is down.
+	header {
+		?Strict-Transport-Security "max-age=31536000"
+		?X-Content-Type-Options "nosniff"
+		?X-Frame-Options "DENY"
+		?Referrer-Policy "same-origin"
+		?Content-Security-Policy "default-src 'none'; frame-ancestors 'none'"
+		-Server
+	}
+
+	# Rate limits. Caddy's standard build has none. The site itself caps live streams in all and
+	# per address (OPENCS_WEB_MAX_STREAMS, OPENCS_WEB_MAX_STREAMS_PER_ADDRESS), uvicorn caps
+	# connections at once (--limit-concurrency), and every page is served from one cached
+	# snapshot, so a flood costs the web process CPU (below the game's) and never the game. To
+	# limit requests per address as well, build Caddy with github.com/mholt/caddy-ratelimit
+	# (`xcaddy build --with github.com/mholt/caddy-ratelimit`, or `caddy add-package` for the
+	# same module), uncomment the `order` line above and this:
+	#
+	# rate_limit {
+	# 	zone per_address {
+	# 		key {remote_host}
+	# 		events 120
+	# 		window 1m
+	# 	}
+	# }
+
+	# uvicorn on the loopback address. Caddy sets X-Forwarded-For and X-Forwarded-Proto, and
+	# replaces any a client sent. It passes the event stream on as it comes.
+	reverse_proxy 127.0.0.1:8000
+
+	log {
+		output file /var/log/caddy/opencs-web.log
+	}
+}

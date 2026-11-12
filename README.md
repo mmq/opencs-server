@@ -76,8 +76,9 @@ them. Expect rough edges.
 - **One server process.** Games in play, and the games held for `/RESUME`, live in memory, so a restart
   ends them; accounts and progress are saved.
 - **No way to change a password in the game.** The operator can issue a new one, and so can a web front
-  end through the service channel (ADR 12), which can also let a player choose it. No web front end is
-  in this repository yet.
+  end through the service channel (ADR 12), which can also let a player choose it. The web front end
+  in `web/` shows only the server's status so far; its registration and password pages are still to
+  come.
 - **The emulator setup** in [`docs/PLAYING.md`](docs/PLAYING.md) is the documented one; a different
   emulator or DOS setup may need its own settings.
 

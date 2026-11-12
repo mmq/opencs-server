@@ -1,0 +1,68 @@
+# /etc/systemd/system/opencs-web.service
+# The web front end (web/): Django under one uvicorn worker on the loopback address, behind Caddy
+# (deploy/Caddyfile), which serves HTTPS. It reaches the game server only through the service
+# socket, and asks it for one snapshot a second at most, only while someone is looking.
+[Unit]
+Description=OpenCS web front end
+After=network.target opencs.service
+
+[Service]
+User=opencs-web
+Group=opencs-web
+# The server's group: it may connect to /run/opencs/service.sock (0660 in a 0750 directory). It
+# cannot reach the server's data directory (0700) or database (0600).
+SupplementaryGroups=opencs
+WorkingDirectory=/opt/opencs
+# OPENCS_WEB_SECRET_KEY, OPENCS_WEB_ALLOWED_HOSTS and the web's other settings (web/README.md).
+EnvironmentFile=/etc/opencs-web/environment
+Environment=OPENCS_WEB_SERVICE_SOCKET=/run/opencs/service.sock
+# One worker: the snapshot cache and the stream counts are in its memory. Only Caddy, on the same
+# host, connects; uvicorn trusts its X-Forwarded-For and X-Forwarded-Proto from 127.0.0.1 alone.
+# --limit-concurrency answers 503 past that many connections at once (live streams included);
+# --lifespan off: Django has no startup or shutdown hooks to run.
+ExecStart=/opt/opencs/.venv/bin/uvicorn opencs_web.asgi:application \
+    --host 127.0.0.1 --port 8000 --workers 1 \
+    --proxy-headers --forwarded-allow-ips 127.0.0.1 \
+    --no-server-header --no-access-log --lifespan off \
+    --limit-concurrency 400 --timeout-graceful-shutdown 5
+Restart=on-failure
+# /var/lib/opencs-web: the web's own files (shared with the archiver).
+StateDirectory=opencs-web
+StateDirectoryMode=0700
+# Read-only everywhere else. The service socket needs no write access to /run: connecting to a
+# socket is not a write to its filesystem, and a bind mount of /run/opencs would keep the
+# directory of a server that has since restarted.
+ProtectSystem=strict
+# Below the game: it gets the CPU and memory first.
+CPUWeight=50
+IOWeight=50
+MemoryMax=256M
+TasksMax=32
+LimitNOFILE=1024
+# Sandboxing: the web needs its state directory, the socket and the loopback address.
+# `systemd-analyze security opencs-web` scores what is left. (Sending email, later, will need
+# IPAddressAllow for the mail provider.)
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+IPAddressAllow=localhost
+IPAddressDeny=any
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+
+[Install]
+WantedBy=multi-user.target
