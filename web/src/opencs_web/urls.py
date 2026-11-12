@@ -1,4 +1,5 @@
-from django.urls import path
+from django.conf import settings
+from django.urls import include, path
 
 from opencs_web import accountviews, views
 
@@ -17,4 +18,6 @@ urlpatterns = [
     path("privacy", accountviews.privacy, name="privacy"),
     path("assets/<str:name>", views.asset, name="asset"),
     path("healthz", views.health, name="health"),
+    # The admin pages: a 404 each while OPENCS_WEB_ADMIN is off.
+    path(f"{settings.OPENCS_ADMIN_PATH}/", include("opencs_web.staffurls")),
 ]

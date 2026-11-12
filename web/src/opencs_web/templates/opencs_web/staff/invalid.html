@@ -1,0 +1,11 @@
+{% extends "opencs_web/staff/base.html" %}
+{% block main %}
+<h1>{{ action.label }}</h1>
+<p class="errors" role="alert">Not done: check what was entered.</p>
+<form method="post" novalidate>
+{% csrf_token %}
+{% include "opencs_web/_fields.html" %}
+<button type="submit">{{ action.label }}{% if action.destructive %}…{% endif %}</button>
+</form>
+<p><a href="{% url 'staff:home' %}">Back to the admin status</a></p>
+{% endblock %}

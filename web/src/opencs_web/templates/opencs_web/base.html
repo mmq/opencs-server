@@ -10,11 +10,11 @@
 <body>
 <header>
 <p class="site"><a href="{% url 'home' %}">OpenCS</a></p>
-<nav aria-label="Site">
+{% block nav %}<nav aria-label="Site">
 <a href="{% url 'home' %}">Status</a>
 {% if registration_open %}<a href="{% url 'register' %}">Register</a>{% endif %}
 <a href="{% url 'account' %}">Your account</a>
-</nav>
+</nav>{% endblock %}
 </header>
 <main>
 {% block main %}{% endblock %}

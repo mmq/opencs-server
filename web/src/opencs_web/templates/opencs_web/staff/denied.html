@@ -1,0 +1,6 @@
+{% extends "opencs_web/staff/base.html" %}
+{% block main %}
+<h1>Not for your role</h1>
+<p>Only an admin may do that. It has been noted in the audit log.</p>
+<p><a href="{% url 'staff:home' %}">Back to the admin status</a></p>
+{% endblock %}

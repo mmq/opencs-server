@@ -35,6 +35,9 @@ DEFAULT_EMAIL_SECURITY = "starttls"
 #: refuses, and a few are left for passwords (which are sent past it).
 DEFAULT_EMAIL_DAILY_CAP = 90
 DEFAULT_EMAIL_FROM = "OpenCS <opencs@localhost>"
+#: The admin pages: where they live, and how long an admin's log-in lasts.
+DEFAULT_ADMIN_PATH = "admin"
+DEFAULT_ADMIN_SESSION_MINUTES = 60
 TRUE = {"1", "true", "yes", "on"}
 FALSE = {"", "0", "false", "no", "off"}
 
@@ -71,6 +74,11 @@ class WebConfig:
     email: EmailConfig | None = None
     email_from: str = DEFAULT_EMAIL_FROM
     email_daily_cap: int = DEFAULT_EMAIL_DAILY_CAP
+    #: Whether the admin pages exist at all, under which path (no slashes at either end), and
+    #: the longest an admin's log-in lasts.
+    admin: bool = False
+    admin_path: str = DEFAULT_ADMIN_PATH
+    admin_session_minutes: int = DEFAULT_ADMIN_SESSION_MINUTES
 
 
 @dataclass(frozen=True)
@@ -158,6 +166,17 @@ def _site_url(env: Mapping[str, str]) -> str | None:
     return raw
 
 
+def _admin_path(env: Mapping[str, str]) -> str:
+    raw = env.get(PREFIX + "ADMIN_PATH", "").strip().strip("/") or DEFAULT_ADMIN_PATH
+    parts = raw.split("/")
+    allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.~")
+    if any(not part or part in (".", "..") or set(part) - allowed for part in parts):
+        raise ConfigError(
+            f"{PREFIX}ADMIN_PATH must be a path of letters, digits, - _ . ~ and /, not {raw!r}"
+        )
+    return raw
+
+
 def load(env: Mapping[str, str] | None = None) -> WebConfig:
     """Read the settings; raise ConfigError if one is missing or wrong."""
     if env is None:
@@ -200,4 +219,7 @@ def load(env: Mapping[str, str] | None = None) -> WebConfig:
         email=_email(env),
         email_from=env.get(PREFIX + "EMAIL_FROM", "").strip() or DEFAULT_EMAIL_FROM,
         email_daily_cap=_count(env, "EMAIL_DAILY_CAP", DEFAULT_EMAIL_DAILY_CAP),
+        admin=_flag(env, "ADMIN"),
+        admin_path=_admin_path(env),
+        admin_session_minutes=_count(env, "ADMIN_SESSION_MINUTES", DEFAULT_ADMIN_SESSION_MINUTES),
     )

@@ -83,3 +83,18 @@ button { font: inherit; padding: 0.3rem 0.8rem; }
   height: 1px;
   overflow: hidden;
 }
+/* The admin pages (opencs_web.staffviews). */
+form.inline { display: inline; margin: 0; }
+form.action {
+  border-top: 1px solid var(--rule);
+  padding-top: 0.5rem;
+}
+form.action h3 { margin: 0 0 0.5rem; }
+pre.lines { white-space: pre-wrap; }
+table.health, table.audit { border-collapse: collapse; font-size: 0.9rem; }
+table.health th, table.health td, table.audit th, table.audit td {
+  border-bottom: 1px solid var(--rule);
+  padding: 0.2rem 0.5rem;
+  text-align: left;
+  vertical-align: top;
+}

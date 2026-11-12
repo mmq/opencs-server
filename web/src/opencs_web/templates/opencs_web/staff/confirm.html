@@ -1,0 +1,23 @@
+{% extends "opencs_web/staff/base.html" %}
+{% block main %}
+<h1>{{ action.label }}?</h1>
+<p>{{ action.warning }}</p>
+<dl class="summary">
+{% for label, value in values %}<dt>{{ label }}</dt><dd>{{ value }}</dd>
+{% endfor %}</dl>
+{% if found %}<h2>The account now</h2>
+<dl class="summary">
+<dt>Exists</dt><dd>{% if found.exists %}yes{% else %}no{% endif %}</dd>
+{% if found.exists %}<dt>Callsign</dt><dd>{{ found.callsign|default:"none yet" }}</dd>
+<dt>In the game</dt><dd>{% if found.online %}yes{% else %}no{% endif %}</dd>{% endif %}
+</dl>{% endif %}
+<form method="post" action="{% url 'staff:act' name %}" novalidate>
+{% csrf_token %}
+{% for field, value in hidden %}<input type="hidden" name="{{ field }}" value="{{ value }}">
+{% endfor %}<input type="hidden" name="confirmed" value="yes">
+{% if code_form %}<p>Your last code was a while ago: enter a current one to go on.</p>
+{% include "opencs_web/_fields.html" with form=code_form %}{% endif %}
+<button type="submit">Yes: {{ action.label|lower }}</button>
+</form>
+<p><a href="{% url 'staff:home' %}">No, go back</a></p>
+{% endblock %}

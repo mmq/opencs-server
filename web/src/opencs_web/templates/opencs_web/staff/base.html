@@ -1,0 +1,9 @@
+{% extends "opencs_web/base.html" %}
+{% block title %}Admin · OpenCS{% endblock %}
+{% block head %}<meta name="robots" content="noindex, nofollow">{% block staffhead %}{% endblock %}{% endblock %}
+{% block nav %}<nav aria-label="Admin">
+{% if admin %}<a href="{% url 'staff:home' %}">Admin status</a>
+{% if is_admin %}<a href="{% url 'staff:audit' %}">Audit log</a>{% endif %}
+<span class="note">{{ admin.name }} ({{ admin.role }})</span>
+<form class="inline" method="post" action="{% url 'staff:logout' %}">{% csrf_token %}<button type="submit">Log out</button></form>
+{% endif %}</nav>{% endblock %}

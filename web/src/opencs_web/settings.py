@@ -18,7 +18,17 @@ SECRET_KEY = _CONFIG.secret_key
 DEBUG = _CONFIG.debug
 ALLOWED_HOSTS = list(_CONFIG.allowed_hosts)
 
-INSTALLED_APPS = ["django.contrib.sessions", "opencs_web"]
+# Django's users and django-otp are for the admin pages only (``staff``): an admin is a user with
+# an ``AdminAccount``, a password and a TOTP device. Django's own admin site is not installed.
+INSTALLED_APPS = [
+    "django.contrib.contenttypes",
+    "django.contrib.auth",
+    "django.contrib.sessions",
+    "django_otp",
+    "django_otp.plugins.otp_totp",
+    "django_otp.plugins.otp_static",
+    "opencs_web",
+]
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -89,6 +99,24 @@ else:
             },
         }
     }
+
+# The admin pages (``staff``): off unless turned on, under their own path. An admin's log-in lasts
+# at most ``OPENCS_ADMIN_SESSION_MINUTES``, and less if idle (``staff.IDLE_SECONDS``).
+OPENCS_ADMIN = _CONFIG.admin
+OPENCS_ADMIN_PATH = _CONFIG.admin_path
+OPENCS_ADMIN_SESSION_MINUTES = _CONFIG.admin_session_minutes
+# Admin passwords: Argon2id, Django's own hasher (argon2-cffi is the server's dependency already).
+PASSWORD_HASHERS = ["django.contrib.auth.hashers.Argon2PasswordHasher"]
+AUTH_PASSWORD_VALIDATORS = [
+    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    {
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+        "OPTIONS": {"min_length": 12},
+    },
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+]
+OTP_TOTP_ISSUER = "OpenCS"
 
 # A web account's session: in the web's database, so logging out ends it. Two weeks.
 SESSION_COOKIE_AGE = 14 * 24 * 3600

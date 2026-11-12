@@ -1,0 +1,10 @@
+{% extends "opencs_web/staff/base.html" %}
+{% block main %}
+<h1>{{ action.label }}: {% if outcome == "ok" %}done{% elif outcome == "offline" %}not done{% else %}refused{% endif %}</h1>
+<pre class="lines" role="status">{% for line in lines %}{{ line }}
+{% endfor %}</pre>
+{% if password %}<p>The new password for {{ account_name }}, shown this once:</p>
+<p class="password"><code>{{ password }}</code></p>
+<p>It is not kept anywhere: give it to the player now.</p>{% endif %}
+<p><a href="{% url 'staff:home' %}">Back to the admin status</a></p>
+{% endblock %}

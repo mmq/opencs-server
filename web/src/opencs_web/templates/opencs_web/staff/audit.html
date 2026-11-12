@@ -1,0 +1,12 @@
+{% extends "opencs_web/staff/base.html" %}
+{% block main %}
+<h1>Audit log</h1>
+<p class="note">The latest {{ entries|length }} entries, newest first, in UTC. The site only adds to this log.</p>
+<table class="audit">
+<thead><tr><th scope="col">When</th><th scope="col">Who</th><th scope="col">From</th><th scope="col">Action</th><th scope="col">Target</th><th scope="col">Result</th><th scope="col">Detail</th></tr></thead>
+<tbody>{% for e in entries %}<tr>
+<td>{{ e.at|date:"Y-m-d H:i:s" }}</td><td>{{ e.who }}{% if e.role %} ({{ e.role }}){% endif %}</td><td>{{ e.source }}</td>
+<td>{{ e.action }}</td><td>{{ e.target }}</td><td>{{ e.result }}</td><td>{{ e.detail|linebreaksbr }}</td>
+</tr>{% empty %}<tr><td colspan="7">Nothing yet.</td></tr>{% endfor %}</tbody>
+</table>
+{% endblock %}

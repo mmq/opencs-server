@@ -1,0 +1,40 @@
+{% extends "opencs_web/staff/base.html" %}
+{% block staffhead %}<script src="{% url 'asset' 'live.js' %}" defer></script>{% endblock %}
+{% block main %}
+<h1>Admin</h1>
+{% if notice %}<p class="notice" role="status">{{ notice }}</p>{% endif %}
+<section id="status" aria-labelledby="status-heading" data-events="{% url 'status-events' %}">
+{% include "opencs_web/status.html" %}
+</section>
+<p id="live" class="note" role="status"></p>
+
+<section aria-labelledby="health-heading">
+<h2 id="health-heading">Server health (as loaded)</h2>
+{% if details %}<table class="health">
+<thead><tr><th scope="col">City</th><th scope="col">Pilots</th><th scope="col">Hits without a shot</th><th scope="col">Hits from far away</th><th scope="col">Slow calls (worst ms)</th><th scope="col">Failures (rebuilds)</th></tr></thead>
+<tbody>{% for city in details.cities %}<tr>
+<th scope="row">{{ city.letter }} {{ city.name }}</th><td>{{ city.players }}</td>
+<td>{{ city.hits_without_a_shot }}</td><td>{{ city.distant_hits }}</td>
+<td>{{ city.slow_calls }}{% if city.slow_calls %} ({{ city.worst_call_ms }}){% endif %}</td>
+<td>{{ city.failures }}{% if city.failures %} ({{ city.rebuilds }}){% endif %}</td>
+</tr>{% endfor %}</tbody>
+</table>
+<p class="help">Odd hit reports are applied all the same: they are a sign of a modified client or a bad
+connection, worth watching, not proof.</p>
+<pre class="lines">{% for line in details.lines %}{{ line }}
+{% endfor %}</pre>
+{% else %}<p>The game server is not answering.</p>{% endif %}
+<p><a href="{% url 'staff:home' %}">Refresh</a></p>
+</section>
+
+<section aria-labelledby="actions-heading">
+<h2 id="actions-heading">Commands</h2>
+{% for name, action, form in actions %}<form class="action" method="post" action="{% url 'staff:act' name %}" novalidate>
+{% csrf_token %}
+<h3>{{ action.label }}</h3>
+{% include "opencs_web/_fields.html" %}
+<button type="submit">{{ action.label }}{% if action.destructive %}…{% endif %}</button>
+</form>
+{% endfor %}
+</section>
+{% endblock %}

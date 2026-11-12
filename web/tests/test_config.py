@@ -184,3 +184,37 @@ def test_resends_smtp_settings_are_read() -> None:
 def test_account_settings_it_cannot_use_are_refused(env: dict[str, str], name: str) -> None:
     with pytest.raises(ConfigError, match=name):
         load({**KEY, **env})
+
+
+def test_the_admin_pages_are_off_by_default() -> None:
+    config = load(KEY)
+    assert config.admin is False
+    assert config.admin_path == "admin"
+    assert config.admin_session_minutes == 60
+
+
+def test_the_admin_settings_are_read() -> None:
+    config = load(
+        {
+            **KEY,
+            "OPENCS_WEB_ADMIN": "true",
+            "OPENCS_WEB_ADMIN_PATH": "/ops/x-7/",
+            "OPENCS_WEB_ADMIN_SESSION_MINUTES": "20",
+        }
+    )
+    assert (config.admin, config.admin_path, config.admin_session_minutes) == (True, "ops/x-7", 20)
+
+
+@pytest.mark.parametrize(
+    ("env", "name"),
+    [
+        ({"OPENCS_WEB_ADMIN": "maybe"}, "ADMIN"),
+        ({"OPENCS_WEB_ADMIN_PATH": "a b"}, "ADMIN_PATH"),
+        ({"OPENCS_WEB_ADMIN_PATH": "ops/../x"}, "ADMIN_PATH"),
+        ({"OPENCS_WEB_ADMIN_PATH": "ops//x"}, "ADMIN_PATH"),
+        ({"OPENCS_WEB_ADMIN_SESSION_MINUTES": "0"}, "ADMIN_SESSION_MINUTES"),
+    ],
+)
+def test_admin_settings_it_cannot_use_are_refused(env: dict[str, str], name: str) -> None:
+    with pytest.raises(ConfigError, match=name):
+        load({**KEY, **env})
