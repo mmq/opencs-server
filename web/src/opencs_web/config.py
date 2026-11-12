@@ -18,6 +18,11 @@ DEFAULT_ARCHIVE_NAME = "opencs-archive.db"
 #: all day fills 10 GB in about two years.
 DEFAULT_ARCHIVE_MAX_DAYS = 365
 DEFAULT_ARCHIVE_MAX_BYTES = 10_000_000_000
+#: Live status streams (server-sent events) open at once, in all and from one address (an IPv6
+#: /64). Each costs a connection and a few kilobytes; none of them costs the game server anything,
+#: since they share one snapshot a second.
+DEFAULT_MAX_STREAMS = 200
+DEFAULT_MAX_STREAMS_PER_ADDRESS = 4
 TRUE = {"1", "true", "yes", "on"}
 FALSE = {"", "0", "false", "no", "off"}
 
@@ -36,10 +41,16 @@ class WebConfig:
     archive: Path = Path(DEFAULT_ARCHIVE_NAME)
     archive_max_days: int = DEFAULT_ARCHIVE_MAX_DAYS
     archive_max_bytes: int = DEFAULT_ARCHIVE_MAX_BYTES
+    service_socket: Path | None = None
+    https: bool = True
+    max_streams: int = DEFAULT_MAX_STREAMS
+    max_streams_per_address: int = DEFAULT_MAX_STREAMS_PER_ADDRESS
 
 
-def _flag(env: Mapping[str, str], name: str) -> bool:
+def _flag(env: Mapping[str, str], name: str, default: bool = False) -> bool:
     raw = env.get(PREFIX + name, "").strip().lower()
+    if not raw:
+        return default
     if raw in TRUE:
         return True
     if raw in FALSE:
@@ -87,6 +98,7 @@ def load(env: Mapping[str, str] | None = None) -> WebConfig:
     if archive == database and str(database) != ":memory:":
         raise ConfigError(f"{PREFIX}ARCHIVE must not be the web's database")
     recordings = env.get(PREFIX + "RECORDINGS", "").strip()
+    socket = env.get(PREFIX + "SERVICE_SOCKET", "").strip()
     return WebConfig(
         secret_key=secret_key,
         debug=_flag(env, "DEBUG"),
@@ -96,4 +108,10 @@ def load(env: Mapping[str, str] | None = None) -> WebConfig:
         archive=archive,
         archive_max_days=_count(env, "ARCHIVE_MAX_DAYS", DEFAULT_ARCHIVE_MAX_DAYS),
         archive_max_bytes=_count(env, "ARCHIVE_MAX_BYTES", DEFAULT_ARCHIVE_MAX_BYTES),
+        service_socket=Path(socket) if socket else None,
+        https=_flag(env, "HTTPS", default=True),
+        max_streams=_count(env, "MAX_STREAMS", DEFAULT_MAX_STREAMS),
+        max_streams_per_address=_count(
+            env, "MAX_STREAMS_PER_ADDRESS", DEFAULT_MAX_STREAMS_PER_ADDRESS
+        ),
     )

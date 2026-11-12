@@ -81,3 +81,27 @@ def test_the_archive_settings() -> None:
 def test_archive_settings_it_cannot_use_are_refused(name: str, value: str) -> None:
     with pytest.raises(ConfigError, match=name):
         load({**KEY, f"OPENCS_WEB_{name}": value})
+
+
+def test_the_site_settings_default_to_https_and_no_service_socket() -> None:
+    config = load(KEY)
+    assert config.https is True
+    assert config.service_socket is None
+    assert (config.max_streams, config.max_streams_per_address) == (200, 4)
+
+
+def test_the_site_settings_are_read() -> None:
+    config = load(
+        {
+            **KEY,
+            "OPENCS_WEB_HTTPS": "false",
+            "OPENCS_WEB_SERVICE_SOCKET": "/run/opencs/service.sock",
+            "OPENCS_WEB_MAX_STREAMS": "50",
+            "OPENCS_WEB_MAX_STREAMS_PER_ADDRESS": "2",
+        }
+    )
+    assert config.https is False
+    assert config.service_socket == Path("/run/opencs/service.sock")
+    assert (config.max_streams, config.max_streams_per_address) == (50, 2)
+    with pytest.raises(ConfigError, match="MAX_STREAMS"):
+        load({**KEY, "OPENCS_WEB_MAX_STREAMS": "0"})

@@ -1,0 +1,19 @@
+{% if status.online %}<h2 id="status-heading">Game server: online</h2>
+<dl class="summary">
+<dt>Accounts</dt><dd>{{ status.accounts }}</dd>
+<dt>Pilots flying</dt><dd>{{ status.pilot_count }}</dd>
+<dt>Games held for returning pilots</dt><dd>{{ status.held }}</dd>
+<dt>Up for</dt><dd>{{ status.uptime }}</dd>
+</dl>
+{% for city in status.cities %}<section class="city" aria-labelledby="city-{{ forloop.counter }}">
+<h3 id="city-{{ forloop.counter }}">City {{ city.letter }}: {{ city.name }}</h3>
+<p>{{ city.pilot_count }} of {{ city.capacity }} pilots</p>
+{% for team in city.teams %}<h4>{{ team.name|title }}</h4>
+<ul>{% for pilot in team.pilots %}
+<li>{{ pilot.callsign }}{% if pilot.guest %} <span class="guest">(guest)</span>{% endif %}</li>{% endfor %}
+</ul>
+{% endfor %}</section>
+{% empty %}<p>No cities are open.</p>
+{% endfor %}{% else %}<h2 id="status-heading">Game server: offline</h2>
+<p>The game server is not answering just now. It may be restarting; this page shows it again when it is back.</p>
+{% endif %}

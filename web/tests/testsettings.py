@@ -5,5 +5,6 @@ import os
 
 os.environ.setdefault("OPENCS_WEB_SECRET_KEY", "test-only-not-a-secret")
 os.environ.setdefault("OPENCS_WEB_DATABASE", ":memory:")
+os.environ.setdefault("OPENCS_WEB_HTTPS", "false")  # the test client speaks plain HTTP
 
 from opencs_web.settings import *  # noqa: F403

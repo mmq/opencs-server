@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenCS</title>
+<link rel="stylesheet" href="{% url 'asset' 'site.css' %}">
+<script src="{% url 'asset' 'live.js' %}" defer></script>
+</head>
+<body>
+<header>
+<h1>OpenCS</h1>
+<p>A server for CyberStrike, the 1993 online game.</p>
+</header>
+<main>
+<section id="status" aria-labelledby="status-heading" data-events="{% url 'status-events' %}">
+{% include "opencs_web/status.html" %}
+</section>
+<p id="live" class="note" role="status"></p>
+</main>
+</body>
+</html>
