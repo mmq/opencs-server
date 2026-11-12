@@ -51,6 +51,15 @@ city while anyone watches it, decoding it once for all of them. The endpoints ar
 (server-sent `track` events); every one is cut at the audience's delay on the server. ADR 16 has the
 track format; OPERATING, "Maps", the settings.
 
+The viewer is two plain ES modules of the site's own, served by `views.asset` (no framework, no build
+step, nothing from elsewhere, so the strict CSP holds): `assets/maptrack.js` has no page in it (it
+decodes windows, applies events to a state, works out where pods are between reports by dead
+reckoning from speed and turn rate, closing onto the next report, at most a second ahead, and moves
+NPCs from their `go` to their `arr`), and `assets/maps.js` draws it on a canvas and runs the timeline,
+from the stream while following the game and from the windows when seeking. Its pages are `/maps`
+(`mapviews.page`, the public's delay, never chat) and `<admin>/maps` (`staffviews.maps`), both from
+`templates/opencs_web/_viewer.html`, whose `data-` attributes give the script the delay it plays at.
+
 ## Settings
 
 Read from the environment (in production, a systemd `EnvironmentFile`):
@@ -107,10 +116,14 @@ registration link from there.
 From the repository root:
 
 ```sh
-uv run pytest web
+uv run pytest web                                     # runs tests/js with node, if installed
 uv run mypy --config-file web/pyproject.toml
 uv run ruff check . && uv run ruff format --check .   # covers web/ too
 ```
+
+`tests/js/maptrack.test.mjs` tests the viewer's track logic with `node --test` (no packages) against
+the recorded fixtures, which `tests/test_map_viewer.py` turns into windows first; without node that
+test is skipped.
 
 ## Compression benchmark
 

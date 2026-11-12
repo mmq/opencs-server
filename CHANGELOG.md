@@ -50,9 +50,16 @@ upgrading.
   code after five minutes; a `moderator` role only kicks and announces. Everything goes in an audit log
   the site only adds to. The web now depends on `django-otp` and `segno` (the enrolment QR code, drawn
   in the terminal) too. The service channel's `status` adds each city's health as numbers.
-- Maps in the web front end, as JSON for a map viewer (the viewer itself is to come): the cities and
-  the times recorded, a city's blocks, its track a minute at a time (pods, shots, deaths, towers, NPCs,
-  territory, scores) and as server-sent events. The public sees them an hour behind
+- Maps in the web front end: a `/maps` page (linked from the status page) with a map viewer, the
+  city from above on a canvas (blocks by value and by who controls them, pods by team with their
+  heading and callsign, shots, deaths, towers, mines, Sentinels, Munchers and guppies), moving
+  smoothly between reports, with pan and zoom, a legend and the scores, and a timeline to play,
+  pause, play faster (2x to 8x) and seek over everything recorded; it follows the game at the delay
+  unless taken back. Administrators have the same viewer on the admin pages, at their own delay and
+  with chat if allowed. A plain script of the site's own (no build step, nothing from elsewhere) that
+  fetches nothing while its tab is hidden. Behind it, JSON: the cities and the times recorded, a
+  city's blocks, its track a minute at a time (pods, shots, deaths, towers, NPCs, territory, scores)
+  and as server-sent events. The public sees them an hour behind
   (`OPENCS_WEB_MAP_DELAY_PUBLIC`; 0 is allowed and makes a radar), administrators as they happen
   (`OPENCS_WEB_MAP_DELAY_ADMIN`); nothing newer is ever sent. Recorded chat only for administrators,
   with `OPENCS_WEB_MAP_ADMIN_CHAT` (ADR 16).

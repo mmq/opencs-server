@@ -924,7 +924,23 @@ free. Another provider's steps are the same three records with its own values.
 
 ### Maps
 
-The web serves a city's map as JSON for a map viewer (ADR 16 has the format): `/maps/cities.json` (the
+The site's **Maps** page (`/maps`, linked from the status page) shows a city from above, with the
+red home in the top left corner: the blocks shaded by what they are worth and tinted by the team
+that controls them, the home corners, each pod as an arrow in its team's colour with its callsign,
+shots, deaths (a cross for a few seconds), towers, mines, Sentinels, Munchers and guppies, and the
+scores. Pods move smoothly between their reports (estimated from their speed and turn rate, never
+more than a second ahead of the last one). Players pick a city, drag and zoom the map, and use the
+timeline: play and pause, 1x to 8x, back and on 10 seconds, a slider over everything recorded, and a
+button back to the latest; the keyboard does the same (space, the arrow keys, L). The page says how
+far behind it is ("shown one hour behind"); by default it follows the game at that delay. Without
+JavaScript it says the map needs it. It fetches a minute of the track at a time, the next one ahead,
+and nothing while its tab is hidden.
+
+Administrators have the same viewer on the admin pages (**Maps**, linked from the admin status page)
+at their own delay, with the recorded chat beside it if `OPENCS_WEB_MAP_ADMIN_CHAT` is on. The public
+page never shows chat, even to an administrator.
+
+The viewer reads JSON (ADR 16 has the format): `/maps/cities.json` (the
 cities and the spans of time recorded), `/maps/<letter>/map.json` (the city's blocks and home corners),
 `/maps/<letter>/track.json?t=<UTC ms>` (the minute holding `t`: the city at its start and what happened
 in it) and `/maps/<letter>/live` (server-sent events, the track as it comes; `?delay=` seconds asks for
