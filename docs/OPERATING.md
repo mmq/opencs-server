@@ -428,7 +428,9 @@ with status 1 (`systemctl status opencs-web-archive` shows it failed); move it a
 It runs as its own user, `opencs-web` (the web front end's), in the server's group, from two units in
 `deploy/`: `opencs-web-archive.path` watches the recordings directory and starts
 `opencs-web-archive.service`, a sandboxed one-shot run, whenever a segment begins or finishes. With every
-city empty nothing changes and nothing runs. The web package and its settings:
+city empty nothing changes and nothing runs. A segment that finishes while a run is going may not start
+another, so `opencs-web-archive.timer` also runs it once an hour as a backstop (a run with nothing to do
+takes milliseconds). The web package and its settings:
 
 ```bash
 sudo useradd --system --shell /usr/sbin/nologin opencs-web     # if the web front end has not made it
@@ -437,12 +439,25 @@ cd /opt/opencs && sudo uv sync --no-dev --all-packages         # adds opencs-web
 sudo install -d -m 0700 /etc/opencs-web
 sudo sh -c 'umask 077; echo "OPENCS_WEB_SECRET_KEY=$(head -c 32 /dev/urandom | base64 | tr -d "=+/")" \
     > /etc/opencs-web/environment'
-sudo install -m 644 deploy/opencs-web-archive.path deploy/opencs-web-archive.service /etc/systemd/system/
+sudo install -m 644 deploy/opencs-web-archive.{path,service,timer} /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now opencs-web-archive.path
+sudo systemctl enable --now opencs-web-archive.path opencs-web-archive.timer
 sudo systemctl start opencs-web-archive          # once, for the segments already there
 journalctl -u opencs-web-archive                 # "archived B-20261111T194024Z.ocsrec", ...
 ```
+
+Without systemd, run `opencs-web archive` from cron or any scheduler, say every five minutes (one
+segment rotation): it is safe to run at any time, and a run interrupted or overlapping another is
+finished by the next. Run it as the server's user, or as a user in the server's group as above. If
+nothing runs it, the server keeps raw segments up to `max_bytes`, then pauses recording and logs "no
+room for a recording"; it never deletes them.
+
+```
+*/5 * * * *  OPENCS_WEB_SECRET_KEY=... OPENCS_WEB_RECORDINGS=/var/lib/opencs-recordings OPENCS_WEB_ARCHIVE=/var/lib/opencs-web/opencs-archive.db /opt/opencs/.venv/bin/opencs-web archive
+```
+
+Set `OPENCS_WEB_ARCHIVE` there: outside systemd there is no state directory, and the archive would
+otherwise be made in the working directory.
 
 The recordings directory must be mode 2770 (as in "Layout"); one made 0700 by an older install needs
 `sudo chmod 2770 /var/lib/opencs-recordings`, and segments made before this version need

@@ -17,8 +17,8 @@ upgrading.
   is written to segment files for a future archiver, on a thread of its own, under a size cap and a
   free-space floor. A slow or failing disk stops the recording, never the game. Recordings hold chat;
   the server deletes only segments the archiver has marked done (ADR 14).
-- A recording archiver, `opencs-web archive`, run by a systemd path unit as the web's user: it stores
-  each finished segment compressed in an archive of its own (about 0.5 MB an hour for a busy city),
+- A recording archiver, `opencs-web archive`, run by a systemd path unit (with an hourly timer as a
+  backstop) or from cron: it stores each finished segment compressed in an archive of its own (about 0.5 MB an hour for a busy city),
   with tables of games, pilots and battle events, deletes the segment, and keeps 12 months or 10 GB.
   `opencs-web forget_callsign` takes a deleted account's callsign out of it. The server now makes
   segments mode 0640 so the archiver, in its group, can read them; the recordings directory should be

@@ -1,0 +1,15 @@
+# /etc/systemd/system/opencs-web-archive.timer
+# A backstop for opencs-web-archive.path: a segment that finishes while a run is already going may
+# not start another, and if that was a city's last segment nothing else changes the directory. A
+# run that finds nothing to do takes milliseconds.
+[Unit]
+Description=Archive OpenCS game recordings once an hour, in case the path unit missed one
+
+[Timer]
+OnBootSec=15min
+OnUnitInactiveSec=1h
+RandomizedDelaySec=5min
+Unit=opencs-web-archive.service
+
+[Install]
+WantedBy=timers.target
