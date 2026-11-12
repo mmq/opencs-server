@@ -1,0 +1,10 @@
+{% extends "opencs_web/base.html" %}
+{% block title %}Maps · OpenCS{% endblock %}
+{% block head %}<script type="module" src="{% url 'asset' 'maps.js' %}"></script>{% endblock %}
+{% block main %}
+<h1>Maps</h1>
+<p>Each city seen from above: the pods, their shots, the towers and who holds which block.
+{% if viewer.delay %}Games are <strong>shown {{ viewer.delay_words }} behind</strong>, so nothing here helps anyone playing now; older games can be played back for as long as they are kept.
+{% else %}Games are shown as they are played.{% endif %}</p>
+{% include "opencs_web/_viewer.html" %}
+{% endblock %}

@@ -98,3 +98,63 @@ table.health th, table.health td, table.audit th, table.audit td {
   text-align: left;
   vertical-align: top;
 }
+/* The maps (assets/maps.js, templates/_viewer.html). The canvas draws in its own colours, the same
+   in light and dark. */
+.map-pick { margin: 0.5rem 0; }
+.map-stage canvas {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  touch-action: none;
+  cursor: grab;
+  border: 1px solid var(--rule);
+}
+.map-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.6rem;
+  margin: 0.5rem 0;
+}
+.map-controls input[type="range"] { flex: 1 1 100%; }
+.map-controls output { font-variant-numeric: tabular-nums; }
+.legend { list-style: none; padding: 0; }
+.legend li { margin: 0.2rem 0; }
+.key {
+  display: inline-block;
+  width: 0.8rem;
+  height: 0.8rem;
+  margin-right: 0.2rem;
+  vertical-align: middle;
+  line-height: 0.8rem;
+  text-align: center;
+  font-weight: bold;
+}
+.key.team-0, .key.team-1, .key.team-2, .key.team-3 { clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+.key.team-0, .scores .team-0 td:first-child::before { background: #d62728; }
+.key.team-1, .scores .team-1 td:first-child::before { background: #1f5fd6; }
+.key.team-2, .scores .team-2 td:first-child::before { background: #1a9a3a; }
+.key.team-3, .scores .team-3 td:first-child::before { background: #1b1b1b; }
+.key.ring { border: 2px solid var(--muted); border-radius: 50%; }
+.key.death { color: #c00000; }
+.key.shot { height: 2px; background: var(--fg); }
+.key.tower { background: var(--muted); }
+.key.mine { color: var(--muted); }
+.key.sentinel { background: #7b3fa0; transform: rotate(45deg) scale(0.8); }
+.key.muncher { background: #e07b00; border-radius: 50%; }
+.key.guppy { background: #139a9a; border-radius: 50%; transform: scale(0.7); }
+.key.block { background: linear-gradient(90deg, #e6e3da, #b8a77c); }
+table.scores { border-collapse: collapse; font-size: 0.9rem; }
+table.scores th, table.scores td {
+  border-bottom: 1px solid var(--rule);
+  padding: 0.15rem 0.5rem;
+  text-align: left;
+}
+.scores td:first-child::before {
+  content: "";
+  display: inline-block;
+  width: 0.6rem;
+  height: 0.6rem;
+  margin-right: 0.3rem;
+}
+ol.lines { font-family: ui-monospace, monospace; font-size: 0.9rem; padding-left: 1.5rem; }

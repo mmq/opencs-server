@@ -25,7 +25,7 @@ from django.urls import reverse
 from django.views.decorators.debug import sensitive_post_parameters
 from django.views.decorators.http import require_http_methods, require_POST, require_safe
 
-from opencs_web import live, staff
+from opencs_web import live, mapviews, staff
 from opencs_web.channel import RefusedError, UnavailableError
 from opencs_web.models import AdminAccount, AuditEntry, Player
 from opencs_web.staffforms import (
@@ -227,6 +227,7 @@ async def home(request: HttpRequest) -> HttpResponse:
         "details": details if isinstance(details, dict) else None,
         "actions": actions,
         "notice": await request.session.apop(NOTICE, None),
+        "map_delay": mapviews.delay_words(settings.OPENCS_MAP_DELAY_ADMIN),
     }
     return _page(request, "home", context, admin)
 
@@ -242,6 +243,21 @@ async def audit_log(request: HttpRequest) -> HttpResponse:
         return _page(request, "denied", {}, admin, status=403)
     entries = [e async for e in AuditEntry.objects.all()[:AUDIT_PAGE]]
     return _page(request, "audit", {"entries": entries}, admin)
+
+
+@_enabled
+@require_safe
+async def maps(request: HttpRequest) -> HttpResponse:
+    """The map viewer at the administrators' delay (none by default), with the recorded chat if
+    ``OPENCS_WEB_MAP_ADMIN_CHAT`` is on."""
+    admin = await _admin(request)
+    if isinstance(admin, HttpResponse):
+        return admin
+    viewer = mapviews.viewer(
+        settings.OPENCS_MAP_DELAY_ADMIN, chat=settings.OPENCS_MAP_ADMIN_CHAT, admin=True
+    )
+    public = mapviews.delay_words(settings.OPENCS_MAP_DELAY_PUBLIC)
+    return _page(request, "maps", {"viewer": viewer, "public_delay": public}, admin)
 
 
 # --- actions -------------------------------------------------------------------------------------

@@ -1,18 +1,22 @@
 from functools import lru_cache
 from importlib.resources import files
 
+from django.conf import settings
 from django.http import Http404, HttpRequest, HttpResponse, StreamingHttpResponse
 from django.shortcuts import render
 from django.template.loader import render_to_string
 from django.views.decorators.http import require_safe
 
 from opencs_web import live
+from opencs_web.mapviews import delay_words
 from opencs_web.status import Status
 
 #: The page's own style sheet and script, served from the package: no external assets.
 ASSETS = {
     "site.css": "text/css; charset=utf-8",
     "live.js": "text/javascript; charset=utf-8",
+    "maps.js": "text/javascript; charset=utf-8",
+    "maptrack.js": "text/javascript; charset=utf-8",
 }
 
 
@@ -27,7 +31,8 @@ async def home(request: HttpRequest) -> HttpResponse:
     """The status page, rendered with the current status, so it works without JavaScript; the
     script then keeps it live from :func:`status_events`. "Offline" is a page, not an error."""
     status = await live.status_cache().get()
-    response = render(request, "opencs_web/home.html", {"status": status})
+    context = {"status": status, "map_delay": delay_words(settings.OPENCS_MAP_DELAY_PUBLIC)}
+    response = render(request, "opencs_web/home.html", context)
     response["Cache-Control"] = "no-cache"
     return response
 

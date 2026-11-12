@@ -1,0 +1,9 @@
+{% extends "opencs_web/staff/base.html" %}
+{% block staffhead %}<script type="module" src="{% url 'asset' 'maps.js' %}"></script>{% endblock %}
+{% block main %}
+<h1>Maps</h1>
+<p>{% if viewer.delay %}Shown {{ viewer.delay_words }} behind (<code>OPENCS_WEB_MAP_DELAY_ADMIN</code>).{% else %}Shown as the games are played.{% endif %}
+{% if viewer.chat %}With the recorded chat.{% else %}Without chat (<code>OPENCS_WEB_MAP_ADMIN_CHAT</code> is off).{% endif %}
+The public's maps are {% if public_delay %}{{ public_delay }} behind{% else %}not delayed: a radar for anyone playing{% endif %}.</p>
+{% include "opencs_web/_viewer.html" %}
+{% endblock %}

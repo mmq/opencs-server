@@ -16,6 +16,7 @@ urlpatterns = [
     path("account/password", accountviews.new_password, name="new-password"),
     path("account/delete", accountviews.delete, name="delete"),
     path("privacy", accountviews.privacy, name="privacy"),
+    path("maps", mapviews.page, name="maps"),
     path("maps/cities.json", mapviews.cities, name="map-cities"),
     path("maps/<str:letter>/map.json", mapviews.city_map, name="map"),
     path("maps/<str:letter>/track.json", mapviews.track, name="map-track"),

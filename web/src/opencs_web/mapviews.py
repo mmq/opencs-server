@@ -19,6 +19,8 @@ from typing import Any
 
 from django.conf import settings
 from django.http import HttpRequest, HttpResponse, JsonResponse, StreamingHttpResponse
+from django.shortcuts import render
+from django.urls import reverse
 from django.views.decorators.http import require_safe
 
 from opencs import policy
@@ -37,6 +39,8 @@ from opencs_web.maps.windows import WINDOW_MS, WindowCache, window_start
 REQUESTS_PER_SOURCE = (60, 2.0)
 #: How long the list of cities and their recorded spans is kept, in seconds.
 CITIES_TTL = 5.0
+#: How long a browser may keep a city's map.json, in seconds.
+MAP_MAX_AGE = 300
 
 
 @dataclass(frozen=True)
@@ -134,6 +138,44 @@ def _letter(letter: str) -> str | None:
     return letter if len(letter) == 1 and "A" <= letter <= "Z" else None
 
 
+# --- the viewer's pages -------------------------------------------------------------------------
+
+
+def delay_words(seconds: int) -> str:
+    """A delay as a player reads it: "one hour", "1 hour and 30 minutes", "45 seconds"."""
+    units = (("hour", 3600), ("minute", 60), ("second", 1))
+    parts = []
+    for name, size in units:
+        count, seconds = divmod(seconds, size)
+        if count:
+            parts.append(f"one {name}" if count == 1 else f"{count} {name}s")
+    if not parts:
+        return ""
+    return parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " and " + parts[-1]
+
+
+def viewer(delay: int, *, chat: bool, admin: bool) -> dict[str, Any]:
+    """What a page with the map viewer gives the script (``maps.html``'s ``data-`` attributes):
+    the endpoints, and the delay it plays at, the audience's, which the script never goes below."""
+    return {
+        "delay": delay,
+        "delay_words": delay_words(delay),
+        "chat": chat,
+        "admin": admin,
+        "base": reverse("map-cities").rsplit("/", 1)[0] + "/",
+    }
+
+
+@require_safe
+async def page(request: HttpRequest) -> HttpResponse:
+    """The public maps page: the viewer at the public's delay, never with chat (an administrator
+    logged in has their own page, under the admin pages)."""
+    context = {"viewer": viewer(settings.OPENCS_MAP_DELAY_PUBLIC, chat=False, admin=False)}
+    response = render(request, "opencs_web/maps.html", context)
+    response["Cache-Control"] = "no-cache"
+    return response
+
+
 # --- the cities ----------------------------------------------------------------------------------
 
 
@@ -208,7 +250,7 @@ async def city_map(request: HttpRequest, letter: str) -> HttpResponse:
         config = header.get("config") if header else None
     if not isinstance(config, dict):
         return _error("no-city", 404)
-    return _json(
+    response = _json(
         {
             "v": FORMAT_VERSION,
             "city": city,
@@ -221,6 +263,9 @@ async def city_map(request: HttpRequest, letter: str) -> HttpResponse:
             "homes": [list(cell) for cell in policy.TEAM_CORNER_CELLS],
         }
     )
+    # A city's map changes only when its file does (and is reloaded): a viewer may keep it a while.
+    response["Cache-Control"] = f"max-age={MAP_MAX_AGE}"
+    return response
 
 
 # --- a window of the track -----------------------------------------------------------------------

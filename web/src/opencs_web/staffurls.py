@@ -11,5 +11,6 @@ urlpatterns = [
     path("login", staffviews.login, name="login"),
     path("logout", staffviews.logout, name="logout"),
     path("audit", staffviews.audit_log, name="audit"),
+    path("maps", staffviews.maps, name="maps"),
     path("do/<str:action>", staffviews.act, name="act"),
 ]

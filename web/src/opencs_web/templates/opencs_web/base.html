@@ -12,6 +12,7 @@
 <p class="site"><a href="{% url 'home' %}">OpenCS</a></p>
 {% block nav %}<nav aria-label="Site">
 <a href="{% url 'home' %}">Status</a>
+<a href="{% url 'maps' %}">Maps</a>
 {% if registration_open %}<a href="{% url 'register' %}">Register</a>{% endif %}
 <a href="{% url 'account' %}">Your account</a>
 </nav>{% endblock %}

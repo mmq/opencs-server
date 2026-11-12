@@ -1,0 +1,43 @@
+{# The map viewer (assets/maps.js), given `viewer` (mapviews.viewer). Hidden until the script runs. #}
+<noscript><p class="notice">The map needs JavaScript, which is off or not supported in this browser.</p></noscript>
+<div id="viewer" class="viewer" hidden data-base="{{ viewer.base }}" data-delay="{{ viewer.delay }}" data-delay-words="{{ viewer.delay_words }}" data-chat="{{ viewer.chat|yesno:'1,0' }}" data-admin="{{ viewer.admin|yesno:'1,0' }}">
+<p class="map-pick"><label for="map-city">City</label>
+<select id="map-city"></select></p>
+<p id="map-note" class="note" role="status" aria-live="polite">Loading the cities…</p>
+<div class="map-stage">
+<canvas id="map-canvas" width="600" height="600" tabindex="0" role="img" aria-label="Map of the city, seen from above, the red home in the top left corner"></canvas>
+</div>
+<div class="map-controls" role="group" aria-label="Timeline">
+<button type="button" id="map-play" aria-pressed="false">Play</button>
+<button type="button" id="map-back" aria-label="Back 10 seconds">−10 s</button>
+<button type="button" id="map-forward" aria-label="Forward 10 seconds">+10 s</button>
+<button type="button" id="map-live">{% if viewer.delay %}Latest{% else %}Live{% endif %}</button>
+<label for="map-speed">Speed</label>
+<select id="map-speed"><option value="1">1×</option><option value="2">2×</option><option value="4">4×</option><option value="8">8×</option></select>
+<output id="map-time" for="map-seek" aria-live="off"></output>
+<input type="range" id="map-seek" min="0" max="1" step="1000" value="0" aria-label="Time">
+</div>
+<div class="map-controls" role="group" aria-label="View">
+<button type="button" id="map-zoom-in" aria-label="Zoom in">+</button>
+<button type="button" id="map-zoom-out" aria-label="Zoom out">−</button>
+<button type="button" id="map-zoom-reset">Whole city</button>
+<span class="help">Keys: space plays or pauses, ← and → go back and on 10 seconds (with Shift a minute), L goes to the {% if viewer.delay %}latest{% else %}live{% endif %} map. Drag the map to move it; the wheel zooms.</span>
+</div>
+<h2 id="legend-heading">Legend</h2>
+<ul class="legend" aria-labelledby="legend-heading">
+<li><span class="key team-0"></span><span class="key team-1"></span><span class="key team-2"></span><span class="key team-3"></span> Pods by team (red, blue, green, black), pointing where they head, with their callsigns</li>
+<li><span class="key ring"></span> A pod dropping in</li>
+<li><span class="key death">×</span> A death, for a few seconds</li>
+<li><span class="key shot"></span> A shot</li>
+<li><span class="key tower"></span> A tower (larger: a mega tower) and <span class="key mine">×</span> a mine, by team</li>
+<li><span class="key sentinel"></span> Sentinel <span class="key muncher"></span> Muncher <span class="key guppy"></span> guppy</li>
+<li><span class="key block"></span> Blocks shaded darker the more they are worth (the number), tinted by the team that controls them; the home corners are outlined</li>
+</ul>
+<h2 id="scores-heading">Scores</h2>
+<table id="map-scores" class="scores" aria-labelledby="scores-heading">
+<thead><tr><th scope="col">Team</th><th scope="col">Pilot</th><th scope="col">Score</th><th scope="col">Multiplier</th></tr></thead>
+<tbody></tbody>
+</table>
+{% if viewer.chat %}<h2 id="chat-heading">Chat</h2>
+<ol id="map-chat" class="lines" aria-labelledby="chat-heading"></ol>{% endif %}
+</div>

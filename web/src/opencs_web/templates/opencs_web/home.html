@@ -7,4 +7,5 @@
 {% include "opencs_web/status.html" %}
 </section>
 <p id="live" class="note" role="status"></p>
+<p><a href="{% url 'maps' %}">Maps of the cities</a>{% if map_delay %}, shown {{ map_delay }} behind{% endif %}.</p>
 {% endblock %}

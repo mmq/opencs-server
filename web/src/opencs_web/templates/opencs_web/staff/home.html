@@ -7,6 +7,7 @@
 {% include "opencs_web/status.html" %}
 </section>
 <p id="live" class="note" role="status"></p>
+<p><a href="{% url 'staff:maps' %}">Maps of the cities</a>{% if map_delay %}, shown {{ map_delay }} behind{% else %}, as they are played{% endif %}.</p>
 
 <section aria-labelledby="health-heading">
 <h2 id="health-heading">Server health (as loaded)</h2>
