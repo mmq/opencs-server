@@ -611,12 +611,17 @@ printf '%s\n' '{"hello":"opencs-service","version":1}' '{"id":1,"op":"snapshot"}
 | `shutdown` | `seconds` (optional), or `cancel: true` | as the admin command |
 | `reset-progress`, `delete-account` | `name` | as the admin commands |
 | `set-callsign` | `name`, `callsign`, `force` (optional) | the account's new callsign, `{"name", "callsign"}`, in the case given, under a player's rules (`/CALLSIGN`) including the week between changes; `force: true` (for the web's admin pages) skips the wait. Refused while the account is online or held |
+| `subscribe` | `city` | `{"city"}`, then the city's live feed on this connection (ADR 16) until `unsubscribe` or the connection ends: lines with no `id`, `{"feed": "B", "epoch": 1, "data": "<base64>"}`, whose data joined over an epoch reads as a recording segment. An epoch's first line has `"start"` (`subscribe`, `gap`, `rebuilt`) and `"dropped"`, and holds a header and a keyframe; `{"feed", "end": "failed"}` if a bug ends it. The records are the recorder's, whether or not the city is recorded: no addresses, nothing from the logon, chat as `[recording] chat` keeps it. Replies to later requests come between the lines |
+| `unsubscribe` | `city` | `{"city"}`; the feed stops |
 
 Bounds: lines of at most 4096 bytes (a longer one closes the connection), 4 connections at once, 50
 requests in a burst and 20 a second per connection (more are refused with `"rate"`), and over every
 connection 5 new passwords in a burst and then one every 5 seconds, far below what game logins may use.
 A request that holds up the server for over 20 ms is logged (`service request ... held up the server`),
-at most once a minute.
+at most once a minute. At most 8 live feeds at once over every connection. A feed holds at most 2000
+records (about a minute of a busy city) for a reader that is behind; past that it drops them, logs
+`the live feed of city X fell 2000 records behind` once, and starts a new epoch when the reader has
+caught up. The game never waits for a reader.
 
 ## The web front end
 
@@ -678,6 +683,10 @@ Settings, in `/etc/opencs-web/environment` (the archiver's are in "The archiver"
 | `OPENCS_WEB_ADMIN` | `true` to have the admin pages ("Administration" below); off, every page under their path is a 404 | `false` |
 | `OPENCS_WEB_ADMIN_PATH` | where the admin pages are, as `admin` or `ops/7f3k` (letters, digits, `-_.~` and `/`); not a secret, but a less obvious one meets fewer scanners | `admin` |
 | `OPENCS_WEB_ADMIN_SESSION_MINUTES` | the longest an admin's log-in lasts (it also ends after 15 minutes without a page) | 60 |
+| `OPENCS_WEB_MAP_DELAY_PUBLIC` | seconds the public's maps are behind real time ("Maps" below). `0` is allowed and makes the map a radar for the game being played | 3600 |
+| `OPENCS_WEB_MAP_DELAY_ADMIN` | the same for administrators logged in to the admin pages | 0 |
+| `OPENCS_WEB_MAP_ADMIN_CHAT` | `true` puts the recorded chat in administrators' map tracks; the public never gets it | `false` |
+| `OPENCS_WEB_MAP_MAX_STREAMS`, `..._PER_ADDRESS` | map streams open at once, in all and from one address | 100, 2 |
 
 The unit, [`deploy/opencs-web.service`](../deploy/opencs-web.service), runs uvicorn with one worker
 (the snapshot cache and the stream counts live in its memory), listening on the loopback address only,
@@ -913,6 +922,35 @@ Then press "Verify" in the dashboard (DNS may take an hour), send yourself a tes
 message's headers: `spf=pass`, `dkim=pass` and `dmarc=pass`. Mail-tester services score a message for
 free. Another provider's steps are the same three records with its own values.
 
+### Maps
+
+The web serves a city's map as JSON for a map viewer (ADR 16 has the format): `/maps/cities.json` (the
+cities and the spans of time recorded), `/maps/<letter>/map.json` (the city's blocks and home corners),
+`/maps/<letter>/track.json?t=<UTC ms>` (the minute holding `t`: the city at its start and what happened
+in it) and `/maps/<letter>/live` (server-sent events, the track as it comes; `?delay=` seconds asks for
+a longer delay than the audience's).
+
+Each audience sees the game a delay behind: the public `OPENCS_WEB_MAP_DELAY_PUBLIC` (an hour), an
+administrator logged in to the admin pages `OPENCS_WEB_MAP_DELAY_ADMIN` (none). Nothing newer than now
+less the delay is sent, whatever is asked: a minute that begins later is refused (403, `too-recent`), one
+that ends later is cut. **Setting the public delay to 0 is a configuration change and works**: the public
+then sees every pod as it moves, a radar for anyone in the game. Keep it at a length after which what a
+map shows no longer helps a player.
+
+A delayed map is read from the recordings: the archive (`OPENCS_WEB_ARCHIVE`) and the segments the
+archiver has not taken yet (`OPENCS_WEB_RECORDINGS`, a segment still being written included), so it
+needs `[recording]` on, and covers what was recorded (`when`). A map with no delay comes from the game
+server's live feed (the service channel's `subscribe`), recorded or not: the web subscribes to a city
+while anyone watches it, once however many do, on a second connection of the channel's four, and
+sends them all the same pieces each second. Windows are decoded once into a cache however many viewers
+ask; each address may make 60 requests in a burst and 2 a second.
+
+Recorded chat is never in a public track. An administrator's has it only with
+`OPENCS_WEB_MAP_ADMIN_CHAT=true`.
+
+A busy 16-pod city's track is about 37 kB a minute of JSON, about 8 kB as Caddy compresses it, and a
+stream about 0.9 kB a second.
+
 ### Without Caddy
 
 Caddy is only the HTTPS front door: it gets and renews the certificate, listens on ports 80 and 443 so
@@ -969,6 +1007,9 @@ Log lines (logger `opencs_web`, in the journal):
 | `game account NAME is gone from the server: its web account is removed` | the operator or the prune removed it |
 | `game account NAME deleted from the web; its callsign CALLSIGN stays in recordings` | nothing to do; `opencs-web forget_callsign CALLSIGN` if the player asks for it to be taken out |
 | `admin NAME logged in` / `admin NAME: ACTION TARGET: RESULT` | the admin pages; the audit log has the details |
+| `live map of city X started` / `stopped: no viewers` | the first viewer of a city's map with no delay came, the last one went |
+| `the live feed of city X fell behind and starts again (N records lost)` | the web read the feed too slowly; the viewers are sent the city again |
+| `live feeds: no connection to the game server (...)` | a `WARNING`: retried with a backoff while anyone watches |
 | `admin NAME locked for 15 minutes after 5 wrong log-ins` | a `WARNING`: someone is guessing, or an admin has forgotten; `resetadmin NAME --unlock` |
 
 ## Stopping, signals and kicks

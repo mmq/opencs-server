@@ -42,6 +42,15 @@ operator's commands over the channel; destructive ones are confirmed on a second
 code if the last was over five minutes ago, and everything goes in an append-only audit log
 (`AuditEntry`). OPERATING, "Administration", has the details.
 
+Maps (`maps/`, `mapviews.py`, ADR 16): `maps/track.py` decodes records into a viewer track (the city
+as a map shows it, and what happens), `maps/source.py` reads a city's records for a time from the archive
+and the unarchived segments, seeking to the keyframe before it, `maps/windows.py` decodes one-minute
+windows once into a bounded cache, and `maps/live.py` subscribes to the game server's live feed of a
+city while anyone watches it, decoding it once for all of them. The endpoints are `/maps/cities.json`,
+`/maps/<letter>/map.json`, `/maps/<letter>/track.json?t=<UTC ms>` and `/maps/<letter>/live`
+(server-sent `track` events); every one is cut at the audience's delay on the server. ADR 16 has the
+track format; OPERATING, "Maps", the settings.
+
 ## Settings
 
 Read from the environment (in production, a systemd `EnvironmentFile`):
@@ -71,7 +80,11 @@ Read from the environment (in production, a systemd `EnvironmentFile`):
 | `OPENCS_WEB_ADMIN` | `true` for the admin pages; off, they are 404s | `false` |
 | `OPENCS_WEB_ADMIN_PATH` | where the admin pages are | `admin` |
 | `OPENCS_WEB_ADMIN_SESSION_MINUTES` | the longest an admin's log-in lasts (15 minutes idle ends it sooner) | 60 |
-| `OPENCS_WEB_RECORDINGS` | the game recorder's directory, for `archive` | none |
+| `OPENCS_WEB_MAP_DELAY_PUBLIC` | seconds the public's maps are behind real time; 0 makes them a radar | 3600 |
+| `OPENCS_WEB_MAP_DELAY_ADMIN` | the same for a logged-in administrator | 0 |
+| `OPENCS_WEB_MAP_ADMIN_CHAT` | `true` puts recorded chat in administrators' tracks | `false` |
+| `OPENCS_WEB_MAP_MAX_STREAMS`, `..._PER_ADDRESS` | map streams at once, in all and from one address | 100, 2 |
+| `OPENCS_WEB_RECORDINGS` | the game recorder's directory, for `archive` and the maps | none |
 | `OPENCS_WEB_ARCHIVE` | the recording archive's SQLite file | `opencs-archive.db`, placed as the database |
 | `OPENCS_WEB_ARCHIVE_MAX_DAYS` | the archive keeps games this many days | 365 |
 | `OPENCS_WEB_ARCHIVE_MAX_BYTES` | and removes the oldest past this size | 10000000000 |

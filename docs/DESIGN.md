@@ -232,11 +232,17 @@ The game recorder (ADR 14) is off unless `[recording] dir` is set. It has two ha
   to a bounded queue; one writer thread encodes, writes and flushes about twice a second, and makes room
   under the size cap.
 
-The router takes a `Tape` (`Router(tape=...)`), set only when there is a recorder, and hands it each
+The router takes a `Tape` (`Router(tape=...)`), set only when there is a recorder or a service channel
+(for live feeds, ADR 16), and hands it each
 `deliver` call's events before the per-recipient loop. The world marks a relayed copy of a client's
 message with `Event.relayed` (a pod's `'b'`, a shot, a grenade, player chat), and the tape leaves those
 out, since the client's message is the record; the same message sent to several single players in one
 call is folded into one record for everyone.
+
+The same hooks feed the service channel's live feeds (`session/livefeed.py`, ADR 16): while the web
+subscribes to a city, each record goes to the feed's bounded queue too, recorded or not, and the
+connection's sender encodes and writes it; a reader that falls behind loses the queue and is sent a
+new header and keyframe once it has caught up.
 
 A segment ends with an END record whose reason is `empty` (the last pilot to record left), `rotate` (a
 new segment replaced it), `full` (the size cap was reached) or `shutdown` (still open when the server
@@ -332,6 +338,7 @@ One file each; [the index](decisions/README.md) has the same list.
 13. [Argon2id for passwords](decisions/0013-argon2id-for-passwords.md).
 14. [Games are recorded as append-only segments of wire payloads](decisions/0014-games-recorded-as-segments.md).
 15. [Archived recordings are one-minute chunks, transformed, then compressed with xz](decisions/0015-archive-chunks-predicted-then-xz.md).
+16. [Maps are tracks decoded in the web process, from recordings and a live feed of the same records](decisions/0016-map-tracks-and-live-feeds.md).
 
 ## 10. Naming and trademarks
 

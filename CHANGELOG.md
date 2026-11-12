@@ -50,6 +50,15 @@ upgrading.
   code after five minutes; a `moderator` role only kicks and announces. Everything goes in an audit log
   the site only adds to. The web now depends on `django-otp` and `segno` (the enrolment QR code, drawn
   in the terminal) too. The service channel's `status` adds each city's health as numbers.
+- Maps in the web front end, as JSON for a map viewer (the viewer itself is to come): the cities and
+  the times recorded, a city's blocks, its track a minute at a time (pods, shots, deaths, towers, NPCs,
+  territory, scores) and as server-sent events. The public sees them an hour behind
+  (`OPENCS_WEB_MAP_DELAY_PUBLIC`; 0 is allowed and makes a radar), administrators as they happen
+  (`OPENCS_WEB_MAP_DELAY_ADMIN`); nothing newer is ever sent. Recorded chat only for administrators,
+  with `OPENCS_WEB_MAP_ADMIN_CHAT` (ADR 16).
+- The service channel's `subscribe` and `unsubscribe`: a city's live feed, the records the recorder is
+  given whether or not the city is recorded, from a capped queue that drops and starts again rather
+  than wait for a slow reader (ADR 16). The router now hears every event when the service channel is on.
 - `no_account_text` in `server.toml`: what a login with an unknown name is told while registration
   is closed, so it can give the web site's address (the default is unchanged). The service channel's
   `account` and `register` say when an account was made, and `account` when it last logged in.

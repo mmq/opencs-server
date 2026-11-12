@@ -17,3 +17,4 @@
 | [0013](0013-argon2id-for-passwords.md) | Argon2id for passwords |
 | [0014](0014-games-recorded-as-segments.md) | Games are recorded as append-only segments of wire payloads |
 | [0015](0015-archive-chunks-predicted-then-xz.md) | Archived recordings are one-minute chunks, transformed, then compressed with xz |
+| [0016](0016-map-tracks-and-live-feeds.md) | Maps are tracks decoded in the web process, from recordings and a live feed of the same records |

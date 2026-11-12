@@ -53,5 +53,7 @@ destructive commands, and an audit log of who did what.
   from a file both accounts can read carried in the hello, since a port has no file permissions.
 - The protocol is a second interface to keep stable. A change a client could misread gets a new version
   number, and the server may speak several.
+- Amended by ADR 16: `subscribe` turns a connection into one that also carries a city's live feed,
+  lines without an `id`, bounded and dropped rather than waited for.
 - The web's own records can fall out of step with the server's (an account deleted or pruned on the
   server). The `account` request lets the web check.

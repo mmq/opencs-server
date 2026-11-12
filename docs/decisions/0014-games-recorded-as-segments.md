@@ -77,7 +77,9 @@ kept. Recorded chat is for administrators only; a public replay shows none.
 
 ## Consequences
 
-- Off unless `[recording] dir` is set. With it off, the router and the sessions do nothing extra.
+- Off unless `[recording] dir` is set. With it off, the router and the sessions do nothing extra,
+  unless the service channel is on: its live feeds (ADR 16) tap the same hooks, whether or not a city
+  is recorded.
 - The recorder is a second reader of the world's events. A new server message needs no recorder change;
   a new relayed copy must be marked `relayed`, or it is recorded twice.
 - A format change gets a new version number, and readers refuse a version they do not know.
