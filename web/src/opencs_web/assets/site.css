@@ -144,6 +144,19 @@ table.health th, table.health td, table.audit th, table.audit td {
 .key.muncher { background: #e07b00; border-radius: 50%; }
 .key.guppy { background: #139a9a; border-radius: 50%; transform: scale(0.7); }
 .key.block { background: linear-gradient(90deg, #e6e3da, #b8a77c); }
+/* In dark mode the keys sit on the map's own light ground, so they look as they do on the map (the
+   black team's would vanish on a dark page). */
+@media (prefers-color-scheme: dark) {
+  .legend {
+    --fg: #1a1a1a;
+    --muted: #555;
+    color: var(--fg);
+    background: #e6e3da;
+    padding: 0.3rem 0.6rem;
+    border-radius: 0.3rem;
+  }
+  .scores .team-3 td:first-child::before { box-shadow: 0 0 0 1px var(--muted); }
+}
 table.scores { border-collapse: collapse; font-size: 0.9rem; }
 table.scores th, table.scores td {
   border-bottom: 1px solid var(--rule);
