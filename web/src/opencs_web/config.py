@@ -35,6 +35,14 @@ DEFAULT_EMAIL_SECURITY = "starttls"
 #: refuses, and a few are left for passwords (which are sent past it).
 DEFAULT_EMAIL_DAILY_CAP = 90
 DEFAULT_EMAIL_FROM = "OpenCS <opencs@localhost>"
+#: The maps (ADR 16): how far behind real time each audience sees, in seconds. The public's hour
+#: keeps a map from being a radar for a game in progress; 0 for the public is a config change, and
+#: works as one. Administrators see it as it happens.
+DEFAULT_MAP_DELAY_PUBLIC = 3600
+DEFAULT_MAP_DELAY_ADMIN = 0
+#: Map streams (live tracks, server-sent events) at once, in all and from one address.
+DEFAULT_MAP_MAX_STREAMS = 100
+DEFAULT_MAP_MAX_STREAMS_PER_ADDRESS = 2
 #: The admin pages: where they live, and how long an admin's log-in lasts.
 DEFAULT_ADMIN_PATH = "admin"
 DEFAULT_ADMIN_SESSION_MINUTES = 60
@@ -79,6 +87,13 @@ class WebConfig:
     admin: bool = False
     admin_path: str = DEFAULT_ADMIN_PATH
     admin_session_minutes: int = DEFAULT_ADMIN_SESSION_MINUTES
+    #: Seconds behind real time the maps are for the public and for administrators, whether an
+    #: administrator's map shows the recorded chat, and the map streams allowed at once.
+    map_delay_public: int = DEFAULT_MAP_DELAY_PUBLIC
+    map_delay_admin: int = DEFAULT_MAP_DELAY_ADMIN
+    map_admin_chat: bool = False
+    map_max_streams: int = DEFAULT_MAP_MAX_STREAMS
+    map_max_streams_per_address: int = DEFAULT_MAP_MAX_STREAMS_PER_ADDRESS
 
 
 @dataclass(frozen=True)
@@ -127,6 +142,22 @@ def _count(env: Mapping[str, str], name: str, default: int) -> int:
         value = 0
     if value < 1:
         raise ConfigError(f"{PREFIX}{name} must be a whole number above 0, not {raw!r}")
+    return value
+
+
+def _seconds(env: Mapping[str, str], name: str, default: int) -> int:
+    """A whole number of seconds, 0 or more."""
+    raw = env.get(PREFIX + name, "").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        value = -1
+    if value < 0:
+        raise ConfigError(
+            f"{PREFIX}{name} must be a whole number of seconds, 0 or more, not {raw!r}"
+        )
     return value
 
 
@@ -222,4 +253,11 @@ def load(env: Mapping[str, str] | None = None) -> WebConfig:
         admin=_flag(env, "ADMIN"),
         admin_path=_admin_path(env),
         admin_session_minutes=_count(env, "ADMIN_SESSION_MINUTES", DEFAULT_ADMIN_SESSION_MINUTES),
+        map_delay_public=_seconds(env, "MAP_DELAY_PUBLIC", DEFAULT_MAP_DELAY_PUBLIC),
+        map_delay_admin=_seconds(env, "MAP_DELAY_ADMIN", DEFAULT_MAP_DELAY_ADMIN),
+        map_admin_chat=_flag(env, "MAP_ADMIN_CHAT"),
+        map_max_streams=_count(env, "MAP_MAX_STREAMS", DEFAULT_MAP_MAX_STREAMS),
+        map_max_streams_per_address=_count(
+            env, "MAP_MAX_STREAMS_PER_ADDRESS", DEFAULT_MAP_MAX_STREAMS_PER_ADDRESS
+        ),
     )

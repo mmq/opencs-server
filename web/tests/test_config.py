@@ -218,3 +218,27 @@ def test_the_admin_settings_are_read() -> None:
 def test_admin_settings_it_cannot_use_are_refused(env: dict[str, str], name: str) -> None:
     with pytest.raises(ConfigError, match=name):
         load({**KEY, **env})
+
+
+def test_the_maps_are_an_hour_behind_for_the_public_and_live_for_admins() -> None:
+    config = load(KEY)
+    assert (config.map_delay_public, config.map_delay_admin) == (3600, 0)
+    assert config.map_admin_chat is False
+    assert (config.map_max_streams, config.map_max_streams_per_address) == (100, 2)
+    config = load(
+        {
+            **KEY,
+            "OPENCS_WEB_MAP_DELAY_PUBLIC": "0",
+            "OPENCS_WEB_MAP_DELAY_ADMIN": "30",
+            "OPENCS_WEB_MAP_ADMIN_CHAT": "true",
+            "OPENCS_WEB_MAP_MAX_STREAMS": "5",
+        }
+    )
+    assert (config.map_delay_public, config.map_delay_admin) == (0, 30)
+    assert config.map_admin_chat and config.map_max_streams == 5
+
+
+@pytest.mark.parametrize("value", ["-1", "soon", "1.5"])
+def test_a_map_delay_it_cannot_use_is_refused(value: str) -> None:
+    with pytest.raises(ConfigError, match="MAP_DELAY_PUBLIC"):
+        load({**KEY, "OPENCS_WEB_MAP_DELAY_PUBLIC": value})

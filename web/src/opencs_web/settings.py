@@ -67,6 +67,14 @@ OPENCS_SERVICE_SOCKET = _CONFIG.service_socket
 OPENCS_MAX_STREAMS = _CONFIG.max_streams
 OPENCS_MAX_STREAMS_PER_ADDRESS = _CONFIG.max_streams_per_address
 
+# The maps (``opencs_web.maps``, ADR 16): how far behind real time each audience sees, in seconds.
+# A public request never gets anything newer than now minus its delay.
+OPENCS_MAP_DELAY_PUBLIC = _CONFIG.map_delay_public
+OPENCS_MAP_DELAY_ADMIN = _CONFIG.map_delay_admin
+OPENCS_MAP_ADMIN_CHAT = _CONFIG.map_admin_chat
+OPENCS_MAP_MAX_STREAMS = _CONFIG.map_max_streams
+OPENCS_MAP_MAX_STREAMS_PER_ADDRESS = _CONFIG.map_max_streams_per_address
+
 # Registration and web accounts (``opencs_web.accounts``).
 OPENCS_SITE_URL = _CONFIG.site_url
 OPENCS_REGISTRATION = _CONFIG.registration

@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.urls import include, path
 
-from opencs_web import accountviews, views
+from opencs_web import accountviews, mapviews, views
 
 urlpatterns = [
     path("", views.home, name="home"),
@@ -16,6 +16,10 @@ urlpatterns = [
     path("account/password", accountviews.new_password, name="new-password"),
     path("account/delete", accountviews.delete, name="delete"),
     path("privacy", accountviews.privacy, name="privacy"),
+    path("maps/cities.json", mapviews.cities, name="map-cities"),
+    path("maps/<str:letter>/map.json", mapviews.city_map, name="map"),
+    path("maps/<str:letter>/track.json", mapviews.track, name="map-track"),
+    path("maps/<str:letter>/live", mapviews.track_stream, name="map-stream"),
     path("assets/<str:name>", views.asset, name="asset"),
     path("healthz", views.health, name="health"),
     # The admin pages: a 404 each while OPENCS_WEB_ADMIN is off.

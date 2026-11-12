@@ -57,6 +57,8 @@ class FakeService:
         self.refuse: str | None = None
         #: Other ops and their results.
         self.results: dict[str, Any] = {}
+        #: Live feeds: city letter -> the feed lines sent after its ``subscribe`` is answered.
+        self.feeds: dict[str, list[dict[str, Any]]] = {}
         self._server: asyncio.Server | None = None
         self._writers: set[asyncio.StreamWriter] = set()
 
@@ -95,6 +97,10 @@ class FakeService:
                     )
                 elif request["op"] == "snapshot":
                     await _send(writer, {"id": request["id"], "ok": True, "result": self.snapshot})
+                elif request["op"] == "subscribe" and request["city"] in self.feeds:
+                    await _send(writer, {"id": request["id"], "ok": True, "result": {}})
+                    for feed_line in self.feeds[request["city"]]:
+                        await _send(writer, feed_line)
                 elif request["op"] in self.results:
                     result = self.results[request["op"]]
                     await _send(writer, {"id": request["id"], "ok": True, "result": result})
