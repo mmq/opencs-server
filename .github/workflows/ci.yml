@@ -16,13 +16,18 @@ concurrency:
 
 jobs:
   checks:
-    name: Checks (Python ${{ matrix.python }})
-    runs-on: ubuntu-latest
+    name: Checks (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.12", "3.13"]
+        # The oldest Python the project supports and the newest, on Linux; macOS on the newest.
+        os: [ubuntu-latest]
+        python: ["3.12", "3.15"]
+        include:
+          - os: macos-latest
+            python: "3.15"
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6

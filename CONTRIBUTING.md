@@ -15,7 +15,7 @@ uv sync                      # create .venv with the server and the dev tools
 
 ## The checks
 
-Every commit passes all of these (CI runs them on Python 3.12 and 3.13):
+Every commit passes all of these (CI runs them on Python 3.12 and 3.15 on Linux, and 3.15 on macOS):
 
 ```bash
 uv run pytest                              # the tests, under a minute
