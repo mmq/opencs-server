@@ -169,8 +169,9 @@ tools/
   judge.py               the black-box conformance check, 19 checks
   smoke.sh               start a throwaway server and run the judge
   make_fixture.py        turn a capture log into a replay fixture
-.github/workflows/
-  ci.yml                 lint, types, tests (Python 3.12 and 3.15, and macOS), the build and the smoke test
+.github/
+  workflows/ci.yml       lint, types, tests (Python 3.12 and 3.15, and macOS), the build and the smoke test
+  dependabot.yml         a monthly pull request each for the actions and uv.lock
 deploy/
   opencs.service         the systemd unit the operator guide installs
   opencs-web*            the web front end's unit and the archiver's (path, service, timer)
