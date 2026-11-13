@@ -43,6 +43,13 @@ from opencs.store.base import Stores
 from opencs.store.memory import memory_stores
 from opencs.store.sqlite import SqliteStore, open_stores
 from opencs.tasks import watch
+from opencs.weblaunch import (
+    DEFAULT_WEB_PORT,
+    WebSite,
+    web_command,
+    web_installed,
+    with_web_defaults,
+)
 from opencs.world.city import City
 
 log = logging.getLogger("opencs.app")
@@ -399,12 +406,25 @@ async def _listen(
             services.hasher.close()
 
 
-async def _run(config: AppConfig, config_file: ConfigFile) -> None:
+async def _run(config: AppConfig, config_file: ConfigFile, site: WebSite | None = None) -> None:
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, stop.set)
-    await serve(config, stop=stop, config_file=config_file)
+    starting: asyncio.Task[None] | None = None
+
+    def ready(port: int) -> None:
+        nonlocal starting
+        if site is not None:  # the service socket is up: the site can connect at once
+            starting = watch(asyncio.create_task(site.start()), "starting the web site")
+
+    try:
+        await serve(config, stop=stop, ready=ready, config_file=config_file)
+    finally:
+        if starting is not None:
+            await asyncio.gather(starting, return_exceptions=True)
+        if site is not None:
+            await site.stop()
 
 
 def _port(text: str) -> int:
@@ -427,7 +447,30 @@ def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument(
         "--data-dir", type=Path, help="override the configured data directory (the SQLite file)"
     )
+    parser.add_argument(
+        "--web",
+        action="store_true",
+        help="also run the web site, on this machine only, with the service channel and "
+        "recording on in the data directory unless the config file sets them",
+    )
+    parser.add_argument(
+        "--web-port",
+        type=_port,
+        default=DEFAULT_WEB_PORT,
+        help=f"the web site's port with --web (default {DEFAULT_WEB_PORT})",
+    )
     return parser.parse_args(argv)
+
+
+def _with_web(config: AppConfig, args: argparse.Namespace) -> tuple[AppConfig, WebSite | None]:
+    """For ``--web``: the config with the service channel and recording on, and the site."""
+    if not args.web:
+        return config, None
+    if not web_installed():
+        raise ConfigError("--web needs the web package (opencs-web): run `uv sync` in the checkout")
+    config = replace(config, server=with_web_defaults(config.server))
+    argv, env = web_command(config.server, args.web_port, os.environ)
+    return config, WebSite(argv, env, args.web_port)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -451,7 +494,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"opencs: cannot open the log file: {exc.strerror or exc}", file=sys.stderr)
         return 2
     try:
-        asyncio.run(_run(config, config_file))
+        config, site = _with_web(config, args)
+        asyncio.run(_run(config, config_file, site))
     except ConfigError as exc:
         print(f"opencs: {exc}", file=sys.stderr)
         return 2

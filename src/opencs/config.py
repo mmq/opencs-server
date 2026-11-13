@@ -7,6 +7,7 @@ and wrong types raise ``ConfigError`` naming the file and the key, so a typo fai
 from __future__ import annotations
 
 import logging
+import re
 import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -149,6 +150,9 @@ class ServerConfig:
     limits: LimitsConfig = LimitsConfig()
     service: ServiceConfig = ServiceConfig()
     recording: RecordingConfig = RecordingConfig()
+    #: ``[web]``: settings for the site ``opencs --web`` starts, as (name, value) pairs, names
+    #: lower case. The server does not read them; the site checks them (``opencs_web.config``).
+    web: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -264,6 +268,11 @@ class _Table:
         if not low <= value <= high:
             raise self.fail(key, f"{value} is outside {low:g}..{high:g}")
         return float(value)
+
+    def value(self, key: str) -> Any:
+        """A key's value as TOML gave it, unchecked (the caller checks it)."""
+        self._seen.add(key)
+        return self._data[key]
 
     def has(self, key: str) -> bool:
         return key in self._data
@@ -475,6 +484,27 @@ def _parse_service(path: Path, table: _Table) -> ServiceConfig:
     return ServiceConfig(path.parent / socket if socket else None)
 
 
+def _parse_web(table: _Table) -> tuple[tuple[str, str], ...]:
+    """``[web]``: names and plain values, passed to the site as ``OPENCS_WEB_<NAME>``. Only their
+    shape is checked here; the site refuses a name it does not know."""
+    section = table.table("web")
+    pairs: list[tuple[str, str]] = []
+    for name in sorted(section.keys()):
+        if not re.fullmatch(r"[a-z][a-z0-9_]*", name):
+            raise section.fail(name, "is not a setting name (lower case letters, digits and _)")
+        value = section.value(name)
+        if isinstance(value, bool):
+            pairs.append((name, "true" if value else "false"))
+        elif isinstance(value, (int, str)):
+            pairs.append((name, str(value)))
+        else:
+            raise section.fail(
+                name, f"expected a string, integer or boolean, got {type(value).__name__}"
+            )
+    section.done()
+    return tuple(pairs)
+
+
 def _recording_mode(table: _Table, key: str, modes: tuple[str, ...], default: Any) -> Any:
     value = table.string(key, default) if default is not None or table.has(key) else None
     if value is not None and value not in modes:
@@ -605,6 +635,7 @@ def _parse_server(path: Path, data: Mapping[str, Any]) -> ServerConfig:
         limits=_parse_limits(table),
         service=_parse_service(path, table),
         recording=_parse_recording(path, table),
+        web=_parse_web(table),
     )
     if config.registration not in policy.REGISTRATION_MODES:
         raise table.fail("registration", f"must be one of {', '.join(policy.REGISTRATION_MODES)}")

@@ -27,6 +27,9 @@ Changelog = "https://github.com/mmq/opencs-server/blob/main/CHANGELOG.md"
 Issues = "https://github.com/mmq/opencs-server/issues"
 Specification = "https://github.com/mmq/cyberstrike-spec/tree/v1.0"
 
+[project.scripts]
+opencs = "opencs.__main__:run"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

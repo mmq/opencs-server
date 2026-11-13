@@ -605,3 +605,30 @@ def test_bad_recording_values_name_the_key(tmp_path: Path, lines: str, key: str)
     text = f'default_city = "A"\n[recording]\n{lines}\n'
     with pytest.raises(ConfigError, match=f"{re.escape(key)}:"):
         load_config(write_config(tmp_path, {"A": CITY}, server=text))
+
+
+def test_the_web_table_is_passed_on_as_names_and_text(tmp_path: Path) -> None:
+    server = 'default_city = "A"\n[web]\ncontact = "ops@example.org"\nmap_delay_public = 60\n'
+    server += "chosen_passwords = true\n"
+    web = load_config(write_config(tmp_path, {"A": CITY}, server)).server.web
+    assert web == (
+        ("chosen_passwords", "true"),
+        ("contact", "ops@example.org"),
+        ("map_delay_public", "60"),
+    )
+    assert load_config(write_config(tmp_path, {"A": CITY})).server.web == ()
+
+
+@pytest.mark.parametrize(
+    ("line", "why"),
+    [
+        ('Contact = "x"', "is not a setting name"),
+        ('"opencs web" = "x"', "is not a setting name"),
+        ("hosts = ['a', 'b']", "expected a string, integer or boolean, got list"),
+        ("delay = 1.5", "expected a string, integer or boolean, got float"),
+    ],
+)
+def test_a_bad_web_setting_is_refused(tmp_path: Path, line: str, why: str) -> None:
+    path = write_config(tmp_path, {"A": CITY}, f'default_city = "A"\n[web]\n{line}\n')
+    with pytest.raises(ConfigError, match=why):
+        load_config(path)

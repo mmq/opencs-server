@@ -95,3 +95,11 @@ enabled = false
 # A different `when` or `chat` for one city:
 # [recording.cities.A]
 # when = "off"
+
+# Settings for the web site that `opencs --web` starts (docs/OPERATING.md, "Trying the web site"):
+# each name is an OPENCS_WEB_ variable's, in lower case, and the environment wins over this table.
+# `--web` also turns on [service] and [recording] in the data directory when they are unset here.
+# [web]
+# map_delay_public = 3600           # the public map an hour behind, as on a public server
+# chosen_passwords = true           # players choose their game password
+# contact = "you@example.org"

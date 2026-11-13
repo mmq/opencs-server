@@ -63,12 +63,13 @@ or listed but gone. (`__init__.py` files and `py.typed` are left out.)
 
 ```
 src/opencs/
-  __main__.py            python -m opencs [--config PATH] [--port N] [--host H]
+  __main__.py            opencs (python -m opencs) [--config PATH] [--port N] [--host H] [--web]
   app.py                 wiring, signals, graceful shutdown
   cities.py              the city tickers and reloading city config
   control.py             the operator's commands as text in, text out
   admin.py               the loopback admin channel: token, bounds, carries Control
   service.py             the web front end's channel: JSON lines on a Unix socket, carries Control
+  weblaunch.py           opencs --web: the web site as a child process, never imported
   tasks.py               long-lived background tasks: a failure is logged, not silent
   recording.py           the game recorder: segment format, bounded queue, writer thread, pruning
   logsetup.py            [logging] applied to the opencs logger tree

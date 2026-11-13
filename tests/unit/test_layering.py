@@ -90,14 +90,17 @@ ALLOWED: dict[str, set[str]] = {
         "session",
         "store",
         "tasks",
+        "weblaunch",
         "world",
     },
+    # ``opencs --web``: starts the web site as a child process; never imports the web package.
+    "weblaunch": {"config"},
     "__main__": {"app"},
     "__init__": set(),
 }
 
 #: The modules only the app (and, for ``cities``/``control``/``admin``, one another) may import.
-ABOVE_THE_SESSIONS = {"cities", "control", "admin", "app"}
+ABOVE_THE_SESSIONS = {"cities", "control", "admin", "app", "weblaunch"}
 
 
 #: Packages that must be sans-IO (DESIGN §3, §3.4) and the standard-library modules they may not
