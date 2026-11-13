@@ -46,6 +46,45 @@ DEFAULT_MAP_MAX_STREAMS_PER_ADDRESS = 2
 #: The admin pages: where they live, and how long an admin's log-in lasts.
 DEFAULT_ADMIN_PATH = "admin"
 DEFAULT_ADMIN_SESSION_MINUTES = 60
+#: Every setting :func:`load` reads, without the prefix: ``opencs-web local`` refuses any other
+#: ``OPENCS_WEB_`` name, so a misspelt one is not silently ignored.
+NAMES = frozenset(
+    {
+        "SECRET_KEY",
+        "DEBUG",
+        "DATABASE",
+        "ALLOWED_HOSTS",
+        "RECORDINGS",
+        "ARCHIVE",
+        "ARCHIVE_MAX_DAYS",
+        "ARCHIVE_MAX_BYTES",
+        "SERVICE_SOCKET",
+        "HTTPS",
+        "MAX_STREAMS",
+        "MAX_STREAMS_PER_ADDRESS",
+        "SITE_URL",
+        "REGISTRATION",
+        "PASSWORD_DELIVERY",
+        "CHOSEN_PASSWORDS",
+        "CONTACT",
+        "PRIVACY_FILE",
+        "EMAIL_HOST",
+        "EMAIL_PORT",
+        "EMAIL_USER",
+        "EMAIL_PASSWORD",
+        "EMAIL_SECURITY",
+        "EMAIL_FROM",
+        "EMAIL_DAILY_CAP",
+        "ADMIN",
+        "ADMIN_PATH",
+        "ADMIN_SESSION_MINUTES",
+        "MAP_DELAY_PUBLIC",
+        "MAP_DELAY_ADMIN",
+        "MAP_ADMIN_CHAT",
+        "MAP_MAX_STREAMS",
+        "MAP_MAX_STREAMS_PER_ADDRESS",
+    }
+)
 TRUE = {"1", "true", "yes", "on"}
 FALSE = {"", "0", "false", "no", "off"}
 
