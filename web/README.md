@@ -100,16 +100,50 @@ Read from the environment (in production, a systemd `EnvironmentFile`):
 
 ## Running
 
+To try the site on one machine, run the game server with it, from the repository root:
+
 ```sh
-uv sync                                     # at the repository root: the server, the web and the tools
+uv run opencs --web    # the server, and the site on http://127.0.0.1:8000/ (--web-port N)
+```
+
+`uv run` installs this package too: it is in the root project's `dev` group, which `uv` syncs by
+default. The server starts the site, as a process of its own, once it listens, and stops it when it
+stops. If `server.toml` leaves them unset, `--web` turns on the service socket
+(`<data_dir>/service.sock`) and recording (`<data_dir>/recordings`); the site's database, archive and a
+secret key made on the first run go in `<data_dir>/web`. It serves plain HTTP on this machine only, with
+the admin pages on and the public map without its delay, and the archiver runs inside it every 5
+minutes. Registration emails are printed in the terminal. Settings of the site go in a `[web]` table in
+`server.toml`: each key is an `OPENCS_WEB_` name in lower case (`map_delay_public = 3600`,
+`chosen_passwords = true`), the environment wins over the table, and the site refuses a name it does
+not know.
+
+`opencs-web local` is the same site run by hand, for a server that is already running:
+
+```sh
+uv run opencs-web local --service-socket /path/to/service.sock --recordings /path/to/recordings
+uv run opencs-web local --state-dir data/web createadmin NAME   # a management command, with these settings
+```
+
+Its options are `--host` (127.0.0.1), `--port` (8000), `--state-dir` (`./opencs-web-local`, where the
+database, archive and secret key go), `--service-socket` and `--recordings`. Without a command it
+serves the site; with one, such as `createadmin NAME` (it asks for a password and shows the second
+factor once), it runs that command with the same settings, so use the same `--state-dir`.
+
+Neither is for a public site: the traffic is plain HTTP and the secret key is only a file.
+`docs/OPERATING.md` ("The web front end") has the production setup: systemd, Caddy and an environment
+file.
+
+For development, run it with uvicorn and the settings in the environment:
+
+```sh
 export OPENCS_WEB_SECRET_KEY=... OPENCS_WEB_ALLOWED_HOSTS=localhost OPENCS_WEB_DEBUG=true \
     OPENCS_WEB_HTTPS=false OPENCS_WEB_SERVICE_SOCKET=/path/to/service.sock   # [service] socket
 uv run opencs-web migrate                   # Django's management commands, like manage.py
 uv run uvicorn opencs_web.asgi:application  # serve it
 ```
 
-Without `OPENCS_WEB_EMAIL_HOST` the site's emails are printed to uvicorn's output: follow the
-registration link from there.
+Without `OPENCS_WEB_EMAIL_HOST` the site's emails are printed to the terminal (the server's, with
+`--web`; uvicorn's otherwise): follow the registration link from there.
 
 ## Checks
 

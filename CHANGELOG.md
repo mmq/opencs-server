@@ -73,6 +73,19 @@ upgrading.
   is closed, so it can give the web site's address (the default is unchanged). The service channel's
   `account` and `register` say when an account was made, and `account` when it last logged in.
 - `create-account` and `reset-password` hash their password off the game's loop.
+- `opencs --web` starts the web site with the server, for trying OpenCS on one machine: `uv run opencs
+  --web` in a fresh checkout is enough, since `uv run` syncs the `dev` group, which holds the web
+  package. The site is a child process on http://127.0.0.1:8000/ (`--web-port N`), started once the
+  server listens and stopped with it; if the web package is missing the server exits 2 and says to run
+  `uv sync`. Where `server.toml` leaves them unset, `--web` turns on the service socket and recording
+  in the data directory, and the site's own files go in `<data_dir>/web`. It is plain HTTP, with the
+  admin pages on and the public map without delay, and prints its emails to the terminal. A new `[web]`
+  table in `server.toml` sets any `OPENCS_WEB_` setting by its lower-case name; the environment wins,
+  and the site refuses unknown names. The server also has an `opencs` command now (`python -m opencs`
+  still works). Not for a public site (OPERATING).
+- `opencs-web local`: the same site run by hand, with its files in one state directory
+  (`--state-dir`, default `./opencs-web-local`) and a generated secret key; with a command, such as
+  `createadmin NAME`, it runs that management command with the same settings.
 - The start of the web site, `web/` (`opencs-web`): a Django skeleton with its own dependencies; the
   server still installs only `argon2-cffi`.
 - The daily removal of unplayed accounts goes in small batches, and guest callsign checks use an index,

@@ -49,13 +49,29 @@ The full walk-through, with every Chamber command and troubleshooting, is
 
 ## How to run
 
-Python 3.12 or newer and [`uv`](https://docs.astral.sh/uv/):
+Python 3.12 or newer and [`uv`](https://docs.astral.sh/uv/). To try the game and its web site on one
+machine, from a fresh checkout:
+
+```bash
+git clone https://github.com/mmq/opencs-server.git && cd opencs-server
+uv run opencs --web          # the server on port 2399, the web site on http://127.0.0.1:8000/
+```
+
+The first run installs what it needs. Then open <http://127.0.0.1:8000/> and connect the game client
+to port 2399. The site's files go in `data/web`, the emails it would send are printed in the terminal,
+and its settings can go in a `[web]` table in `config/server.toml`. To make an administrator for its
+admin pages: `uv run opencs-web local --state-dir data/web createadmin NAME`.
+
+For the plain server, without the site:
 
 ```bash
 uv sync                      # create .venv with the dev tools
 uv run python -m opencs      # start the server (config in config/; port 2399)
 tools/smoke.sh               # start a throwaway server and run the 19 judge checks (about a minute)
 ```
+
+`--web` is for trying it on one machine only: it uses plain HTTP and keeps its secret key in a file. A
+public server runs the site the way [`docs/OPERATING.md`](docs/OPERATING.md) describes.
 
 By default the server listens on port 2399 on every IPv4 interface (`host = "0.0.0.0"` in
 `config/server.toml`); set `host` to `127.0.0.1` to keep it to your own machine. Installing on a
