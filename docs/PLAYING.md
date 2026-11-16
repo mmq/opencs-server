@@ -24,51 +24,56 @@ The game thinks it is dialing a modem on a serial port. DOSBox-X and DOSBox Stag
 modem and, when the game "dials" a number, open a TCP connection to whatever address the phonebook maps
 the number to.
 
-The settings that matter are the same in both, in the emulator's config file (`dosbox-x.conf`,
-`dosbox-staging.conf`, or one you pass with `-conf`):
+The settings that matter are the same in both. Put them in a config file of your own, such as
+`dosbox-opencs.conf`, and start the emulator with it: `dosbox-x --conf dosbox-opencs.conf` (DOSBox
+Staging: `dosbox --conf dosbox-opencs.conf`). The emulator's own file (`dosbox-x.conf`,
+`dosbox-staging.conf`) works as well; the settings are the same.
 
 ```ini
 [dos]
-umb=true
 ems=true
-xms=true
 
 [cpu]
 core=dynamic
+cycles=25000          # DOSBox Staging: cpu_cycles = 25000
 
 [serial]
-phonebookfile = /full/path/to/phonebook.txt
 serial1=modem
-```
+phonebookfile=phonebook.txt
 
-The game needs expanded memory (`ems`). It runs smoothly with the dynamic core and about 25000 cycles:
-`cycles=25000` in DOSBox-X, `cpu_cycles = 25000` in DOSBox Staging.
-
-The phonebook is a text file; give its full path. Each line is a number, a space and the `host:port` it
-maps to. Map the number the game dials (next section) to your server, or to `localhost` for a server on
-your own machine:
-
-```
-1234 play.example.org:2399
-1111 localhost:2399
-```
-
-Then mount the folder holding the game and start it from `[autoexec]` as you normally would:
-
-```ini
 [autoexec]
 mount c /path/to/your/game
 c:
 CS.COM
 ```
 
-(`CS.COM` is the game's start program; the folder name and the way the game was installed are yours.)
+Set the two paths: the phonebook file (just its name if it is in the same folder as the config file,
+otherwise its full path), and the folder holding the game (`CS.COM` is the game's start program;
+where it is, and how it was installed, are yours). The game needs expanded memory (`ems`). It runs
+smoothly with the dynamic core and about 25000 cycles.
+
+The phonebook is a text file. Each line is a number, a space and the `host:port` it maps to. Map the
+number the game dials (next section) to your server. The game's default number is 1-800-638-8369,
+written here without the dashes; for a server on your own machine:
+
+```
+18006388369 localhost:2399
+```
+
+To keep another server in the same file, give it a number of your own (`1234` here), and set that
+number in SETTINGS when you want to play there:
+
+```
+18006388369 localhost:2399
+1234 play.example.org:2399
+```
 
 ### The game's settings: dial number, baud rate, account name and password
 
 Before you log on, press the game's SETTINGS button and set:
 
-- the **phone number** to the one in your phonebook line (`1234` above);
+- the **phone number** to the one in your phonebook line: the default, 1-800-638-8369, or the one you
+  chose for another server (`1234` above);
 - the **baud rate** to **9600**, the speed the server sends at (at any lower setting the game falls behind);
 - your **account name** and **password**, as described next, or leave the stock guest name `JOINGENIE`.
 

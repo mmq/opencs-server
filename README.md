@@ -2,11 +2,11 @@
 
 [![CI](https://github.com/mmq/opencs-server/actions/workflows/ci.yml/badge.svg)](https://github.com/mmq/opencs-server/actions/workflows/ci.yml)
 
-OpenCS is a server for *CyberStrike*, the online game Simutronics launched on GEnie in 1993 and later
-ran on America Online and play.net. The original GEnie DOS client connects to it unchanged, so the game
-can be played again over the internet. It implements the [CyberStrike Server
-Specification](https://github.com/mmq/cyberstrike-spec), written alongside it from the original client
-and the game's manual.
+OpenCS is a server for *CyberStrike*, an online game Simutronics launched on GEnie in 1993 and later
+ran on AOL and play.net. The original GEnie DOS client connects to it unchanged, so the game can be
+played again over the internet. It implements the
+[CyberStrike Server Specification](https://github.com/mmq/cyberstrike-spec), written alongside it
+from the original client and the game's manual.
 
 *CyberStrike* is a trademark of Simutronics Corp. This project is not affiliated with or endorsed by
 Simutronics, and contains none of the game's files.
@@ -27,27 +27,55 @@ OpenCS lets the unmodified DOS client log on and dive into the action like it's 
 
 ## How to play
 
-You need your own copy of the game, the address of a server, and a way to run the game with a modem that
-dials out over the internet: [DOSBox-X](https://dosbox-x.com/),
-[DOSBox Staging](https://www.dosbox-staging.org/), or any DOS setup with an emulated modem. In short:
+You need your own copy of the game, the address of a server, and a way to run the game with a modem
+that dials out over the internet: [DOSBox-X](https://dosbox-x.com/),
+[DOSBox Staging](https://www.dosbox-staging.org/), or any DOS setup with an emulated modem.
 
 > [!WARNING]
 > **Connections to the server are not encrypted.** The original game sends your account name and
 > password as plain text, and nothing on the server can change that; the game also keeps the password
 > in plain text in `CS.CFG`. **Use a throwaway password that you use nowhere else**, never a real one.
 
-1. In DOSBox-X or DOSBox Staging, set the first serial port to a modem (`serial1=modem`) and point
-   `phonebookfile` at a phonebook file.
-2. In the phonebook, map the number the game dials to the server: `1234 host.example.org:2399`, or
-   `1111 localhost:2399` for a server on your own machine.
-3. In the game's SETTINGS, set that dial number, a baud rate of 9600, and an account name and password
-   (or leave the stock guest name `JOINGENIE`).
+1. Save this as `dosbox-opencs.conf`, with the paths to your phonebook file and the folder holding
+   the game:
+
+   ```ini
+   [dos]
+   ems=true
+
+   [cpu]
+   core=dynamic
+   cycles=25000          # DOSBox Staging: cpu_cycles = 25000
+
+   [serial]
+   serial1=modem
+   # phonebook.txt in the same folder as this file, or its full path
+   phonebookfile=phonebook.txt
+
+   [autoexec]
+   mount c /path/to/your/game
+   c:
+   CS.COM
+   ```
+
+2. Make `phonebook.txt`: one phone number and server per line. To use the default phone number to
+   connect to your own machine:
+
+   ```
+   18006388369 localhost:2399
+   ```
+
+   For someone else's server, put its `host:port` instead of `localhost:2399`.
+
+3. Start it with `dosbox-x --conf dosbox-opencs.conf` (DOSBox Staging: `dosbox --conf dosbox-opencs.conf`).
+   In the game's SETTINGS, leave the phone number at its default, 1-800-638-8369, set the baud rate to
+   9600, and set an account name and password (or leave the stock guest name `JOINGENIE`).
 4. Log on, open the Chamber and type `/PLAY`, or `/PLAY B RED` to pick a city and a team.
 
 The full walk-through, with every Chamber command and troubleshooting, is
 [`docs/PLAYING.md`](docs/PLAYING.md).
 
-## How to run
+## How to run the server
 
 Python 3.12 or newer and [`uv`](https://docs.astral.sh/uv/). To try the game and its web site on one
 machine, from a fresh checkout:
@@ -57,10 +85,8 @@ git clone https://github.com/mmq/opencs-server.git && cd opencs-server
 uv run opencs --web          # the server on port 2399, the web site on http://127.0.0.1:8000/
 ```
 
-The first run installs what it needs. Then open <http://127.0.0.1:8000/> and connect the game client
-to port 2399. The site's files go in `data/web`, the emails it would send are printed in the terminal,
-and its settings can go in a `[web]` table in `config/server.toml`. To make an administrator for its
-admin pages: `uv run opencs-web local --state-dir data/web createadmin NAME`.
+To make an administrator for the web site's admin pages:
+`uv run opencs-web local --state-dir data/web createadmin NAME`.
 
 For the plain server, without the site:
 
@@ -94,8 +120,6 @@ them. Expect rough edges.
 - **No way to change a password in the game.** The operator can issue a new one, and so can the web
   front end in `web/` through the service channel (ADR 12): players register there with an email
   address and get a new password from its account page.
-- **The emulator setup** in [`docs/PLAYING.md`](docs/PLAYING.md) is the documented one; a different
-  emulator or DOS setup may need its own settings.
 
 ## Architecture in brief
 
@@ -147,7 +171,7 @@ uv run mypy                  # strict, on src/
 | end to end | a real server on loopback, and the judge: two scripted pilots through the Chamber and a game, 19 checks (`tools/smoke.sh`, or `pytest -m judge`) |
 
 A server can also capture any connection's wire traffic in the replay format, so a bug seen in a live
-game becomes a test (see the operator guide).
+game can become a test (see the operator guide).
 
 ## The specification
 
