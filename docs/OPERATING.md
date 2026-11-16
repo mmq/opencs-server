@@ -154,6 +154,58 @@ a clean stop; 1 when a startup step fails (the message names it: the database or
 port, the admin port); 2 for a bad config file, an unwritable log file, or an admin port with no usable
 token.
 
+### Trying the web site
+
+To try the site on one machine, add `--web`:
+
+```bash
+uv run opencs --web              # the game on port 2399, the site on http://127.0.0.1:8000/
+```
+
+The server starts the site once it is listening, as a process of its own (so a slow page still cannot
+hold up a game), and stops it when it stops. `--web-port N` moves the site. Where `server.toml` leaves
+them unset, `--web` turns on the service channel (`service.sock`) and recording (`recordings/`) in the
+data directory, and the site keeps its own files in `web/` there: its database, its archive and a
+secret key made on the first run (mode 0600). The site runs the archiver itself, every 5 minutes, so
+there is nothing to schedule.
+
+It is set up for a visitor on your own machine, and not for the internet:
+
+- plain HTTP, to `127.0.0.1` and `localhost` only (`OPENCS_WEB_HTTPS=false`);
+- the admin pages are on, and the public map has no delay, so a game shows on it as it is played;
+- the emails it would send (registration and log-in links) are printed in the terminal, where the
+  server logs: open the link from there.
+
+To change a setting, put it in a `[web]` table in `server.toml`, named as its `OPENCS_WEB_` variable
+is, in lower case (the settings are in "The web front end" below):
+
+```toml
+[web]
+map_delay_public = 3600        # the public map an hour behind, as on a public server
+chosen_passwords = true
+```
+
+A variable in the environment wins over the table, and the site refuses a name it does not know, so
+a misspelling is an error and not a setting that does nothing. If the site cannot start (its port is
+taken, a bad value), the server logs why and the game goes on without it. Without the web package
+(`uv sync --no-dev` leaves it out) `--web` exits with 2 and says to run `uv sync`.
+
+The data directory's path must be short enough for a Unix socket (about 100 characters; macOS's
+temporary directories are not): `--web` says so and asks for a shorter `[service] socket`.
+
+To make an administrator for the admin pages ("Administration" below), run the site's own command
+with the site's state directory:
+
+```bash
+uv run opencs-web local --state-dir data/web createadmin NAME
+```
+
+`opencs-web local` is also the site on its own, for a server that is already running
+(`uv run opencs-web local --service-socket PATH --recordings DIR`); with a command after its options it
+runs that management command with the same settings. For a public site, use the setup in "The web
+front end" below (systemd, Caddy, an environment file): `--web` keeps a secret key in a file and sends
+nothing encrypted.
+
 ### As a service (systemd)
 
 The unit is [`deploy/opencs.service`](../deploy/opencs.service). From `/opt/opencs`, install it, and change its paths
